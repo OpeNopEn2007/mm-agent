@@ -10,8 +10,8 @@ This roadmap delivers the MM-Agent mathematical modeling system in Claude Code. 
 
 ## Phases
 
-- [ ] **Phase 1: Claude Code Integration** - Establish Skills/Agents framework and workflow entry point
-- [ ] **Phase 2: Problem Analysis Pipeline** - Parse and structure competition problems from PDF/MD/TXT
+- [x] **Phase 1: Claude Code Integration** - Establish Skills/Agents framework and workflow entry point
+- [x] **Phase 2: Problem Analysis Pipeline** - Parse and structure competition problems from PDF/MD/TXT
 - [ ] **Phase 3: Task Decomposition with DAG** - Decompose into dependent tasks with Memory System
 - [ ] **Phase 4: HMML Knowledge Retrieval** - Retrieve relevant modeling methods from knowledge base
 - [ ] **Phase 5: Mathematical Modeling with Actor-Critic** - Generate iterative modeling solutions
@@ -58,12 +58,12 @@ This roadmap delivers the MM-Agent mathematical modeling system in Claude Code. 
 3. System outputs `problem.md` with structured fields: title, background, questions, constraints, objectives, keywords, summary
 4. System identifies problem context, research goals, and evaluation criteria from raw text
 
-**Plans:** 1/4 plans executed
+**Plans:** 4/4 complete
 
 **Plan List:**
-- [ ] 02-01-PLAN.md — Install PyMuPDF and create parse-problem skill foundation (Wave 1)
-- [ ] 02-02-PLAN.md — Implement PDF text extraction with PyMuPDF (Wave 1)
-- [ ] 02-03-PLAN.md — Implement LLM-based structured extraction (Wave 2)
+- [x] 02-01-PLAN.md — Install PyMuPDF and create parse-problem skill foundation (Wave 1)
+- [x] 02-02-PLAN.md — Implement PDF text extraction with PyMuPDF (Wave 2)
+- [x] 02-03-PLAN.md — Implement LLM-based structured extraction (Wave 2)
 - [x] 02-04-PLAN.md — Integrate with coordinator and create PDF fixtures (Wave 2)
 
 ---
