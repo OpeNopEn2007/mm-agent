@@ -49,7 +49,7 @@
 
 - [ ] **MEM-01**: 系统可在任务开始时加载依赖任务的 Memory
 - [ ] **MEM-02**: 系统可在任务完成时写入 Memory 文件（task-{id}.json）
-- [ ] **MEM-03**: 系统可传递上下文信息给后续任务
+- [x] **MEM-03**: 系统可传递上下文信息给后续任务
 
 ### Report Generation
 
@@ -130,7 +130,7 @@
 | CODE-06 | Phase 6 | Pending |
 | MEM-01 | Phase 3 | Pending |
 | MEM-02 | Phase 3 | Pending |
-| MEM-03 | Phase 3 | Pending |
+| MEM-03 | Phase 3 | Complete |
 | RPT-01 | Phase 7 | Pending |
 | RPT-02 | Phase 7 | Pending |
 | RPT-03 | Phase 7 | Pending |
