@@ -38,9 +38,9 @@ This roadmap delivers the MM-Agent mathematical modeling system in Claude Code. 
 
 **Plan List:**
 - [x] 01-01-PLAN.md — Create main mm-agent Skill and coordinator sub-skill entry points
-- [ ] 01-02-PLAN.md — Create phase-specific Agents (coordinator, modeler, programmer, reporter)
-- [ ] 01-03-PLAN.md — Implement workflow orchestration logic and configure Hooks
-- [ ] 01-04-PLAN.md — Verify workflow entry point and create smoke test fixtures
+- [x] 01-02-PLAN.md — Create phase-specific Agents (coordinator, modeler, programmer, reporter)
+- [x] 01-03-PLAN.md — Implement workflow orchestration logic and configure Hooks
+- [x] 01-04-PLAN.md — Verify workflow entry point and create smoke test fixtures
 
 ---
 
@@ -58,7 +58,13 @@ This roadmap delivers the MM-Agent mathematical modeling system in Claude Code. 
 3. System outputs `problem.md` with structured fields: title, background, questions, constraints, objectives, keywords, summary
 4. System identifies problem context, research goals, and evaluation criteria from raw text
 
-**Plans:** TBD
+**Plans:** 0/4 plans (Ready to execute)
+
+**Plan List:**
+- [ ] 02-01-PLAN.md — Install PyMuPDF and create parse-problem skill foundation (Wave 1)
+- [ ] 02-02-PLAN.md — Implement PDF text extraction with PyMuPDF (Wave 1)
+- [ ] 02-03-PLAN.md — Implement LLM-based structured extraction (Wave 2)
+- [ ] 02-04-PLAN.md — Integrate with coordinator and create PDF fixtures (Wave 2)
 
 ---
 
@@ -159,8 +165,8 @@ This roadmap delivers the MM-Agent mathematical modeling system in Claude Code. 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Claude Code Integration | 1/4 | In Progress|  |
-| 2. Problem Analysis Pipeline | 0/4 | Not started | - |
+| 1. Claude Code Integration | 4/4 | Complete | 2026-04-10 |
+| 2. Problem Analysis Pipeline | 0/4 | Ready to execute | - |
 | 3. Task Decomposition with DAG | 0/6 | Not started | - |
 | 4. HMML Knowledge Retrieval | 0/3 | Not started | - |
 | 5. Mathematical Modeling with Actor-Critic | 0/5 | Not started | - |
@@ -171,3 +177,4 @@ This roadmap delivers the MM-Agent mathematical modeling system in Claude Code. 
 
 *Roadmap created: 2026-04-10*
 *Phase 1 planned: 2026-04-10*
+*Phase 2 planned: 2026-04-10*
