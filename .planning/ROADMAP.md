@@ -112,7 +112,7 @@ This roadmap delivers the MM-Agent mathematical modeling system in Claude Code. 
 2. System outputs `model.md` with modeling method, formulas, variables, and assumptions
 3. System outputs `formulas.json` with structured mathematical formula definitions
 4. System performs Actor-Critic iteration (max 3 rounds) to improve modeling quality
-5. System stops iteration when modeling quality reaches threshold instead of always completing max rounds
+5. System stops iteration when modeling quality reaches threshold (satisfaction_threshold=8) instead of always completing max rounds
 
 **Plans:** TBD
 
@@ -132,7 +132,7 @@ This roadmap delivers the MM-Agent mathematical modeling system in Claude Code. 
 3. System captures execution output (stdout/stderr) and saves to results files
 4. System automatically retries execution up to 5 times with error handling on failures
 5. System outputs `results.json` with numerical results and generates visualization plots
-6. System enforces 60-second execution timeout and terminates hanging processes
+6. System enforces 300-second execution timeout and terminates hanging processes
 
 **Plans:** TBD
 
