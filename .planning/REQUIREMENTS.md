@@ -61,7 +61,7 @@
 
 - [ ] **INTG-01**: 用户可通过 /mm-agent --problem <file> 启动工作流
 - [ ] **INTG-02**: 系统继承 Claude Code 的模型配置，无需单独 API Key
-- [ ] **INTG-03**: 系统使用 Claude Code Skills 定义工作流入口
+- [x] **INTG-03**: 系统使用 Claude Code Skills 定义工作流入口
 - [ ] **INTG-04**: 系统使用 Claude Code Agents 执行各阶段任务
 
 ## v2 Requirements
@@ -136,7 +136,7 @@
 | RPT-03 | Phase 7 | Pending |
 | INTG-01 | Phase 1 | Pending |
 | INTG-02 | Phase 1 | Pending |
-| INTG-03 | Phase 1 | Pending |
+| INTG-03 | Phase 1 | Complete |
 | INTG-04 | Phase 1 | Pending |
 
 **Coverage:**

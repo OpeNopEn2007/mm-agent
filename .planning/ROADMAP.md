@@ -34,10 +34,10 @@ This roadmap delivers the MM-Agent mathematical modeling system in Claude Code. 
 3. Workflow is defined as a Claude Code Skill with auto-discovery in `.claude/skills/`
 4. Agents are registered for executing workflow phases with proper isolation
 
-**Plans:** 4 plans
+**Plans:** 1/4 plans executed
 
 **Plan List:**
-- [ ] 01-01-PLAN.md — Create main mm-agent Skill and coordinator sub-skill entry points
+- [x] 01-01-PLAN.md — Create main mm-agent Skill and coordinator sub-skill entry points
 - [ ] 01-02-PLAN.md — Create phase-specific Agents (coordinator, modeler, programmer, reporter)
 - [ ] 01-03-PLAN.md — Implement workflow orchestration logic and configure Hooks
 - [ ] 01-04-PLAN.md — Verify workflow entry point and create smoke test fixtures
@@ -159,7 +159,7 @@ This roadmap delivers the MM-Agent mathematical modeling system in Claude Code. 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Claude Code Integration | 0/4 | Planned | - |
+| 1. Claude Code Integration | 1/4 | In Progress|  |
 | 2. Problem Analysis Pipeline | 0/4 | Not started | - |
 | 3. Task Decomposition with DAG | 0/6 | Not started | - |
 | 4. HMML Knowledge Retrieval | 0/3 | Not started | - |
