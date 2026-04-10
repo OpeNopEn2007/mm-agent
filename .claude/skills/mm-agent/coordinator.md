@@ -51,10 +51,42 @@ Mode: {interactive/auto}
 Phases: 7 total
 ```
 
-## Step 3: Invoke GSD phases (Phase 1: Foundation)
-For Phase 1 (Claude Code Integration), this is the setup phase.
+## Step 3: Execute Phase 2 - Problem Analysis
 
-For future phases (2-7), use GSD workflow:
+Invoke parse-problem skill to parse problem file and extract structured definition:
+
+```bash
+# Parse problem file and extract structured components
+PROBLEM_PARSED=$(Skill parse-problem --problem-path="$PROBLEM_FILE" || echo "FAILED")
+
+# Check parsing succeeded
+if [ "$PROBLEM_PARSED" = "FAILED" ]; then
+  echo "❌ Error: Problem parsing failed"
+  exit 1
+fi
+
+# Verify problem.md was created
+if [ ! -f ".planning/memory/problem.md" ]; then
+  echo "❌ Error: problem.md not created"
+  exit 1
+fi
+
+echo "✓ Problem analyzed successfully"
+echo "  Problem: $(grep '^title:' .planning/memory/problem.md | sed 's/title: //')"
+```
+
+The parse-problem skill:
+- Detects file format (PDF/MD/TXT)
+- Extracts raw text using PyMuPDF (PDF) or file I/O (MD/TXT)
+- Performs LLM-based structured extraction (7 fields)
+- Writes problem.md to .planning/memory/
+
+Output files from Phase 2:
+- .planning/memory/problem.md - Structured problem definition
+- .planning/memory/raw-problem-text.txt - Raw extracted text (debug)
+
+## Step 4: Invoke GSD phases (Phase 3+)
+For Phase 3 (Task Decomposition) and beyond, use GSD workflow:
 ```bash
 /gsd:execute-phase 02-problem-analysis
 /gsd:execute-phase 03-task-decomposition
@@ -66,7 +98,9 @@ For future phases (2-7), use GSD workflow:
 
 Each phase produces artifacts in .planning/memory/ and passes context to next phase.
 
-## Step 4: Report workflow completion
+Note: Phase 1 (Foundation) establishes the skills and agents. Phase 2 (Problem Analysis) parses the input file. Phases 3-7 are executed via GSD workflow.
+
+## Step 5: Report workflow completion
 After all phases complete:
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -76,6 +110,15 @@ After all phases complete:
 Output: .planning/output/report.pdf
 Memory: .planning/memory/task-*.json
 ```
-
-Note: Phase 1 is the foundation phase. Actual workflow execution happens in Phase 2+.
 </process>
+
+<context>
+**PROBLEM_FILE variable:**
+Passed from SKILL.md after initial validation. Contains path to problem file (PDF/MD/TXT).
+
+**Phase 2 output:**
+.planning/memory/problem.md is the canonical output used by Phase 3 (Task Decomposition).
+
+**parse-problem skill:**
+Located at .claude/skills/mm-agent/parse-problem.md. Handles all file format detection and text extraction.
+</context>
