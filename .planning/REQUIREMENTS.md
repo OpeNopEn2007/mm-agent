@@ -5,117 +5,143 @@
 
 ## v1 Requirements
 
-Requirements for initial release. Each maps to roadmap phases.
+自动化数学建模系统的初始版本需求。每项映射到 roadmap phases。
 
-### Foundation
+### Problem Analysis
 
-- [ ] **FND-01**: Claude Code Skill 框架可正确加载和执行 mm-agent 工作流
-- [ ] **FND-02**: .planning/ 目录结构按照 GSD 规范创建和管理
-- [ ] **FND-03**: 配置文件 (config.json) 正确设置工作流参数（granularity、parallelization、verification）
-- [ ] **FND-04**: Git 追踪规划文档，阶段输出可回溯
+- [ ] **PROB-01**: 系统可接收 PDF 格式赛题文件并解析提取文本内容
+- [ ] **PROB-02**: 系统可接收 Markdown/TXT 格式赛题文件
+- [ ] **PROB-03**: 系统可从赛题中提取问题背景、目标、约束条件
+- [ ] **PROB-04**: 系统可输出结构化 problem.md 文件（包含 title, background, questions, constraints, objectives, keywords, summary）
 
-### Problem Input
+### Task Decomposition
 
-- [ ] **PROB-01**: 用户可通过 Skill 命令启动数学建模工作流
-- [ ] **PROB-02**: 系统可接收非结构化赛题文本并解析为结构化问题描述
-- [ ] **PROB-03**: 问题解析结果存储为 problem.md 供后续阶段使用
-- [ ] **PROB-04**: 上下文传递机制确保问题信息在各阶段间传递
+- [ ] **TASK-01**: 系统可识别赛题中的多个子问题
+- [ ] **TASK-02**: 系统可分析子问题间的依赖关系并构建 DAG
+- [ ] **TASK-03**: 系统可对 DAG 进行拓扑排序确定执行顺序
+- [ ] **TASK-04**: 系统可检测 DAG 中的循环依赖并报错
+- [ ] **TASK-05**: 系统可输出 dag.json 和 execution-order.txt
 
-### Agent Coordination
+### Knowledge Retrieval
 
-- [ ] **AGNT-01**: Planner Agent 可分析问题并生成建模规划 (plan.md)
-- [ ] **AGNT-02**: Modeler Agent 可根据规划推导数学模型 (model.md)
-- [ ] **AGNT-03**: Programmer Agent 可将模型转换为可执行 Python 代码
-- [ ] **AGNT-04**: Reviewer Agent 可验证结果是否符合预期
-- [ ] **AGNT-05**: 智能体间通过文件传递上下文，实现阶段隔离
-- [ ] **AGNT-06**: 设置最大迭代限制防止无限循环
+- [ ] **KNOW-01**: 系统可加载预计算的 HMML embedding 文件
+- [ ] **KNOW-02**: 系统可根据任务描述检索相关建模方法（Top-K）
+- [ ] **KNOW-03**: 系统可输出检索结果到 retrieved-methods.json
 
-### Simulation
+### Mathematical Modeling
 
-- [ ] **SIM-01**: Python 运行时环境可正确执行生成的代码
-- [ ] **SIM-02**: 数值模拟结果以结构化格式存储 (results.json)
-- [ ] **SIM-03**: 模拟输出包含可视化图表 (plots/figures)
-- [ ] **SIM-04**: 代码验证子流程在模拟前检查代码正确性
+- [ ] **MODEL-01**: 系统可基于任务描述和检索方法生成建模方案
+- [ ] **MODEL-02**: 系统可输出 model.md（包含建模方法、公式、变量、假设）
+- [ ] **MODEL-03**: 系统可输出 formulas.json（结构化公式定义）
+- [ ] **MODEL-04**: 系统可实施 Actor-Critic 迭代改进（max_rounds=3）
+- [ ] **MODEL-05**: 系统可在建模方案达到质量阈值后停止迭代
+
+### Code Generation & Execution
+
+- [ ] **CODE-01**: 系统可基于建模方案生成可执行 Python 代码
+- [ ] **CODE-02**: 系统可执行生成的 Python 代码
+- [ ] **CODE-03**: 系统可捕获代码执行输出（stdout/stderr）
+- [ ] **CODE-04**: 系统可在执行失败时自动重试（最多 5 次）
+- [ ] **CODE-05**: 系统可输出 results.json 和可视化图表
+- [ ] **CODE-06**: 系统可实施执行超时保护（60s）
+
+### Memory System
+
+- [ ] **MEM-01**: 系统可在任务开始时加载依赖任务的 Memory
+- [ ] **MEM-02**: 系统可在任务完成时写入 Memory 文件（task-{id}.json）
+- [ ] **MEM-03**: 系统可传递上下文信息给后续任务
 
 ### Report Generation
 
-- [ ] **RPT-01**: 系统可基于模板生成结构化报告
-- [ ] **RPT-02**: 报告包含标准章节（摘要、模型、结果、结论、参考文献）
-- [ ] **RPT-03**: 格式验证智能体检查报告符合提交规范
-- [ ] **RPT-04**: 最终输出为 PDF 格式（通过 Pandoc/LaTeX）
+- [ ] **RPT-01**: 系统可基于建模过程和结果生成 LaTeX 报告
+- [ ] **RPT-02**: 系统可输出 PDF 格式论文报告
+- [ ] **RPT-03**: 报告包含摘要、引言、方法、结果、结论、参考文献
 
-### Verification
+### Claude Code Integration
 
-- [ ] **VRF-01**: 每阶段结束有验证门控，确认输出质量
-- [ ] **VRF-02**: 验证失败时提供明确错误信息和建议
-- [ ] **VRF-03**: 用户可选择跳过验证（YOLO 模式）
+- [ ] **INTG-01**: 用户可通过 /mm-agent --problem <file> 启动工作流
+- [ ] **INTG-02**: 系统继承 Claude Code 的模型配置，无需单独 API Key
+- [ ] **INTG-03**: 系统使用 Claude Code Skills 定义工作流入口
+- [ ] **INTG-04**: 系统使用 Claude Code Agents 执行各阶段任务
 
 ## v2 Requirements
 
-Deferred to future release. Tracked but not in current roadmap.
+推迟实现的功能。已追踪但不包含在当前 roadmap。
 
-### Interactive Features
+### Advanced Features
 
-- **INT-01**: 用户可在阶段间干预和调整方向
-- **INT-02**: 支持用户反馈循环，修正智能体输出
-- **INT-03**: 进度实时显示，用户可见当前阶段状态
+- **HMML-ADV-01**: 完整 98+ 方法节点的 HMML 知识库构建
+- **HMML-ADV-02**: 问题感知和方案感知双向检索
+- **ACTR-ADV-01**: Modeler + Critic 双 Agent 架构（替代内部迭代）
+- **ACTR-ADV-02**: 质量评分自动判断（替代固定 max_rounds）
+- **EXEC-ADV-01**: Pyodide 浏览器沙盒执行
+- **EXEC-ADV-02**: 高级错误恢复（代码自动修复而非重试）
+- **RPT-ADV-01**: 竞赛特定格式模板（MCM/ICM, CUMCM）
+- **RPT-ADV-02**: 多语言报告支持
 
-### Templates
+### Multi-Model Support
 
-- **TMP-01**: 预置数学建模模板库（优化类、预测类、评价类等）
-- **TMP-02**: 用户可自定义模板
-
-### Extended Outputs
-
-- **EXT-01**: 支持多种报告格式（Word、HTML）
-- **EXT-02**: 支持多语言报告（中英文）
+- **MMOD-01**: 支持 DeepSeek 等其他模型
+- **MMOD-02**: 模型路由策略（不同阶段使用不同模型）
 
 ## Out of Scope
 
-Explicitly excluded. Documented to prevent scope creep.
+明确排除的功能，防止范围蔓延。
 
 | Feature | Reason |
 |---------|--------|
-| Web UI | Claude Code 是 CLI 工具，优先 CLI 原生集成 |
-| 团队实时协作 | 上下文同步复杂度高，优先单用户 |
-| 外部模型 API 调用 | 优先本地执行，控制成本和延迟 |
-| 数据库持久化 | 文件系统足够，避免额外依赖 |
+| Web UI (Django/Flask) | CLI-first 定位，v1 专注命令行交互 |
+| 独立 Python CLI | 集成而非独立，Claude Code 插件是目标 |
+| 100% MM-Agent 功能对齐 | 复刻核心流水线，不追求全面对齐 |
+| 数据库持久化 | JSON 文件足够，避免额外依赖 |
+| LangGraph/LangChain 编排 | GSD 框架已提供更好的 phase/plan/execute 模式 |
+| 实时可视化界面 | 静态图表足够，复杂度高 |
+| OAuth 登录 | 无用户系统，单用户 CLI 工具 |
+| 多用户协作 | 单用户场景，竞赛参与者个人使用 |
 
 ## Traceability
 
-Which phases cover which requirements. Updated during roadmap creation.
+哪些 phases 覆盖哪些 requirements。在 roadmap 创建时更新。
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FND-01 | Phase 1 | Pending |
-| FND-02 | Phase 1 | Pending |
-| FND-03 | Phase 1 | Pending |
-| FND-04 | Phase 1 | Pending |
-| PROB-01 | Phase 1 | Pending |
-| PROB-02 | Phase 1 | Pending |
-| PROB-03 | Phase 1 | Pending |
-| PROB-04 | Phase 1 | Pending |
-| AGNT-01 | Phase 2 | Pending |
-| AGNT-02 | Phase 2 | Pending |
-| AGNT-03 | Phase 3 | Pending |
-| AGNT-04 | Phase 4 | Pending |
-| AGNT-05 | Phase 1 | Pending |
-| AGNT-06 | Phase 1 | Pending |
-| SIM-01 | Phase 3 | Pending |
-| SIM-02 | Phase 3 | Pending |
-| SIM-03 | Phase 3 | Pending |
-| SIM-04 | Phase 3 | Pending |
-| RPT-01 | Phase 4 | Pending |
-| RPT-02 | Phase 4 | Pending |
-| RPT-03 | Phase 4 | Pending |
-| RPT-04 | Phase 4 | Pending |
-| VRF-01 | Phase 1 | Pending |
-| VRF-02 | Phase 1 | Pending |
-| VRF-03 | Phase 1 | Pending |
+| PROB-01 | Phase 2 | Pending |
+| PROB-02 | Phase 2 | Pending |
+| PROB-03 | Phase 2 | Pending |
+| PROB-04 | Phase 2 | Pending |
+| TASK-01 | Phase 3 | Pending |
+| TASK-02 | Phase 3 | Pending |
+| TASK-03 | Phase 3 | Pending |
+| TASK-04 | Phase 3 | Pending |
+| TASK-05 | Phase 3 | Pending |
+| KNOW-01 | Phase 4 | Pending |
+| KNOW-02 | Phase 4 | Pending |
+| KNOW-03 | Phase 4 | Pending |
+| MODEL-01 | Phase 5 | Pending |
+| MODEL-02 | Phase 5 | Pending |
+| MODEL-03 | Phase 5 | Pending |
+| MODEL-04 | Phase 5 | Pending |
+| MODEL-05 | Phase 5 | Pending |
+| CODE-01 | Phase 6 | Pending |
+| CODE-02 | Phase 6 | Pending |
+| CODE-03 | Phase 6 | Pending |
+| CODE-04 | Phase 6 | Pending |
+| CODE-05 | Phase 6 | Pending |
+| CODE-06 | Phase 6 | Pending |
+| MEM-01 | Phase 3 | Pending |
+| MEM-02 | Phase 3 | Pending |
+| MEM-03 | Phase 3 | Pending |
+| RPT-01 | Phase 7 | Pending |
+| RPT-02 | Phase 7 | Pending |
+| RPT-03 | Phase 7 | Pending |
+| INTG-01 | Phase 1 | Pending |
+| INTG-02 | Phase 1 | Pending |
+| INTG-03 | Phase 1 | Pending |
+| INTG-04 | Phase 1 | Pending |
 
 **Coverage:**
-- v1 requirements: 24 total
-- Mapped to phases: 24
+- v1 requirements: 32 total
+- Mapped to phases: 32
 - Unmapped: 0 ✓
 
 ---
