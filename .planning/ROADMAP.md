@@ -90,7 +90,7 @@ This roadmap delivers the MM-Agent mathematical modeling system in Claude Code. 
 - [x] 03-01-PLAN.md — Create test scaffolds for DAG operations, Memory system, and Task Decomposition (Wave 0)
 - [x] 03-02-PLAN.md — Implement task-decomposition.md skill for subproblem identification (Wave 1)
 - [x] 03-03-PLAN.md — Implement DAG operations with topological sort and cycle detection (Wave 1)
-- [ ] 03-04-PLAN.md — Implement Memory System I/O (load/write) with schema validation (Wave 2)
+- [x] 03-04-PLAN.md — Implement Memory System I/O (load/write) with schema validation (Wave 2)
 - [ ] 03-05-PLAN.md — Integrate Phase 3 workflow into coordinator with context passing (Wave 2)
 
 ---
