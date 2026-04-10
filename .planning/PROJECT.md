@@ -1,10 +1,10 @@
-# MM-Agent in Claude Code (mm-agent-in-cc)
+# MM-Agent in Claude Code
 
 ## What This Is
 
-一个将学术界的 MM Agent 数学建模多智能体架构复刻并本地化为 Claude Code 工作流插件的系统。目标是打造一个能全自动接收非结构化赛题、进行数学建模、执行数值仿真并输出报告的端到端工作流。
+将 NeurIPS 2025 论文 "MM-Agent" 的数学建模多智能体架构，本地化为 Claude Code 工作流插件。用户通过 `/mm-agent --problem <file>` 启动，继承 Claude Code 的模型配置，无需单独配置 API Key。
 
-基于 NeurIPS 2025 收录的 MM Agent 论文，结合 GSD 框架的上下文隔离与状态机特性，让数学建模工作者在熟悉的 Claude Code 环境中使用这个强大的数学建模工具。
+为数学建模竞赛参与者、科研工作者在熟悉的 Claude Code 环境中提供 MM-Agent 的自动化建模能力。
 
 ## Core Value
 
@@ -20,52 +20,64 @@
 
 ### Active
 
-- [ ] 将 MM Agent 的多智能体编排架构移植到 Claude Code 的 Skills/Hooks/Agents 体系
-- [ ] 实现赛题接收、解析、建模规划的能力
-- [ ] 实现数学建模过程中的智能体协作与上下文管理
-- [ ] 实现数值仿真执行与结果验证的能力
-- [ ] 实现论文报告自动生成与格式排版审查的能力
-- [ ] 提供用户友好的交互界面（CLI 或 Web）
+- [ ] 问题解析：接收 PDF/MD/TXT 赛题，输出结构化 problem.md
+- [ ] 任务分解：分解子问题，构建 DAG，拓扑排序确定执行顺序
+- [ ] HMML 检索：从层次化数学建模库检索相关建模方法
+- [ ] Actor-Critic 建模：迭代生成建模方案，直到质量达标
+- [ ] 代码生成执行：生成 Python 代码，执行数值仿真，处理错误
+- [ ] Memory System：任务间上下文传递，依赖任务结果加载
+- [ ] 报告生成：输出 LaTeX/PDF 报告
 
 ### Out of Scope
 
-- Web 可视化界面（MM Agent 原版有，但 Claude Code 本身是 CLI，优先 CLI 集成）
-- 与原版 MM Agent 100% 功能对齐（聚焦核心流水线，特化数学建模场景）
+- Web UI（Django/Flask）— CLI-first，v1 不做 Web UI
+- 独立 Python CLI — 集成而非独立部署
+- 100% MM-Agent 功能对齐 — 复刻而非创新，聚焦核心流水线
+- 数据库持久化 — 文件系统足够，避免额外依赖
+- LangGraph/LangChain — GSD 框架已提供更好的编排模式
 
 ## Context
 
-### 理论支撑
-- **MM Agent 论文**: [MM Agent: LLM as Agents for Real-world Mathematical Modeling Problem](https://arxiv.org/abs/2505.14148) - NeurIPS 2025 收录
-- 论文提出的核心贡献：多智能体协作架构用于数学建模问题求解
-
-### 开源参考
-- **LLM-MM-Agent**: https://github.com/usail-hkust/LLM-MM-Agent - MM Agent 的工程实现
-- **get-shit-done**: https://github.com/gsd-build/get-shit-done.git - GSD 框架，提供工程化的智能体编排系统和结构化的上下文管理方案
-
 ### 技术环境
-- Claude Code 已具备：本地文件读写、工具调用、子智能体编排、可拓展性（Plugins、Hooks、Skills）
-- GSD 框架特性：上下文隔离、状态机、结构化的上下文传递
+- Claude Code Skills/Hooks/Agents 体系（原生机制）
+- Python + NumPy/SciPy/Matplotlib（数值模拟）
+- sentence-transformers（HMML embedding 计算）
+- LaTeX/Pandoc（报告生成）
+- GSD Framework（已验证的工作流编排模式）
 
-### 设计思路
-- MM Agent 论文成果优秀，已有工程实现和编排系统
-- Claude Code 是很多人的生产工具，有强大的可拓展性
-- 参考 GSD 设计，结合 MM Agent 理论，在 Claude Code 中"复刻"数学建模的 GSD
-- 在数学建模特化场景下，可以对 GSD 的泛化设计进行约束优化（如引入格式排版审查子智能体）
+### 参考实现
+- 论文：https://arxiv.org/abs/2505.14148
+- LLM-MM-Agent 仓库：https://github.com/usail-hkust/LLM-MM-Agent
+- GSD Framework：https://github.com/gsd-build/get-shit-done
+
+### 关键洞察
+- 数学建模 ≠ 数学推理：需要开放式问题分析、抽象、有原则的形式化
+- LLM 在推理上强，但在模型构建上弱 → 需要多智能体协作 + HMML 知识库
+- 任务间存在依赖 → DAG + 拓扑排序 + Memory System
+- 单次生成质量不稳定 → Actor-Critic 迭代改进
 
 ## Constraints
 
-- **Tech Stack**: Claude Code Skills/Hooks/Agents 体系
-- **Target Users**: 数学建模竞赛参与者、科研工作者
-- **Integration**: 必须能在 Claude Code CLI 环境中运行
-- **Reference**: 需参考 LLM-MM-Agent 和 get-shit-done 的实现
+- **Tech Stack**: 必须在 Claude Code CLI 环境中运行，使用 Skills/Hooks/Agents 体系
+- **Integration**: 继承 Claude Code 的模型配置，无需单独配置 API Key
+- **Scope**: 聚焦核心流水线，其他功能失败不影响主流程
+- **Reference**: 需参考 LLM-MM-Agent 和 get-shit-done 的实现模式
+- **CLI-first**: v1 不做 Web UI，命令行交互为主
+- **User Requirements**: 用户已有 Claude Code 环境，可提供赛题文件（PDF/MD/TXT）
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| CLI-first 而非 Web 界面 | Claude Code 本身是 CLI 工具，优先与其原生集成 | — Pending |
-| 参考 GSD 框架设计 | GSD 的上下文隔离与状态机特性与 MM Agent 需求高度匹配 | — Pending |
-| 特化数学建模场景 | 可对 GSD 泛化设计进行约束优化（如报告格式审查） | — Pending |
+| 框架复用：GSD | 已验证的编排模式，避免重新发明轮子 | — Pending |
+| 知识检索：预计算 embedding | 确定性计算，LLM 不擅长向量运算 | — Pending |
+| 任务依赖：DAG + 拓扑排序 | 数学建模特有需求，子问题间存在依赖 | — Pending |
+| 迭代改进：Actor-Critic | 单次生成质量不稳定，模拟专家审视过程 | — Pending |
+| 状态持久化：JSON 文件 | 简单可读可追踪，避免数据库依赖 | — Pending |
+| 代码执行：Python 沙盒 | 数学建模需要数值计算，需要执行环境 | — Pending |
+| HMML embedding：BGE-m3 或 mGTE | 中英文优秀，支持离线 | — Pending |
+| Actor-Critic：Modeler Agent 内部迭代 | v1 简单实现，后续可升级双 Agent | — Pending |
+| max_rounds=3 | 平衡质量与成本，过多迭代边际效益递减 | — Pending |
 
 ## Evolution
 
