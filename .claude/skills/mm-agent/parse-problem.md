@@ -7,159 +7,224 @@ description: Parse unstructured problem text into structured format
 将非结构化赛题文本解析为结构化 problem.md，提取关键信息供后续阶段使用。
 </objective>
 
+<context>
+**problem_path variable:**
+The problem file path is passed from the coordinator skill or from SKILL.md.
+Use this variable to access the file path.
+
+**text variable:**
+Store extracted text in a variable for structured extraction in Step 3.
+</context>
+
 <input>
-- `problem_text`: 原始问题文本内容
+- `problem_path`: Problem file path (PDF/MD/TXT)
+- `problem_text`: 原始问题文本内容（如果已提供）
 </input>
 
 <output>
-输出文件: `.planning/phases/01-foundation-problem-pipeline/outputs/problem.md`
+输出文件: `.planning/memory/problem.md`
 </output>
-
-<output_format>
-
-## problem.md 结构
-
-```markdown
-# Problem: {title}
-
-## Metadata
-- **Source:** {来源，如已知}
-- **Parsed:** {解析时间}
-- **Language:** {语言}
-
-## Background
-
-{问题背景描述}
-
-## Questions
-
-### Q1: {第一个问题标题}
-{第一个问题的详细描述}
-
-### Q2: {第二个问题标题}
-{第二个问题的详细描述}
-
-...
-
-## Constraints
-
-### Known Conditions
-- {已知条件 1}
-- {已知条件 2}
-- ...
-
-### Assumptions
-- {可做假设 1}
-- {可做假设 2}
-- ...
-
-## Objectives
-
-### Main Goal
-{主要建模目标}
-
-### Sub-objectives
-- {子目标 1}
-- {子目标 2}
-- ...
-
-## Keywords
-
-- {关键词 1}
-- {关键词 2}
-- ...
-
-## Summary
-
-{100-200 字的问题摘要，包含核心问题和主要目标}
-
-## Raw Text
-
-```
-{原始问题文本，完整保留}
-```
-
-## Context Summary
-
-**For downstream phases:**
-- Problem type: {问题类型：优化/预测/评价/等}
-- Key variables: {关键变量列表}
-- Data available: {是否有提供数据}
-- Expected output: {期望输出：模型/方案/报告}
-```
-
-</output_format>
 
 <process>
 
-## 1. 分析问题结构
+## Step 1: Detect file format
 
-使用 LLM 分析问题文本，识别：
-- 问题标题
-- 问题背景
-- 具体问题（可能有多个子问题）
-- 已知条件和约束
-- 建模目标
-- 关键词
+Parse file extension from problem_path to determine parsing strategy:
+- `.pdf` → Use PyMuPDF (fitz)
+- `.md` or `.txt` → Use standard file I/O
 
-## 2. 解析 Prompt 模板
+## Step 2: Extract raw text
+
+For PDF files:
+```python
+import fitz  # PyMuPDF
+
+def extract_pdf_text(pdf_path: str) -> str:
+    """Extract all text from PDF file with error handling."""
+    try:
+        doc = fitz.open(pdf_path)
+        if len(doc) == 0:
+            raise ValueError("PDF file is empty or corrupted")
+        
+        text_pages = []
+        for page_num, page in enumerate(doc):
+            try:
+                text = page.get_text()
+                text_pages.append(text)
+            except Exception as e:
+                print(f"Warning: Failed to extract page {page_num}: {e}")
+                text_pages.append("")
+        
+        doc.close()
+        full_text = "\n".join(text_pages)
+        
+        if not full_text.strip():
+            raise ValueError("No text extracted from PDF")
+        
+        return full_text
+    except FileNotFoundError:
+        raise FileNotFoundError(f"PDF file not found: {pdf_path}")
+    except Exception as e:
+        raise RuntimeError(f"PDF extraction error: {str(e)}")
+```
+
+For MD/TXT files:
+```python
+def read_text_file(file_path: str) -> str:
+    """Read text file with encoding fallback."""
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except UnicodeDecodeError:
+        with open(file_path, 'r', encoding='latin-1') as f:
+            return f.read()
+    except FileNotFoundError:
+        raise FileNotFoundError(f"File not found: {file_path}")
+    except Exception as e:
+        raise RuntimeError(f"File reading error: {str(e)}")
+```
+
+## Step 2.5: Write raw text to memory (for debugging)
+
+```bash
+mkdir -p .planning/memory
+echo "$text" > .planning/memory/raw-problem-text.txt
+
+if [ ! -s .planning/memory/raw-problem-text.txt ]; then
+  echo "Error: No text extracted from problem file"
+  exit 1
+fi
+
+echo "✓ Extracted $(wc -l < .planning/memory/raw-problem-text.txt) lines from problem file"
+```
+
+## Step 3: Extract structured fields using LLM
+
+Analyze the extracted text and extract the following 7 fields as JSON:
 
 ```
-请将以下数学建模赛题解析为结构化格式。
+Analyze this mathematical modeling problem and extract structured information:
 
-## 解析要求
+{text}
 
-1. **标题**: 提取问题的主题或标题
-2. **背景**: 描述问题的现实背景和意义
-3. **问题**: 列出所有需要回答的问题（可能有多个子问题）
-4. **约束**: 提取所有已知条件、数据和限制
-5. **目标**: 明确建模需要达成的目标
-6. **关键词**: 提取 5-10 个关键词
+Return a JSON object with these fields:
+{
+  "title": "Problem title (string)",
+  "background": "Context and problem statement (2-3 paragraphs)",
+  "questions": ["Question 1", "Question 2", ...],
+  "constraints": ["Constraint 1", "Constraint 2", ...],
+  "objectives": ["Objective 1", "Objective 2", ...],
+  "keywords": ["keyword1", "keyword2", ...],
+  "summary": "One-sentence problem summary"
+}
 
-## 注意事项
-
-- 保持原始问题的完整性
-- 不要添加原文没有的信息
-- 如果某个部分不明确，标注为"需进一步分析"
-
-## 原始赛题文本
-
-{problem_text}
+Guidelines:
+- Extract ALL information from the problem
+- If a field is not explicitly stated, infer it from context
+- If truly not present, use "not specified"
+- Return ONLY valid JSON, no markdown formatting
 ```
 
-## 3. 结构化输出
+Validation:
+```python
+import json
 
-将 LLM 的解析结果按照 `<output_format>` 格式整理。
+problem_data = json.loads(problem_json)
+required_fields = ["title", "background", "questions", "constraints", "objectives", "keywords", "summary"]
 
-## 4. 生成摘要
+for field in required_fields:
+    if field not in problem_data:
+        raise ValueError(f"Missing required field: {field}")
+```
 
-创建 100-200 字的问题摘要，包含：
-- 问题核心是什么
-- 主要建模目标
-- 关键约束或挑战
+## Step 4: Write problem.md to memory
 
-## 5. 添加上下文摘要
+```python
+import yaml
 
-为后续阶段生成简明的上下文信息：
-- 问题类型分类
-- 关键变量
-- 数据可用性
-- 期望输出类型
+frontmatter = {
+    'title': problem_data['title'],
+    'type': 'competition_problem',
+    'source': problem_path
+}
 
-## 6. 保留原始文本
+def format_list(items):
+    if not items:
+        return "- (none specified)"
+    return "\n".join(f"- {item}" for item in items)
 
-将原始问题文本完整保存在 `## Raw Text` 部分。
+content = f"""---
+{yaml.dump(frontmatter, default_flow_style=False).strip()}
+---
 
-## 7. 写入文件
+# Background
 
-将结构化内容写入：
-`.planning/phases/01-foundation-problem-pipeline/outputs/problem.md`
+{problem_data['background']}
+
+## Questions
+
+{format_list(problem_data['questions'])}
+
+## Constraints
+
+{format_list(problem_data['constraints'])}
+
+## Objectives
+
+{format_list(problem_data['objectives'])}
+
+## Keywords
+
+{format_list(problem_data['keywords'])}
+
+## Summary
+
+{problem_data['summary']}
+"""
+
+mkdir -p .planning/memory
+with open('.planning/memory/problem.md', 'w', encoding='utf-8') as f:
+    f.write(content)
+
+print(f"✓ Wrote problem.md to .planning/memory/")
+```
+
+Verify output:
+```bash
+test -f .planning/memory/problem.md || exit 1
+grep -q "^title:" .planning/memory/problem.md || exit 1
+grep -q "# Background" .planning/memory/problem.md || exit 1
+grep -q "## Questions" .planning/memory/problem.md || exit 1
+grep -q "## Constraints" .planning/memory/problem.md || exit 1
+grep -q "## Objectives" .planning/memory/problem.md || exit 1
+grep -q "## Keywords" .planning/memory/problem.md || exit 1
+grep -q "## Summary" .planning/memory/problem.md || exit 1
+
+echo "✓ problem.md validated with all 7 fields"
+```
 
 </process>
 
 <quality_gate>
-- [ ] 所有必填字段都有内容
-- [ ] 摘要准确反映问题核心
-- [ ] 原始文本完整保留
-- [ ] 上下文摘要便于后续阶段理解
+- [ ] PDF/MD/TXT text extraction successful
+- [ ] All 7 fields extracted from problem text
+- [ ] problem.md written to .planning/memory/
+- [ ] All sections present: Background, Questions, Constraints, Objectives, Keywords, Summary
 </quality_gate>
+
+<notes>
+**Skill auto-discovery:**
+This skill is automatically discovered by Claude Code from `.claude/skills/mm-agent/parse-problem.md`.
+
+**Coordinator integration:**
+The coordinator skill invokes parse-problem with the problem file path after initial validation in SKILL.md.
+
+**Output format:**
+problem.md is written to `.planning/memory/` for use by Phase 3 (Task Decomposition).
+
+**Requirements addressed:**
+- PROB-01: PDF parsing with PyMuPDF
+- PROB-02: MD/TXT file reading
+- PROB-03: LLM structured extraction with 7 fields
+- PROB-04: Output problem.md with structured format
+</notes>
