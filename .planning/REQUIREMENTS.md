@@ -55,7 +55,10 @@
 
 - [ ] **RPT-01**: 系统可基于建模过程和结果生成 LaTeX 报告
 - [ ] **RPT-02**: 系统可输出 PDF 格式论文报告
-- [ ] **RPT-03**: 报告包含摘要、引言、方法、结果、结论、参考文献
+- [ ] **RPT-03**: 报告使用固定大纲结构 + 动态 Task 章节（IDEA.md §11.2）
+- [ ] **RPT-04**: 系统支持 mcmthesis（美赛）和 cumcmthesis（国赛）模板切换（IDEA.md §11.6）
+- [ ] **RPT-05**: 系统使用精细化章节依赖图进行上下文传递（IDEA.md §11.3）
+- [ ] **RPT-06**: LaTeX 生成遵循科学语言规范（无 Markdown，连贯叙事，学术风格）
 
 ### Claude Code Integration
 
@@ -76,7 +79,7 @@
 - **ACTR-ADV-02**: 质量评分自动判断（替代固定 max_rounds）
 - **EXEC-ADV-01**: Pyodide 浏览器沙盒执行
 - **EXEC-ADV-02**: 高级错误恢复（代码自动修复而非重试）
-- **RPT-ADV-01**: 竞赛特定格式模板（MCM/ICM, CUMCM）
+- ~~**RPT-ADV-01**: 竞赛特定格式模板（MCM/ICM, CUMCM）~~ → 升级为 RPT-04
 - **RPT-ADV-02**: 多语言报告支持
 
 ### Multi-Model Support
@@ -134,6 +137,9 @@
 | RPT-01 | Phase 7 | Pending |
 | RPT-02 | Phase 7 | Pending |
 | RPT-03 | Phase 7 | Pending |
+| RPT-04 | Phase 7 | Pending |
+| RPT-05 | Phase 7 | Pending |
+| RPT-06 | Phase 7 | Pending |
 | INTG-01 | Phase 1 | Pending |
 | INTG-02 | Phase 1 | Pending |
 | INTG-03 | Phase 1 | Complete |

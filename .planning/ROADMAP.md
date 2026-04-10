@@ -153,16 +153,30 @@ This roadmap delivers the MM-Agent mathematical modeling system in Claude Code. 
 
 ### Phase 7: Report Generation
 
-**Goal:** Generate final paper report with proper structure and formatting
+**Goal:** Generate final paper report with fixed outline, chapter-based context passing, and LaTeX/PDF compilation
 
 **Depends on:** Phase 6
 
-**Requirements:** RPT-01, RPT-02, RPT-03
+**Requirements:** RPT-01, RPT-02, RPT-03, RPT-04, RPT-05
+
+**Key Design** (IDEA.md §11):
+- Fixed outline structure with dynamic Task chapters (§11.2)
+- Chapter relevance map for fine-grained context passing (§11.3)
+- Scientific language prompt for academic writing (§11.5)
+- mcmthesis (美赛) and cumcmthesis (国赛) template support (§11.6)
 
 **Success Criteria** (what must be TRUE):
-1. System generates LaTeX report combining problem analysis, modeling process, and results
-2. System compiles LaTeX to PDF format paper report
-3. Report includes required sections: abstract, introduction, methodology, results, conclusion, references
+1. System generates fixed outline structure with dynamic Task chapters
+2. System uses chapter relevance map for fine-grained context passing
+3. System generates LaTeX following scientific language prompt (no markdown, continuous narrative)
+4. System supports both mcmthesis and cumcmthesis templates
+5. System compiles LaTeX to PDF and collects figures/codes as appendix
+
+**Resources:**
+- `.planning/templates/report-generator.py` - Report generation logic
+- `.planning/templates/mcmthesis/` - 美赛模板
+- `.planning/templates/cumcmthesis/` - 国赛模板
+- `.planning/prompts/mm-agent-prompts.py` - 38 Prompt templates
 
 **Plans:** TBD
 
