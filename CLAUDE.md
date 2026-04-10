@@ -67,11 +67,11 @@
 <!-- GSD:project-start source:PROJECT.md -->
 ## Project
 
-**MM-Agent in Claude Code (mm-agent-in-cc)**
+**MM-Agent in Claude Code**
 
-一个将学术界的 MM Agent 数学建模多智能体架构复刻并本地化为 Claude Code 工作流插件的系统。目标是打造一个能全自动接收非结构化赛题、进行数学建模、执行数值仿真并输出报告的端到端工作流。
+将 NeurIPS 2025 论文 "MM-Agent" 的数学建模多智能体架构，本地化为 Claude Code 工作流插件。用户通过 `/mm-agent --problem <file>` 启动，继承 Claude Code 的模型配置，无需单独配置 API Key。
 
-基于 NeurIPS 2025 收录的 MM Agent 论文，结合 GSD 框架的上下文隔离与状态机特性，让数学建模工作者在熟悉的 Claude Code 环境中使用这个强大的数学建模工具。
+为数学建模竞赛参与者、科研工作者在熟悉的 Claude Code 环境中提供 MM-Agent 的自动化建模能力。
 
 **Core Value:** **输入非结构化赛题 → 自动化数学建模全流程 → 输出符合要求的论文报告**
 
@@ -79,76 +79,103 @@
 
 ### Constraints
 
-- **Tech Stack**: Claude Code Skills/Hooks/Agents 体系
-- **Target Users**: 数学建模竞赛参与者、科研工作者
-- **Integration**: 必须能在 Claude Code CLI 环境中运行
-- **Reference**: 需参考 LLM-MM-Agent 和 get-shit-done 的实现
+- **Tech Stack**: 必须在 Claude Code CLI 环境中运行，使用 Skills/Hooks/Agents 体系
+- **Integration**: 继承 Claude Code 的模型配置，无需单独配置 API Key
+- **Scope**: 聚焦核心流水线，其他功能失败不影响主流程
+- **Reference**: 需参考 LLM-MM-Agent 和 get-shit-done 的实现模式
+- **CLI-first**: v1 不做 Web UI，命令行交互为主
+- **User Requirements**: 用户已有 Claude Code 环境，可提供赛题文件（PDF/MD/TXT）
 <!-- GSD:project-end -->
 
 <!-- GSD:stack-start source:research/STACK.md -->
 ## Technology Stack
 
 ## Recommended Stack
-### Core Technologies
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
+### Core Framework
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
 | Claude Code Skills | Current | Extension mechanism | Native CLI integration, declarative skill definition, auto-discovery |
 | Claude Code Hooks | Current | Event triggers | PreToolUse/PostToolUse for validation, auto-formatting, state tracking |
 | Claude Code Agents | Current | Subagent orchestration | Specialized agents for modeling phases, parallel execution support |
-| MCP Servers | Current | Tool integration | External tools (web search, code execution, document processing) |
 | GSD Framework | Latest | Workflow patterns | Proven phase/plan/execute pattern, context isolation, state management |
+### Python Runtime
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| Python | 3.10+ (3.12 recommended) | Runtime environment | Required for numerical computation, matches LLM-MM-Agent |
+| NumPy | Latest | Numerical array operations | Foundation for scientific computing |
+| SciPy | Latest | Scientific computing | Optimization, statistics, linear algebra |
+| Pandas | Latest | Data manipulation | Data preprocessing, result handling |
+| Matplotlib | Latest | Visualization | Plot generation for reports |
+| SymPy | Latest | Symbolic mathematics | Analytical derivations |
+| statsmodels | Latest | Statistical modeling | Regression, time series |
+| scikit-image | Latest | Image processing | If needed for visual problems |
+### Embedding & Knowledge Retrieval
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| FlagEmbedding (BGE-m3) | Latest | Embedding computation | Multi-lingual (100+), multi-function retrieval, 8192 token context |
+| sentence-transformers | Latest | Model wrapper | Simplified BGE-m3 loading and usage |
+### Report Generation
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| Jinja2 | Latest | Template engine | Dynamic content rendering |
+| Pandoc | Latest | Document conversion | Markdown/LaTeX to PDF |
+| pypandoc | Latest | Python Pandoc bindings | Programmatic conversion |
+| pylatex | Latest | LaTeX generation | Programmatic LaTeX creation |
 ### Supporting Libraries
 | Library | Version | Purpose | When to Use |
 |---------|---------|---------|-------------|
-| Python + NumPy/SciPy | 3.12+ | Numerical computation | Mathematical modeling, simulation execution |
-| SymPy | Latest | Symbolic math | Analytical model derivation |
-| Matplotlib/Plotly | Latest | Visualization | Result plots, charts for reports |
-| LaTeX (pandoc) | Latest | Document generation | Paper report formatting |
-| Jinja2 | Latest | Template engine | Report templates, dynamic content |
-### Development Tools
-| Tool | Purpose | Notes |
-|------|---------|-------|
-| claude-cli | Skill development | `claude skill create`, `claude skill test` |
-| git | Version control | Planning docs tracked per config |
-| pytest | Testing | Agent behavior verification |
-| markdown | Documentation | Skill prompts, workflow docs |
-## Installation
-# Claude Code Skills (installed in ~/.claude/skills/ or .claude/skills/)
-# No npm install needed - skills are markdown files
-# Python environment for numerical work
-# Document generation
-# Or: brew install pandoc (macOS)
-# MCP servers (if needed for external tools)
+| PyMuPDF (fitz) | Latest | PDF text extraction | Problem parsing from PDF files |
+| python-dotenv | Latest | Environment loading | API key management |
+| pyyaml | Latest | Config parsing | YAML configuration files |
+| anthropic | Latest | Claude API | Direct API calls if needed |
+| openai | Latest | OpenAI API | For potential model selection |
 ## Alternatives Considered
-| Recommended | Alternative | When to Use Alternative |
-|-------------|-------------|-------------------------|
-| Claude Code Skills | Custom Python scripts | If need standalone app outside CLI |
-| GSD Framework patterns | LangGraph/LangChain | If need different agent orchestration approach |
-| CLI-first | Web UI (Gradio/Streamlit) | If need visual interface for non-CLI users |
-| In-file context | Database state storage | If need persistent multi-session state |
-## What NOT to Use
-| Avoid | Why | Use Instead |
-|-------|-----|-------------|
-| Web framework (Django/Flask) | Not a web app, CLI-native integration | Claude Code Skills |
-| Custom agent orchestration | GSD already solves this well | GSD framework patterns |
-| Hardcoded prompts in code | Skills are more maintainable | Skill markdown files |
-| Global state without isolation | Context pollution between phases | GSD's context isolation patterns |
-## Stack Patterns by Variant
-- Use Python CLI (argparse/rich)
-- Because may need deployment outside Claude Code
-- Use Skills + Hooks + Agents
-- Because native CLI experience, auto-discovery
-## Version Compatibility
-| Package A | Compatible With | Notes |
-|-----------|-----------------|-------|
-| Claude Code | Skills/Hooks/Agents | All current versions work together |
-| Python 3.12+ | NumPy/SciPy/SymPy | Latest versions recommended |
-| GSD Framework | Claude Code Agents | Designed for agent-based execution |
+| Category | Recommended | Alternative | Why Not |
+|----------|-------------|-------------|---------|
+| Framework | GSD Framework | LangGraph/LangChain | GSD provides better phase orchestration for Claude Code |
+| Embedding | BGE-m3 | mGTE | BGE-m3 has more established community, better documentation |
+| Report | Jinja2 + Pandoc | WeasyPrint | Pandoc is standard for academic papers |
+| State | JSON files | Database | File system simpler for v1, avoids deployment complexity |
+| Python | 3.12 | 3.11/3.10 | Latest stable, better performance |
+## Installation
+### Core Python Environment
+# Create environment
+# Core dependencies (from LLM-MM-Agent requirements.txt)
+# Report generation
+# PDF parsing
+# Configuration
+### Claude Code Skills Setup
+# Skills are markdown files in ~/.claude/skills/ or project .claude/skills/
+# No npm install needed - native Claude Code mechanism
+# Example skill structure:
+# .claude/skills/mm-agent/
+#   SKILL.md          # Entry point definition
+#   parse-problem.md  # Problem parsing hook
+#   model-task.md     # Task modeling agent
+#   execute-code.md   # Code execution hook
+#   generate-report.md # Report generation hook
+### Embedding Model Download
+# BGE-m3 model (recommended)
+# Automatically downloaded on first use via FlagEmbedding
+## Configuration Files
+### Project Structure
+### Environment Variables
+# .env (do not commit)
+# Claude Code inherits user configuration - no additional API key needed
+# For direct API calls if needed:
 ## Sources
-- MM Agent Paper: https://arxiv.org/abs/2505.14148 — Multi-agent architecture patterns
-- LLM-MM-Agent repo: https://github.com/usail-hkust/LLM-MM-Agent — Reference implementation
-- GSD Framework: https://github.com/gsd-build/get-shit-done — Workflow patterns
-- Claude Code docs: https://claude.ai/code — Skills/Hooks/Agents documentation
+- [MM-Agent Paper (arXiv 2505.14148)](https://arxiv.org/abs/2505.14148) — NeurIPS 2025, four-stage mathematical modeling framework, HIGH confidence
+- [LLM-MM-Agent Repository](https://github.com/usail-hkust/LLM-MM-Agent) — Python dependencies, HMML structure, MEDIUM confidence
+- [GSD Framework GitHub](https://github.com/gsd-build/get-shit-done) — Phase orchestration patterns, HIGH confidence
+- [FlagEmbedding GitHub](https://github.com/FlagOpen/FlagEmbedding) — BGE-m3 installation and usage, HIGH confidence
+## Confidence Assessment
+| Area | Confidence | Reason |
+|------|------------|--------|
+| Core Framework | HIGH | Claude Code native + GSD verified patterns |
+| Python Stack | HIGH | Based on LLM-MM-Agent requirements.txt |
+| Embedding | HIGH | Official FlagEmbedding docs verified |
+| Report Generation | MEDIUM | Standard tools, less math-specific validation |
+| Installation | MEDIUM | Based on package docs, not fully tested in this project |
 <!-- GSD:stack-end -->
 
 <!-- GSD:conventions-start source:CONVENTIONS.md -->

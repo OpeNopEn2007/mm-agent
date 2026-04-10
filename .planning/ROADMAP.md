@@ -1,202 +1,166 @@
 # Roadmap: MM-Agent in Claude Code
 
-**Project:** MM-Agent in Claude Code (mm-agent-in-cc)
 **Created:** 2026-04-10
-**Granularity:** Coarse (4 phases)
-**Core Value:** 输入非结构化赛题 → 自动化数学建模全流程 → 输出符合要求的论文报告
+**Granularity:** Standard
+**Total Phases:** 7
 
-## Phase Overview
+## Overview
 
-| # | Phase | Goal | Requirements | Status |
-|---|-------|------|--------------|--------|
-| 1 | Foundation & Problem Pipeline | 建立工作流基础设施和问题输入流程 | FND-01~04, PROB-01~04, AGNT-05~06, VRF-01~03 | ✓ Complete |
-| 2 | Modeling Agent System | 实现核心建模智能体和协调机制 | AGNT-01, AGNT-02 | Pending |
-| 3 | Simulation & Execution | 数值模拟执行和结果验证 | AGNT-03, SIM-01~04 | Pending |
-| 4 | Review & Report Generation | 结果审查和报告生成 | AGNT-04, RPT-01~04 | Pending |
+This roadmap delivers the MM-Agent mathematical modeling system in Claude Code. Each phase follows the natural pipeline from problem input to paper output, with clear success criteria and requirement mapping.
 
-**Total phases:** 4
-**Total requirements:** 24
-**Coverage:** 100% ✓
-**Completed:** 1/4 phases
+## Phases
 
----
+- [ ] **Phase 1: Claude Code Integration** - Establish Skills/Agents framework and workflow entry point
+- [ ] **Phase 2: Problem Analysis Pipeline** - Parse and structure competition problems from PDF/MD/TXT
+- [ ] **Phase 3: Task Decomposition with DAG** - Decompose into dependent tasks with Memory System
+- [ ] **Phase 4: HMML Knowledge Retrieval** - Retrieve relevant modeling methods from knowledge base
+- [ ] **Phase 5: Mathematical Modeling with Actor-Critic** - Generate iterative modeling solutions
+- [ ] **Phase 6: Code Generation & Execution** - Execute Python numerical simulations
+- [ ] **Phase 7: Report Generation** - Produce LaTeX/PDF paper reports
 
 ## Phase Details
 
-### Phase 1: Foundation & Problem Pipeline
+### Phase 1: Claude Code Integration
 
-**Goal:** 建立工作流基础设施和问题输入流程
+**Goal:** Establish the foundational Skills/Agents framework with workflow entry point that inherits Claude Code configuration
 
-**Duration estimate:** 1-2 days
+**Depends on:** Nothing (first phase)
 
-**Requirements covered:**
-- FND-01, FND-02, FND-03, FND-04 (Foundation)
-- PROB-01, PROB-02, PROB-03, PROB-04 (Problem Input)
-- AGNT-05, AGNT-06 (Agent Coordination basics)
-- VRF-01, VRF-02, VRF-03 (Verification framework)
+**Requirements:** INTG-01, INTG-02, INTG-03, INTG-04
 
-**Success criteria:**
-1. 用户执行 `/mm-agent` skill 可启动工作流
-2. 问题文本正确解析为 problem.md 结构化文件
-3. .planning/ 目录按 GSD 规范创建
-4. 验证门控机制可拦截不合格输出
+**Success Criteria** (what must be TRUE):
+1. User can invoke `/mm-agent --problem <file>` command and receive initial workflow response
+2. System inherits Claude Code's model configuration without requiring separate API keys
+3. Workflow is defined as a Claude Code Skill with auto-discovery in `.claude/skills/`
+4. Agents are registered for executing workflow phases with proper isolation
 
-**Key deliverables:**
-- `.claude/skills/mm-agent/SKILL.md` — 主入口 Skill
-- `.claude/skills/mm-agent/problem-input.md` — 问题解析 Skill
-- `.planning/` 目录结构
-- `config.json` 工作流配置
-- 验证门控逻辑
-
-**Dependencies:** None (foundation phase)
-
-**Approach notes:**
-- 参考 GSD framework 的初始化模式
-- 问题解析使用 LLM 结构化输出
-- 上下文传递机制：problem.md → plan.md → ...
+**Plans:** TBD
 
 ---
 
-### Phase 2: Modeling Agent System
+### Phase 2: Problem Analysis Pipeline
 
-**Goal:** 实现核心建模智能体和协调机制
+**Goal:** Parse unstructured competition problems and extract structured problem definition
 
-**Duration estimate:** 2-3 days
+**Depends on:** Phase 1
 
-**Requirements covered:**
-- AGNT-01 (Planner Agent)
-- AGNT-02 (Modeler Agent)
+**Requirements:** PROB-01, PROB-02, PROB-03, PROB-04
 
-**Success criteria:**
-1. Planner Agent 可分析 problem.md 并生成 plan.md
-2. Modeler Agent 可根据 plan.md 推导 model.md
-3. 智能体输出包含上下文摘要供后续阶段使用
+**Success Criteria** (what must be TRUE):
+1. User can provide PDF format problem file and system extracts full text content
+2. User can provide Markdown or TXT format problem file and system parses it
+3. System outputs `problem.md` with structured fields: title, background, questions, constraints, objectives, keywords, summary
+4. System identifies problem context, research goals, and evaluation criteria from raw text
 
-**Key deliverables:**
-- `.claude/agents/planner.md` — Planner Agent 定义
-- `.claude/agents/modeler.md` — Modeler Agent 定义
-- `.claude/skills/mm-agent/modeling-phase.md` — 建模阶段 Skill
-- 复杂度约束检查逻辑
-
-**Dependencies:**
-- Phase 1 (问题解析输出 problem.md)
-
-**Approach notes:**
-- Planner: 问题分析 → 建模策略选择 → 任务分解
-- Modeler: 符号建模 → 方程推导 → 变量定义
-- 参考 MM Agent 论文的智能体角色定义
-- 添加模型复杂度约束（max variables, max equations）
+**Plans:** TBD
 
 ---
 
-### Phase 3: Simulation & Execution
+### Phase 3: Task Decomposition with DAG
 
-**Goal:** 数值模拟执行和结果验证
+**Goal:** Decompose problem into dependent subproblems with execution order and context passing
 
-**Duration estimate:** 2-3 days
+**Depends on:** Phase 2
 
-**Requirements covered:**
-- AGNT-03 (Programmer Agent)
-- SIM-01, SIM-02, SIM-03, SIM-04 (Simulation)
+**Requirements:** TASK-01, TASK-02, TASK-03, TASK-04, TASK-05, MEM-01, MEM-02, MEM-03
 
-**Success criteria:**
-1. Programmer Agent 可将 model.md 转换为可执行 Python 代码
-2. Python 运行时正确执行模拟代码
-3. 结果以 results.json + plots/ 输出
-4. 代码验证在执行前检查语法和逻辑错误
+**Success Criteria** (what must be TRUE):
+1. System identifies multiple subproblems from structured problem.md and assigns unique task IDs
+2. System constructs DAG showing dependencies between tasks and outputs `dag.json`
+3. System performs topological sort to determine execution order and outputs `execution-order.txt`
+4. System detects circular dependencies and reports error with cycle details
+5. System loads dependency task results from Memory files before starting dependent tasks
+6. System writes task results to `task-{id}.json` Memory files after completion
 
-**Key deliverables:**
-- `.claude/agents/programmer.md` — Programmer Agent 定义
-- `.claude/skills/mm-agent/simulation-phase.md` — 模拟阶段 Skill
-- 代码验证逻辑（语法检查、逻辑检查）
-- Python 运行时配置
-- 结果输出模板 (results.json schema)
-
-**Dependencies:**
-- Phase 2 (建模输出 model.md)
-
-**Approach notes:**
-- Programmer: 模型 → 算法选择 → 代码生成
-- 代码验证：静态分析 + 单元测试框架
-- 数值库：NumPy, SciPy, Matplotlib
-- 错误处理：捕获异常，生成调试建议
+**Plans:** TBD
 
 ---
 
-### Phase 4: Review & Report Generation
+### Phase 4: HMML Knowledge Retrieval
 
-**Goal:** 结果审查和报告生成
+**Goal:** Retrieve relevant mathematical modeling methods from hierarchical knowledge library
 
-**Duration estimate:** 2-3 days
+**Depends on:** Phase 3
 
-**Requirements covered:**
-- AGNT-04 (Reviewer Agent)
-- RPT-01, RPT-02, RPT-03, RPT-04 (Report Generation)
+**Requirements:** KNOW-01, KNOW-02, KNOW-03
 
-**Success criteria:**
-1. Reviewer Agent 可验证结果是否符合问题预期
-2. 报告包含标准章节（摘要、模型、结果、结论、参考文献）
-3. 格式验证智能体检查报告结构
-4. 最终输出为 PDF
+**Success Criteria** (what must be TRUE):
+1. System loads precomputed HMML embedding files from knowledge base directory
+2. Given task description, system retrieves Top-K most relevant modeling methods
+3. System outputs retrieval results to `retrieved-methods.json` with method names, descriptions, and similarity scores
 
-**Key deliverables:**
-- `.claude/agents/reviewer.md` — Reviewer Agent 定义
-- `.claude/agents/format-verifier.md` — 格式验证智能体定义
-- `.claude/skills/mm-agent/report-phase.md` — 报告阶段 Skill
-- 报告模板 (LaTeX/Pandoc)
-- 格式验证清单
-
-**Dependencies:**
-- Phase 3 (模拟输出 results.json, plots/)
-
-**Approach notes:**
-- Reviewer: 结果验证 → 逻辑检查 → 敏感性分析
-- 报告模板：数学建模标准结构
-- 格式验证：章节完整性、引用格式、图表标注
-- 输出转换：Markdown → LaTeX → PDF (Pandoc)
+**Plans:** TBD
 
 ---
 
-## Phase Dependencies
+### Phase 5: Mathematical Modeling with Actor-Critic
 
-```
-Phase 1 (Foundation)
-    ↓
-Phase 2 (Modeling) ──── depends on problem.md from Phase 1
-    ↓
-Phase 3 (Simulation) ──── depends on model.md from Phase 2
-    ↓
-Phase 4 (Report) ──── depends on results.json/plots from Phase 3
-```
+**Goal:** Generate mathematical modeling solutions through iterative quality improvement
 
-## Verification Points
+**Depends on:** Phase 4
 
-| Phase | Verification Gate | What Gets Verified |
-|-------|-------------------|--------------------|
-| 1 | Problem parsed | problem.md structure, required fields |
-| 2 | Model defined | model.md completeness, complexity limits |
-| 3 | Simulation ran | results.json valid, plots generated |
-| 4 | Report complete | PDF output, format checklist passed |
+**Requirements:** MODEL-01, MODEL-02, MODEL-03, MODEL-04, MODEL-05
 
-## Risk Mitigation
+**Success Criteria** (what must be TRUE):
+1. System generates initial modeling plan based on task description and retrieved methods
+2. System outputs `model.md` with modeling method, formulas, variables, and assumptions
+3. System outputs `formulas.json` with structured mathematical formula definitions
+4. System performs Actor-Critic iteration (max 3 rounds) to improve modeling quality
+5. System stops iteration when modeling quality reaches threshold instead of always completing max rounds
 
-| Risk | Mitigation Phase | Strategy |
-|------|------------------|----------|
-| Context loss | Phase 1 | File-based context passing |
-| Infinite loops | Phase 1 | Max iteration limits |
-| Simulation failure | Phase 3 | Code verification sub-phase |
-| Format drift | Phase 4 | Format verifier agent |
-| Model over-complexity | Phase 2 | Complexity constraints |
+**Plans:** TBD
 
 ---
 
-## Execution Mode
+### Phase 6: Code Generation & Execution
 
-**Parallelization:** Enabled (within phases, parallel agent work)
-**Verification:** Enabled at each phase transition
-**Auto-advance:** Enabled (YOLO mode by default)
+**Goal:** Generate and execute Python code for numerical simulation with error handling
+
+**Depends on:** Phase 5
+
+**Requirements:** CODE-01, CODE-02, CODE-03, CODE-04, CODE-05, CODE-06
+
+**Success Criteria** (what must be TRUE):
+1. System generates executable Python code based on modeling plan and formulas
+2. System executes generated Python code in sandboxed environment
+3. System captures execution output (stdout/stderr) and saves to results files
+4. System automatically retries execution up to 5 times with error handling on failures
+5. System outputs `results.json` with numerical results and generates visualization plots
+6. System enforces 60-second execution timeout and terminates hanging processes
+
+**Plans:** TBD
 
 ---
+
+### Phase 7: Report Generation
+
+**Goal:** Generate final paper report with proper structure and formatting
+
+**Depends on:** Phase 6
+
+**Requirements:** RPT-01, RPT-02, RPT-03
+
+**Success Criteria** (what must be TRUE):
+1. System generates LaTeX report combining problem analysis, modeling process, and results
+2. System compiles LaTeX to PDF format paper report
+3. Report includes required sections: abstract, introduction, methodology, results, conclusion, references
+
+**Plans:** TBD
+
+---
+
+## Progress
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 1. Claude Code Integration | 0/4 | Not started | - |
+| 2. Problem Analysis Pipeline | 0/4 | Not started | - |
+| 3. Task Decomposition with DAG | 0/6 | Not started | - |
+| 4. HMML Knowledge Retrieval | 0/3 | Not started | - |
+| 5. Mathematical Modeling with Actor-Critic | 0/5 | Not started | - |
+| 6. Code Generation & Execution | 0/6 | Not started | - |
+| 7. Report Generation | 0/3 | Not started | - |
+
+---
+
 *Roadmap created: 2026-04-10*
-*Granularity: Coarse*
-*Ready for Phase 1 planning*
