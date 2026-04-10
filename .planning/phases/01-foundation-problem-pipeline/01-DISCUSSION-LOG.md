@@ -32,7 +32,7 @@
 | 交互式多行输入 | 需要额外交互，复杂度高 | |
 
 **User's choice:** 文件路径参数 (auto-selected - recommended)
-**Notes:** Mathematical modeling problems are typically long, multi-paragraph texts
+**Notes:** Mathematical modeling problems are typically long, multi-paragraph texts. **User clarification:** 赛题、论文与参考资料多为 PDF 格式，需支持 PDF 解析
 
 ---
 
