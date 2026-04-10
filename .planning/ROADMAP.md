@@ -84,10 +84,10 @@ This roadmap delivers the MM-Agent mathematical modeling system in Claude Code. 
 5. System loads dependency task results from Memory files before starting dependent tasks
 6. System writes task results to `task-{id}.json` Memory files after completion
 
-**Plans:** 5 plans
+**Plans:** 1/5 plans executed
 
 **Plan List:**
-- [ ] 03-01-PLAN.md — Create test scaffolds for DAG operations, Memory system, and Task Decomposition (Wave 0)
+- [x] 03-01-PLAN.md — Create test scaffolds for DAG operations, Memory system, and Task Decomposition (Wave 0)
 - [ ] 03-02-PLAN.md — Implement task-decomposition.md skill for subproblem identification (Wave 1)
 - [ ] 03-03-PLAN.md — Implement DAG operations with topological sort and cycle detection (Wave 1)
 - [ ] 03-04-PLAN.md — Implement Memory System I/O (load/write) with schema validation (Wave 2)
@@ -174,7 +174,7 @@ This roadmap delivers the MM-Agent mathematical modeling system in Claude Code. 
 |-------|----------------|--------|-----------|
 | 1. Claude Code Integration | 4/4 | Complete | 2026-04-10 |
 | 2. Problem Analysis Pipeline | 4/4 | Complete | 2026-04-10 |
-| 3. Task Decomposition with DAG | 0/5 | Not started | - |
+| 3. Task Decomposition with DAG | 1/5 | In Progress|  |
 | 4. HMML Knowledge Retrieval | 0/3 | Not started | - |
 | 5. Mathematical Modeling with Actor-Critic | 0/5 | Not started | - |
 | 6. Code Generation & Execution | 0/6 | Not started | - |
