@@ -1,118 +1,53 @@
 ---
 name: mm-agent
-description: Mathematical modeling multi-agent workflow for contest problems
+description: Mathematical modeling workflow - parse problems, build models, execute simulations, generate reports
 ---
 
 <objective>
-输入赛题 → 自动化数学建模全流程 → 输出符合要求的论文报告
+Execute end-to-end mathematical modeling workflow from problem input to paper report output.
+Users invoke via /mm-agent --problem <file> to start the 7-phase pipeline.
 
-基于 MM Agent (NeurIPS 2025) 的多智能体架构，在 Claude Code 中实现数学建模全流程自动化。
+Phases:
+1. Problem Analysis - Parse and structure competition problems
+2. Task Decomposition - Build DAG with dependencies
+3. HMML Knowledge Retrieval - Find relevant modeling methods
+4. Mathematical Modeling - Generate models via Actor-Critic iteration
+5. Code Generation & Execution - Run Python numerical simulations
+6. Report Generation - Produce LaTeX/PDF paper reports
+
+The workflow inherits Claude Code's model configuration automatically.
 </objective>
 
-<execution_context>
-- .planning/PROJECT.md (项目愿景和约束)
-- .planning/ROADMAP.md (阶段概览)
-- .planning/STATE.md (当前状态)
-</execution_context>
-
-<flags>
-- `--problem <path>` — 问题文件路径（支持 .md, .txt, .pdf）
-- `--interactive` — 进入交互模式，逐步确认
-- `--skip-verify` — YOLO 模式，跳过验证门控
-- `--phase <N>` — 从指定阶段开始/继续
-</flags>
-
 <process>
+## Step 1: Parse command arguments
+Use Bash tool to extract $ARGUMENTS and parse parameters:
+- --problem <file> (required) - Path to problem file (PDF/MD/TXT)
+- --interactive (optional) - Step-by-step confirmation mode
+- --skip-verify (optional) - Disable verification gates
+- --phase N (optional) - Resume from phase N
 
-## 1. 参数检查
+Store parsed values in variables for downstream use.
 
-检查是否提供了 `--problem` 参数。
+## Step 2: Validate problem file exists
+Use Bash tool to check:
+- File exists at specified path
+- File extension is supported (.pdf, .md, .txt)
+- File is readable
 
-**如果没有参数：**
-显示使用帮助：
-```
-## MM-Agent: 数学建模多智能体工作流
+If validation fails, report error with supported format list and exit.
 
-用法:
-  /mm-agent --problem <file>     启动完整工作流
-  /mm-agent --problem <file> --interactive  交互模式
-  /mm-agent --phase <N>          从指定阶段继续
+## Step 3: Invoke coordinator skill
+Use Skill tool to load coordinator.md for workflow orchestration.
+Pass parsed arguments as context.
 
-支持格式: .md, .txt, .pdf
-
-示例:
-  /mm-agent --problem contest-2024.pdf
-  /mm-agent --problem problem.md --interactive
-```
-
-退出。
-
-## 2. 初始化阶段输出目录
-
-创建阶段输出目录结构：
-```
-.planning/phases/01-foundation-problem-pipeline/outputs/
-.planning/phases/02-modeling-agent-system/inputs/
-.planning/phases/02-modeling-agent-system/outputs/
-```
-
-## 3. 问题输入处理
-
-调用 `mm-agent-problem-input` skill：
-1. 验证文件存在性
-2. 检测文件类型（.md/.txt/.pdf）
-3. 提取文本内容
-4. 将文本传递给解析器
-
-## 4. 问题解析
-
-调用 `mm-agent-parse-problem` skill：
-1. 使用 LLM 解析问题结构
-2. 提取：标题、背景、问题、约束、目标、关键词
-3. 生成摘要
-4. 输出到 `outputs/problem.md`
-
-## 5. 验证（可选）
-
-如果没有 `--skip-verify`：
-调用 `mm-agent-verify-phase` skill：
-1. 检查输出文件存在性
-2. 检查必填字段完整性
-3. 报告验证结果
-
-## 6. 显示结果
-
-输出问题解析摘要：
-```
-## 问题解析完成
-
-**标题:** {title}
-**关键词:** {keywords}
-
-**背景摘要:** {summary}
-
-**子问题:** {N} 个
-**约束条件:** {N} 个
-**建模目标:** {N} 个
-
-输出文件: .planning/phases/01-foundation-problem-pipeline/outputs/problem.md
-
-下一步: /mm-agent --phase 2
-```
-
-## 7. 配置常量
-
-```yaml
-# Workflow Configuration
-max_iterations_per_phase: 5
-max_total_iterations: 20
-iteration_timeout_seconds: 300
-```
-
+Coordinator skill handles:
+- GSD phase orchestration
+- Memory system initialization
+- Agent invocation per phase
+- Progress tracking and reporting
 </process>
 
-<success_criteria>
-- [ ] 问题文件成功读取
-- [ ] problem.md 包含所有必填字段
-- [ ] 摘要准确反映问题核心
-</success_criteria>
+<notes>
+This skill is the primary entry point for the MM-Agent workflow.
+All phase-specific logic is delegated to the coordinator skill and GSD framework.
+</notes>
