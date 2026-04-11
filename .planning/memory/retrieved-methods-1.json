@@ -1,0 +1,55 @@
+{
+  "query": "建立网球比赛动量预测模型",
+  "methods": [
+    {
+      "domain": "Prediction (Prediction)",
+      "subdomain": "Discrete Prediction (Discrete Prediction)",
+      "method": "Bayesian Network",
+      "score": 0.5122314095497131,
+      "core_idea": "Bayesian Network uses a directed acyclic graph (DAG) to represent causal relationships between random variables. Each node in the graph represents a random variable, and edges represent conditional dependencies between variables. Through local conditional probability distributions, Bayesian Network can effectively represent and reason about complex probabilistic relationships. The main components are: 1. Nodes: Represent random variables, which can be observable or latent variables. 2. Directed edges: Represent conditional dependencies between variables. 3. Conditional Probability Tables (CPTs): Define the probability distribution of each node given its parent nodes.",
+      "application": "Bayesian Network is widely used in the following fields: Medical diagnosis: Assists doctors in making diagnostic decisions by modeling the relationships between symptoms and diseases. Risk assessment: Evaluates the probability of system failures or financial crises in finance and engineering. Natural language processing: Handles uncertainties in language, such as speech recognition and machine translation. Machine learning: Used for classification, regression, and generative models, handling complex probabilistic reasoning problems."
+    },
+    {
+      "domain": "Machine Learning (Machine Learning)",
+      "subdomain": "Regression",
+      "method": "Locally Weighted Linear Regression (LWLR)",
+      "score": 0.49351227283477783,
+      "core_idea": "In LWLR, for each point to be predicted, different weights are assigned to the data points in the training set based on their distance. The closer the point, the greater the weight; the farther the point, the smaller the weight. Then, linear regression is performed on these weighted data points to obtain the predicted value for that point. Specifically, given a point to be predicted \\( x \\), its predicted value \\( \\hat{y} \\) is calculated through the following steps: 1. Calculate the weight matrix: Calculate the weight for each point in the training set based on a distance metric (such as the Gaussian kernel function). 2. Weighted regression: Perform linear regression on the weighted dataset to calculate the regression coefficients. 3. Prediction: Use the obtained regression coefficients to predict the value for the point to be predicted.",
+      "application": "LWLR is widely used in the following fields: Nonlinear regression analysis: When data shows a nonlinear trend, LWLR can effectively capture local nonlinear relationships. Local modeling: LWLR provides a flexible solution when local characteristics of the data need to be modeled. Data smoothing: By local weighting, LWLR can effectively smooth data and reduce the impact of noise."
+    },
+    {
+      "domain": "Machine Learning (Machine Learning)",
+      "subdomain": "Classification (Classification)",
+      "method": "Logistic Regression",
+      "score": 0.4903535842895508,
+      "core_idea": "Logistic Regression applies the Sigmoid function to a linear combination of input features, mapping the result to between 0 and 1 to estimate the probability of an event occurring.",
+      "application": "Logistic Regression is widely used in the following fields: Binary classification problems: such as spam detection and disease diagnosis. Multiclass classification problems: Logistic Regression can also be extended for multiclass classification tasks. Probability prediction: providing probability estimates of events occurring, suitable for scenarios requiring probability output."
+    },
+    {
+      "domain": "Machine Learning (Machine Learning)",
+      "subdomain": "Clustering (Clustering)",
+      "method": "Expectation Maximization (EM)",
+      "score": 0.487249493598938,
+      "core_idea": "",
+      "application": "The EM algorithm is widely used in the following fields: Mixture model estimation: In Gaussian Mixture Models (GMM), the EM algorithm is used to estimate the parameters of each Gaussian distribution. Missing data imputation: In cases of missing data, the EM algorithm can estimate the missing values to complete the dataset. Clustering analysis: In unsupervised learning, the EM algorithm is used for clustering data, such as image segmentation in image processing. Hidden Markov Models (HMM): Used to estimate the parameters of HMMs, such as state transition probabilities and observation probabilities."
+    },
+    {
+      "domain": "Machine Learning (Machine Learning)",
+      "subdomain": "Ensemble Learning Algorithms (Ensemble Learning Algorithms)",
+      "method": "Bagging Algorithm",
+      "score": 0.4835399389266968,
+      "core_idea": "The basic idea of Bagging is to generate multiple different subsets of the training set through random sampling with replacement, train multiple base learners on these subsets, and then combine the predictions of these base learners to obtain the final prediction. Specifically, the steps of the Bagging algorithm are as follows: 1. Data sampling: Randomly draw multiple subsets from the original training set using sampling with replacement. Each subset is typically the same size as the original training set, but due to sampling with replacement, some samples may appear multiple times in the same subset, while others may not appear at all. 2. Model training: Train a base learner on each subset. 3. Combine results: For classification problems, use voting, where the class with the most predictions from the base learners is chosen as the final prediction; for regression problems, use averaging, where the average of the base learners' predictions is taken as the final prediction.",
+      "application": "Bagging algorithms are particularly suitable for the following situations: High variance models: For high variance models that are prone to overfitting (such as decision trees), Bagging can effectively reduce the variance and improve generalization ability. Noisy data: In the presence of noisy data, Bagging can reduce the impact of noise on the model through multiple training and result combination."
+    },
+    {
+      "domain": "Prediction (Prediction)",
+      "subdomain": "Discrete Prediction (Discrete Prediction)",
+      "method": "Markov Decision Process (MDP)",
+      "score": 0.4781055450439453,
+      "core_idea": "MDP describes how an agent can maximize long-term rewards by choosing actions in an uncertain environment. The core ideas are: Markov property: The future state of the system depends only on the current state and the action taken, not on the past history. Reward mechanism: Each state-action pair receives an immediate reward, and the agent's goal is to maximize cumulative rewards through policy selection. The main components of MDP are: 1. State set (S): Describes all possible states of the system. 2. Action set (A): Describes all possible actions the agent can take in each state. 3. State transition probability (P): Defines the probability of transitioning to other states after taking a specific action in a given state. 4. Reward function (R): Defines the immediate reward obtained after taking a specific action in a given state. 5. Discount factor (γ): Used to balance the importance of current rewards and future rewards, typically ranging from 0 to 1.",
+      "application": "MDP is widely used in the following fields: Robot navigation: Helps robots plan paths in complex environments, avoid obstacles, and achieve autonomous navigation. Autonomous driving: Used for decision-making, such as stopping or passing at traffic lights, ensuring safety and efficiency. Resource management: Optimizes resource allocation in fields like cloud computing to maximize system performance. Financial investment: Formulates investment strategies to balance risk and return, achieving asset growth."
+    }
+  ],
+  "top_k": 6,
+  "timestamp": "2026-04-11T00:42:36.208457+00:00"
+}
