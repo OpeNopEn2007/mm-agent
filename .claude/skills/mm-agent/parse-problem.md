@@ -22,7 +22,10 @@ Store extracted text in a variable for structured extraction in Step 3.
 </input>
 
 <output>
-输出文件: `.planning/memory/problem.md`
+输出文件:
+- `.planning/memory/problem.md` — 结构化问题描述
+- `.planning/memory/attachments.json` — 附件查找结果（如有附件）
+- `.planning/memory/raw-problem-text.txt` — 原始文本（调试用）
 </output>
 
 <process>
@@ -96,6 +99,140 @@ if [ ! -s .planning/memory/raw-problem-text.txt ]; then
 fi
 
 echo "✓ Extracted $(wc -l < .planning/memory/raw-problem-text.txt) lines from problem file"
+```
+
+## Step 2.6: Extract attachment references from problem text
+
+Analyze the extracted text to identify attachment references:
+
+```
+Scan the problem text for attachment references:
+
+{text}
+
+Identify all attachments mentioned in the problem:
+- Look for patterns: "附件1", "附件2", "附表", "附件说明", "数据文件", "提供的表格"
+- Look for explicit file names with extensions: .csv, .xlsx, .txt, .dat, .json
+- Look for context clues: "见附件", "参考数据", "附件中包含"
+
+Return JSON with attachment info:
+{
+  "attachments": [
+    {
+      "mentioned_as": "original text mentioning the attachment",
+      "pattern": "glob pattern to search (e.g., **/附件1*.csv)",
+      "expected_type": "csv|xlsx|txt|dat|json|unknown"
+    }
+  ],
+  "has_attachments": true|false
+}
+
+If no attachments mentioned, return:
+{
+  "attachments": [],
+  "has_attachments": false
+}
+```
+
+Store the attachment patterns for later search:
+```bash
+mkdir -p .planning/memory
+echo "$attachment_json" > .planning/memory/attachment-patterns.json
+
+if [ "$(jq '.has_attachments' .planning/memory/attachment-patterns.json)" == "true" ]; then
+  ATTACHMENT_COUNT=$(jq '.attachments | length' .planning/memory/attachment-patterns.json)
+  echo "✓ Identified $ATTACHMENT_COUNT attachment references"
+fi
+```
+
+## Step 2.7: Find attachment files using Glob
+
+For each attachment pattern, search for matching files:
+
+```bash
+# Get problem directory (where the problem file is located)
+PROBLEM_DIR=$(dirname "$problem_path")
+
+# Initialize attachments.json
+echo '{"files": [], "missing": []}' > .planning/memory/attachments.json
+
+# If no attachments mentioned, skip this step
+if [ "$(jq '.has_attachments' .planning/memory/attachment-patterns.json)" != "true" ]; then
+  echo "✓ No attachments mentioned in problem"
+  exit 0
+fi
+
+# Iterate through each attachment pattern
+ATTACHMENT_COUNT=$(jq '.attachments | length' .planning/memory/attachment-patterns.json)
+for i in $(seq 0 $((ATTACHMENT_COUNT - 1))); do
+  PATTERN=$(jq -r ".attachments[$i].pattern" .planning/memory/attachment-patterns.json)
+  MENTIONED=$(jq -r ".attachments[$i].mentioned_as" .planning/memory/attachment-patterns.json)
+  EXPECTED_TYPE=$(jq -r ".attachments[$i].expected_type" .planning/memory/attachment-patterns.json)
+
+  # Use Glob tool to search for files
+  # Note: This requires Claude Code's Glob tool which will be invoked by the skill
+  echo "Searching for: $PATTERN in $PROBLEM_DIR"
+
+  # Placeholder for Glob results (actual search happens via Claude Code tool)
+  # Glob --pattern "$PATTERN" --path "$PROBLEM_DIR"
+done
+```
+
+**Claude Code Tool Integration:**
+
+The skill will use Claude Code's Glob tool to search for attachments:
+
+```markdown
+After identifying attachment patterns, use the Glob tool to search:
+
+For each attachment pattern from attachment-patterns.json:
+1. Glob --pattern "{pattern}" --path "{problem_directory}"
+2. If found:
+   - Add to attachments.json with found_path
+   - Read file to get metadata (rows, columns if CSV/XLSX)
+3. If not found:
+   - Add to attachments.json "missing" array
+   - Prompt user to provide the attachment
+```
+
+**Output attachments.json format:**
+
+```json
+{
+  "files": [
+    {
+      "mentioned_as": "附件1_食堂历史运行数据",
+      "found_path": "春季补选/B题/附件1_食堂历史运行数据.csv",
+      "type": "csv",
+      "rows": 10000,
+      "columns": ["日期", "时段", "进店人数", "..."]
+    }
+  ],
+  "missing": [
+    {
+      "mentioned_as": "附件2_窗口信息",
+      "expected_pattern": "**/附件2*.csv",
+      "suggestion": "Please provide the file or specify path with --attachments"
+    }
+  ]
+}
+```
+
+**Missing attachment handling:**
+
+```markdown
+If attachments.json has entries in "missing" array, display error:
+
+❌ 附件未找到
+
+题目提及以下附件：
+{for each missing attachment}
+- {mentioned_as}
+
+请提供附件：
+1. 将附件文件放入题目目录
+2. 或手动指定路径：
+   /mm-agent --problem {problem_path} --attachments "附件1.csv,附件2.csv"
 ```
 
 ## Step 3: Extract structured fields using LLM
@@ -207,6 +344,9 @@ echo "✓ problem.md validated with all 7 fields"
 
 <quality_gate>
 - [ ] PDF/MD/TXT text extraction successful
+- [ ] Attachment references identified (if any)
+- [ ] Attachment files searched using Glob
+- [ ] attachments.json created with found/missing status
 - [ ] All 7 fields extracted from problem text
 - [ ] problem.md written to .planning/memory/
 - [ ] All sections present: Background, Questions, Constraints, Objectives, Keywords, Summary
@@ -219,12 +359,20 @@ This skill is automatically discovered by Claude Code from `.claude/skills/mm-ag
 **Coordinator integration:**
 The coordinator skill invokes parse-problem with the problem file path after initial validation in SKILL.md.
 
+**Attachment handling (IDEA.md §11.2):**
+- Step 2.6: LLM extracts attachment references from problem text
+- Step 2.7: Glob tool searches for attachment files recursively
+- Output: attachments.json with found/missing status
+- Missing attachments: Prompt user to provide files or specify paths
+
 **Output format:**
 problem.md is written to `.planning/memory/` for use by Phase 3 (Task Decomposition).
+attachments.json is written to `.planning/memory/` for use by Phase 5 (Modeling) and Phase 6 (Code Execution).
 
 **Requirements addressed:**
 - PROB-01: PDF parsing with PyMuPDF
 - PROB-02: MD/TXT file reading
 - PROB-03: LLM structured extraction with 7 fields
 - PROB-04: Output problem.md with structured format
+- Attachment handling: Glob-based search with missing file prompts
 </notes>
