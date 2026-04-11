@@ -870,15 +870,77 @@ class PaperGenerator:
 
         Args:
             llm: Optional LLM callable for content generation.
-                 If None, content generation will use placeholders.
+                 If None, attempts to acquire LLM from environment.
         """
-        self.content_generator = ContentGenerator(llm)
+        self._llm = llm
+        # Acquire LLM if not provided
+        if self._llm is None:
+            self._llm = self._acquire_llm()
+            if self._llm is None:
+                print("[PaperGenerator] Warning: No LLM available, using placeholder mode")
+        self.content_generator = ContentGenerator(self._llm)
         self.outline_generator = OutlineGenerator()
         self.context_extractor = ContextExtractor()
         self.prompt_creator = PromptCreator()
         self.document_assembler = LatexDocumentAssembler()
         self.file_manager = FileManager()
-        self.llm = llm
+
+        # Track partial results for error handling
+        self._generated_chapters: Dict[str, Chapter] = {}
+
+    @property
+    def llm(self) -> Optional[Callable[[str], str]]:
+        """Expose LLM for external access."""
+        return self._llm
+
+    def _acquire_llm(self) -> Optional[Callable[[str], str]]:
+        """Acquire LLM from Claude Code environment.
+
+        Strategy:
+        1. Check for ANTHROPIC_API_KEY and use anthropic SDK
+        2. Check for Claude Code agent context (claude_code_session)
+        3. Fall back to None (placeholder mode)
+
+        Returns:
+            LLM callable or None if not available
+        """
+        import os
+
+        # Strategy 1: Use anthropic SDK if API key is available
+        anthropic_key = os.environ.get('ANTHROPIC_API_KEY') or os.environ.get('CLAUDE_API_KEY')
+        if anthropic_key:
+            try:
+                import anthropic
+                client = anthropic.Anthropic(api_key=anthropic_key)
+
+                def anthropic_llm(prompt: str) -> str:
+                    """Generate text using Anthropic Claude."""
+                    response = client.messages.create(
+                        model="claude-sonnet-4-20250514",
+                        max_tokens=4096,
+                        messages=[{"role": "user", "content": prompt}]
+                    )
+                    return response.content[0].text
+
+                print("[PaperGenerator] Using Anthropic SDK for LLM")
+                return anthropic_llm
+            except ImportError:
+                print("[PaperGenerator] anthropic package not installed")
+            except Exception as e:
+                print(f"[PaperGenerator] Failed to initialize Anthropic client: {e}")
+
+        # Strategy 2: Check if running in Claude Code with built-in LLM
+        # Claude Code provides the LLM context through the Skill/Agent runtime
+        # When called as a Skill, the LLM is already available in context
+        claude_session = os.environ.get('CLAUDE_CODE_SESSION')
+        if claude_session:
+            print("[PaperGenerator] Claude Code session detected")
+            # In Claude Code, Skills receive LLM through the runtime
+            # This is a placeholder that logs - actual LLM use happens via Skill tool
+
+        # No LLM available
+        print("[PaperGenerator] No LLM available, will use placeholder content")
+        return None
 
     def generate_paper(
         self,
