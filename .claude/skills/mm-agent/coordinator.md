@@ -348,18 +348,44 @@ echo "Context files: .planning/memory/context-for-task-{1..$TASK_COUNT}.txt"
 echo ""
 ```
 
-## Step 4.7: Invoke GSD phases (Phase 4+)
-For Phase 4 (HMML Retrieval) and beyond, use GSD workflow:
+## Step 4.7: Execute Phase 4-7 (mm-agent internal mechanism)
+Execute subsequent phases using mm-agent internal phase sub-skills:
+
 ```bash
-/gsd:execute-phase 04-hmml-retrieval
-/gsd:execute-phase 05-mathematical-modeling
-/gsd:execute-phase 06-code-execution
-/gsd:execute-phase 07-report-generation
+# Phase 4: HMML Knowledge Retrieval
+# Uses hmml-retrieval.md sub-skill
+python3 .claude/scripts/hmml_retrieval.py \
+  --query-file .planning/memory/task-desc-{task_id}.txt \
+  --output .planning/memory/retrieved-methods-{task_id}.json \
+  --top-k 6
+
+# Phase 5: Mathematical Modeling
+# Uses modeler.md agent (Actor-Critic iteration)
+# Input: task-desc, retrieved-methods.json
+# Output: model.md, formulas.json
+
+# Phase 6: Code Generation & Execution
+# Uses programmer.md agent
+# Input: model.md, formulas.json
+# Output: results.json, plots/
+
+# Phase 7: Report Generation
+# Uses reporter.md agent
+# Input: all memory artifacts
+# Output: report.pdf (LaTeX compiled)
 ```
 
-Each phase produces artifacts in .planning/memory/ and passes context to next phase.
+Each phase produces artifacts in `.planning/memory/` and passes context to next phase.
 
-Note: Phase 1 (Foundation) establishes the skills and agents. Phase 2 (Problem Analysis) parses the input file. Phase 3 (Task Decomposition) sets up DAG and context. Phases 4-7 are executed via GSD workflow.
+**Phase sub-skills location:**
+- `.claude/skills/mm-agent/hmml-retrieval.md` — Phase 4 HMML retrieval
+- `.claude/skills/mm-agent/modeling.md` — Phase 5 Actor-Critic modeling
+- `.claude/skills/mm-agent/code-execution.md` — Phase 6 code generation
+- `.claude/skills/mm-agent/report-generation.md` — Phase 7 report compilation
+
+**Runtime independence:** mm-agent workflow executes phases internally via skill invocations and script calls, not via `/gsd:*` commands. GSD framework is used for development workflow (planning, verification), not runtime execution.
+
+Note: Phase 1 (Foundation) establishes the skills and agents. Phase 2 (Problem Analysis) parses the input file. Phase 3 (Task Decomposition) sets up DAG and context. Phases 4-7 execute in sequence using internal mechanism.
 
 ## Step 5: Report workflow completion
 After all phases complete:
