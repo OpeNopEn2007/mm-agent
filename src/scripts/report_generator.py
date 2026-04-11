@@ -948,7 +948,7 @@ class PaperGenerator:
         metadata: Dict[str, Any],
         output_dir: str,
         filename: str
-    ) -> None:
+    ) -> Dict[str, Any]:
         """Generate a complete academic paper from JSON data.
 
         Args:
@@ -956,7 +956,18 @@ class PaperGenerator:
             metadata: Paper metadata (title, team, year, etc.)
             output_dir: Directory to save output files
             filename: Base filename for output (without extension)
+
+        Returns:
+            Dictionary with generation results including partial_chapters if errors occurred
         """
+        results: Dict[str, Any] = {
+            "success": True,
+            "chapters_generated": 0,
+            "chapters_failed": 0,
+            "partial_chapters": [],
+            "error": None
+        }
+
         # 1. Create chapter structure
         task_count = len(json_data.get("tasks", []))
         print(f"Starting paper generation with {task_count} tasks")
@@ -969,19 +980,66 @@ class PaperGenerator:
         completed_chapters: List[Chapter] = []
         for chapter in chapters:
             if chapter.needs_content:
-                self._generate_chapter_content(chapter, json_data, completed_chapters, chapter_relevance_map)
-                completed_chapters.append(chapter)
+                try:
+                    self._generate_chapter_content(chapter, json_data, completed_chapters, chapter_relevance_map)
+                    completed_chapters.append(chapter)
+                    results["chapters_generated"] += 1
+                    # Track successful chapters for partial result preservation
+                    self._generated_chapters[chapter.path_string] = chapter
+                except ChapterGenerationError as e:
+                    print(f"[PaperGenerator] Chapter generation failed: {e}")
+                    results["chapters_failed"] += 1
+                    results["success"] = False
+                    # Preserve partial result if chapter has some content
+                    if chapter.is_generated and chapter.content:
+                        completed_chapters.append(chapter)
+                        self._generated_chapters[chapter.path_string] = chapter
+                        results["partial_chapters"].append(chapter.path_string)
+                except Exception as e:
+                    print(f"[PaperGenerator] Unexpected error generating {chapter.path_string}: {e}")
+                    results["chapters_failed"] += 1
+                    results["success"] = False
+                    results["error"] = str(e)
 
         # 3. Complete metadata if needed
-        complete_metadata = self._complete_metadata(chapters, metadata)
+        try:
+            complete_metadata = self._complete_metadata(chapters, metadata)
+        except MetadataError as e:
+            print(f"[PaperGenerator] Metadata completion failed: {e}")
+            complete_metadata = metadata
+            results["error"] = f"Metadata error: {e}"
 
         # 4. Assemble the final document
-        document = self.document_assembler.create_document(chapters, complete_metadata)
+        try:
+            document = self.document_assembler.create_document(chapters, complete_metadata)
+        except Exception as e:
+            print(f"[PaperGenerator] Document assembly failed: {e}")
+            results["success"] = False
+            results["error"] = f"Assembly error: {e}"
+            return results
 
         # 5. Save and convert to PDF
         latex_path = f"{output_dir}/{filename}.tex"
-        self.file_manager.save_to_file(document, latex_path)
-        self.file_manager.generate_pdf(latex_path)
+        try:
+            self.file_manager.save_to_file(document, latex_path)
+        except Exception as e:
+            print(f"[PaperGenerator] Failed to save LaTeX: {e}")
+            results["success"] = False
+            results["error"] = f"Save error: {e}"
+            return results
+
+        # PDF generation (may fail but LaTeX source is saved)
+        try:
+            self.file_manager.generate_pdf(latex_path)
+        except PDFCompilationError as e:
+            print(f"[PaperGenerator] PDF compilation failed: {e}")
+            results["error"] = f"PDF compilation failed: {e}"
+            # Don't mark success=False - LaTeX is still valid
+        except Exception as e:
+            print(f"[PaperGenerator] PDF generation error: {e}")
+            results["error"] = f"PDF error: {e}"
+
+        return results
 
     def _generate_chapter_content(
         self,
@@ -990,26 +1048,32 @@ class PaperGenerator:
         completed_chapters: List[Chapter],
         chapter_relevance_map: Dict[str, List[str]]
     ) -> None:
-        """Generate content for a single chapter."""
+        """Generate content for a single chapter with error handling."""
         print(f"Generating content for: {chapter.path_string}")
 
-        # Get relevant context data for this chapter
-        context = self.context_extractor.get_context_for_chapter(chapter, json_data)
+        try:
+            # Get relevant context data for this chapter
+            context = self.context_extractor.get_context_for_chapter(chapter, json_data)
 
-        # Get only the relevant completed chapters for context
-        relevant_chapters = self._get_relevant_chapters(chapter, completed_chapters, chapter_relevance_map)
+            # Get only the relevant completed chapters for context
+            relevant_chapters = self._get_relevant_chapters(chapter, completed_chapters, chapter_relevance_map)
 
-        # Create prompt and generate content
-        prompt = self.prompt_creator.create_prompt(
-            chapter, context, relevant_chapters
-        )
-        # Generate content
-        response = self.content_generator.generate_chapter_content(prompt)
+            # Create prompt and generate content
+            prompt = self.prompt_creator.create_prompt(
+                chapter, context, relevant_chapters
+            )
 
-        # Update chapter with generated content
-        chapter.content = response
-        chapter.title = ''
-        chapter.is_generated = True
+            # Generate content - this may raise LLMFailureError
+            response = self.content_generator.generate_chapter_content(prompt)
+
+            # Update chapter with generated content
+            chapter.content = response
+            chapter.title = ''
+            chapter.is_generated = True
+
+        except Exception as e:
+            # Wrap in ChapterGenerationError for caller to handle
+            raise ChapterGenerationError(chapter.path_string, str(e))
 
     def _get_relevant_chapters(
         self,
