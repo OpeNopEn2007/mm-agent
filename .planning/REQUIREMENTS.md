@@ -33,8 +33,8 @@
 - [x] **MODEL-01**: 系统可基于任务描述和检索方法生成建模方案
 - [x] **MODEL-02**: 系统可输出 model.md（包含建模方法、公式、变量、假设）
 - [x] **MODEL-03**: 系统可输出 formulas.json（结构化公式定义）
-- [ ] **MODEL-04**: 系统可实施 Actor-Critic 迭代改进（max_rounds=3）
-- [ ] **MODEL-05**: 系统可在建模方案达到质量阈值后停止迭代
+- [x] **MODEL-04**: 系统可实施 Actor-Critic 迭代改进（max_rounds=3）
+- [x] **MODEL-05**: 系统可在建模方案达到质量阈值后停止迭代
 
 ### Code Generation & Execution
 
@@ -123,8 +123,8 @@
 | MODEL-01 | Phase 5 | Complete |
 | MODEL-02 | Phase 5 | Complete |
 | MODEL-03 | Phase 5 | Complete |
-| MODEL-04 | Phase 5 | Pending |
-| MODEL-05 | Phase 5 | Pending |
+| MODEL-04 | Phase 5 | Complete |
+| MODEL-05 | Phase 5 | Complete |
 | CODE-01 | Phase 6 | Pending |
 | CODE-02 | Phase 6 | Pending |
 | CODE-03 | Phase 6 | Pending |

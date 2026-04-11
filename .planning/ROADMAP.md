@@ -163,8 +163,8 @@ This roadmap delivers the MM-Agent mathematical modeling system in Claude Code. 
 **Plans:** 4/4 planned
 
 **Plan List:**
-- [ ] 05-01-PLAN.md — Create test scaffolds for mathematical modeling (Wave 1)
-- [ ] 05-02-PLAN.md — Implement Actor-Critic iteration in modeling skill (Wave 1)
+- [x] 05-01-PLAN.md — Create test scaffolds for mathematical modeling (Wave 1)
+- [x] 05-02-PLAN.md — Implement Actor-Critic iteration in modeling skill (Wave 1)
 - [ ] 05-03-PLAN.md — Integrate modeling skill into coordinator workflow (Wave 2)
 - [ ] 05-04-PLAN.md — Verify Phase 5 completion (Wave 3)
 
