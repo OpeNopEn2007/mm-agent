@@ -38,12 +38,12 @@
 
 ### Code Generation & Execution
 
-- [ ] **CODE-01**: 系统可基于建模方案生成可执行 Python 代码
-- [ ] **CODE-02**: 系统可执行生成的 Python 代码
-- [ ] **CODE-03**: 系统可捕获代码执行输出（stdout/stderr）
-- [ ] **CODE-04**: 系统可在执行失败时自动重试（最多 5 次）
-- [ ] **CODE-05**: 系统可输出 results.json 和可视化图表
-- [ ] **CODE-06**: 系统可实施执行超时保护（300s）
+- [x] **CODE-01**: 系统可基于建模方案生成可执行 Python 代码
+- [x] **CODE-02**: 系统可执行生成的 Python 代码
+- [x] **CODE-03**: 系统可捕获代码执行输出（stdout/stderr）
+- [x] **CODE-04**: 系统可在执行失败时自动重试（最多 5 次）
+- [x] **CODE-05**: 系统可输出 results.json 和可视化图表
+- [x] **CODE-06**: 系统可实施执行超时保护（300s）
 
 ### Memory System
 
@@ -125,12 +125,12 @@
 | MODEL-03 | Phase 5 | Complete |
 | MODEL-04 | Phase 5 | Complete |
 | MODEL-05 | Phase 5 | Complete |
-| CODE-01 | Phase 6 | Pending |
-| CODE-02 | Phase 6 | Pending |
-| CODE-03 | Phase 6 | Pending |
-| CODE-04 | Phase 6 | Pending |
-| CODE-05 | Phase 6 | Pending |
-| CODE-06 | Phase 6 | Pending |
+| CODE-01 | Phase 6 | Complete |
+| CODE-02 | Phase 6 | Complete |
+| CODE-03 | Phase 6 | Complete |
+| CODE-04 | Phase 6 | Complete |
+| CODE-05 | Phase 6 | Complete |
+| CODE-06 | Phase 6 | Complete |
 | MEM-01 | Phase 3 | Pending |
 | MEM-02 | Phase 3 | Pending |
 | MEM-03 | Phase 3 | Complete |
