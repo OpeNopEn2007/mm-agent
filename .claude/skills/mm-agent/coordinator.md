@@ -251,6 +251,115 @@ if len(data['methods']) > 3:
 "
   fi
 
+  ### Step 4.5.5: Mathematical Modeling with Actor-Critic
+  # Generate mathematical modeling solution using Actor-Critic iteration
+  echo "  Generating mathematical model..."
+
+  # Invoke modeling skill
+  # The skill will:
+  # - Load task description and retrieved methods
+  # - Perform Actor-Critic iteration (max_rounds=3, satisfaction_threshold=8)
+  # - Output model.md and formulas.json
+  MODELING=$(Skill modeling --task-id $TASK_ID || echo "FAILED")
+
+  # Check modeling succeeded
+  if [ "$MODELING" = "FAILED" ]; then
+    echo "  ⚠ Warning: Mathematical modeling failed for task $TASK_ID"
+    echo "  Continuing with basic solution..."
+    # Create placeholder files for Phase 6
+    echo "Modeling failed - basic placeholder" > .planning/memory/model-$TASK_ID.md
+    echo '{"task_id":"'"$TASK_ID"'","equations":[],"variables":[],"assumptions":[]}' > .planning/memory/formulas-$TASK_ID.json
+  else
+    echo "  ✓ Mathematical modeling complete"
+
+    # Verify model.md was created
+    if [ -f ".planning/memory/model-$TASK_ID.md" ]; then
+      MODEL_METHOD=$(grep "^# Modeling Method" .planning/memory/model-$TASK_ID.md -A 5 | tail -4 | head -1 | sed 's/^[[:space:]]*//')
+      echo "     Method: ${MODEL_METHOD:0:60}..."
+    else
+      echo "  ⚠ Warning: model-$TASK_ID.md not created"
+    fi
+
+    # Verify formulas.json was created
+    if [ -f ".planning/memory/formulas-$TASK_ID.json" ]; then
+      FORMULA_COUNT=$(python3 -c "import json; print(len(json.load(open('.planning/memory/formulas-$TASK_ID.json'))['equations']))" 2>/dev/null || echo "0")
+      echo "     Formulas: $FORMULA_COUNT equations"
+    else
+      echo "  ⚠ Warning: formulas-$TASK_ID.json not created"
+    fi
+
+    # Display iteration info (from frontmatter if available)
+    FINAL_SCORE=$(python3 -c "
+import yaml, sys
+try:
+    with open('.planning/memory/model-$TASK_ID.md') as f:
+        # Parse frontmatter (between --- markers)
+        lines = f.readlines()
+        if lines[0].strip() == '---':
+            i = 1
+            fm_lines = []
+            while i < len(lines) and lines[i].strip() != '---':
+                fm_lines.append(lines[i])
+                i += 1
+            fm = yaml.safe_load(''.join(fm_lines))
+            print(fm.get('final_score', 'N/A'))
+            print(fm.get('iteration_rounds', 'N/A'))
+except:
+    print('N/A')
+    print('N/A')
+" 2>/dev/null || echo "N/A")
+    echo "     Score: $(echo "$FINAL_SCORE" | head -1)"
+    echo "     Rounds: $(echo "$FINAL_SCORE" | tail -1)"
+  fi
+
+  # Update task memory with modeling results
+  python3 << EOF
+import json
+import sys
+from datetime import datetime
+
+task_id = sys.argv[1]
+memory_path = f".planning/memory/task-{task_id}.json"
+
+try:
+    with open(memory_path) as f:
+        memory = json.load(f)
+
+    # Update status and phase
+    memory['status'] = 'completed'
+    memory['phase'] = 'mathematical-modeling'
+    memory['updated_at'] = datetime.now().isoformat()
+
+    # Read model.md if exists
+    try:
+        with open(f".planning/memory/model-{task_id}.md", 'r', encoding='utf-8') as f:
+            model_content = f.read()
+            # Extract just the content (skip frontmatter)
+            lines = model_content.split('\n')
+            if lines[0].strip() == '---':
+                idx = lines.index('---', 1) + 1
+                memory['mathematical_modeling_process'] = '\n'.join(lines[idx:])
+            else:
+                memory['mathematical_modeling_process'] = model_content
+    except FileNotFoundError:
+        memory['mathematical_modeling_process'] = "Modeling failed"
+
+    # Read formulas.json if exists
+    try:
+        with open(f".planning/memory/formulas-{task_id}.json", 'r', encoding='utf-8') as f:
+            memory['preliminary_formulas'] = json.load(f)
+    except FileNotFoundError:
+        memory['preliminary_formulas'] = {"equations": [], "variables": [], "assumptions": []}
+
+    with open(memory_path, 'w', encoding='utf-8') as f:
+        json.dump(memory, f, indent=2, ensure_ascii=False)
+
+    print(f"Updated task-{task_id}.json with modeling results")
+except Exception as e:
+    print(f"Error updating memory: {e}")
+EOF
+    "$TASK_ID"
+
   # Task execution placeholder
   # Note: In Phase 3, we only set up infrastructure
   # Actual modeling happens in Phase 5 (Mathematical Modeling)
@@ -386,24 +495,24 @@ Execute subsequent phases using mm-agent internal phase sub-skills:
 
 ```bash
 # Phase 4: HMML Knowledge Retrieval
-# Uses hmml-retrieval.md sub-skill
+# Uses hmml-retrieval.md sub-skill (already integrated in Step 4.5.4)
 python3 .claude/scripts/hmml_retrieval.py \
   --query-file .planning/memory/task-desc-{task_id}.txt \
   --output .planning/memory/retrieved-methods-{task_id}.json \
   --top-k 6
 
 # Phase 5: Mathematical Modeling
-# Uses modeler.md agent (Actor-Critic iteration)
+# Uses modeling.md skill (integrated in Step 4.5.5)
 # Input: task-desc, retrieved-methods.json
 # Output: model.md, formulas.json
 
 # Phase 6: Code Generation & Execution
-# Uses programmer.md agent
+# Uses code-execution.md agent
 # Input: model.md, formulas.json
 # Output: results.json, plots/
 
 # Phase 7: Report Generation
-# Uses reporter.md agent
+# Uses report-generation.md agent
 # Input: all memory artifacts
 # Output: report.pdf (LaTeX compiled)
 ```
@@ -411,14 +520,15 @@ python3 .claude/scripts/hmml_retrieval.py \
 Each phase produces artifacts in `.planning/memory/` and passes context to next phase.
 
 **Phase sub-skills location:**
-- `.claude/skills/mm-agent/hmml-retrieval.md` — Phase 4 HMML retrieval
+- `.claude/skills/mm-agent/parse-problem.md` — Phase 2 problem parsing
+- `.claude/skills/mm-agent/task-decomposition.md` — Phase 3 task decomposition
 - `.claude/skills/mm-agent/modeling.md` — Phase 5 Actor-Critic modeling
 - `.claude/skills/mm-agent/code-execution.md` — Phase 6 code generation
 - `.claude/skills/mm-agent/report-generation.md` — Phase 7 report compilation
 
 **Runtime independence:** mm-agent workflow executes phases internally via skill invocations and script calls, not via `/gsd:*` commands. GSD framework is used for development workflow (planning, verification), not runtime execution.
 
-Note: Phase 1 (Foundation) establishes the skills and agents. Phase 2 (Problem Analysis) parses the input file. Phase 3 (Task Decomposition) sets up DAG and context. Phases 4-7 execute in sequence using internal mechanism.
+Note: Phase 1 (Foundation) establishes the skills and agents. Phase 2 (Problem Analysis) parses the input file. Phase 3 (Task Decomposition) sets up DAG and context. Phase 4 (HMML Retrieval) retrieves relevant methods. Phase 5 (Mathematical Modeling) generates modeling solutions. Phases 6-7 execute in sequence using internal mechanism.
 
 ## Step 5: Report workflow completion
 After all phases complete:
@@ -472,4 +582,14 @@ Located at .claude/skills/mm-agent/parse-problem.md. Handles all file format det
 **Phase 4 output:**
 - .planning/memory/query-task-{id}.txt - Query text per task
 - .planning/memory/retrieved-methods-{id}.json - Retrieval results per task
+
+**Phase 5 integration:**
+- Mathematical modeling (modeling.md skill)
+- Actor-Critic iteration with max_rounds=3, satisfaction_threshold=8
+- model.md (Modeling Method, Formulas, Variables, Assumptions)
+- formulas.json (equations[], variables[], assumptions[])
+
+**Phase 5 output:**
+- .planning/memory/model-{id}.md - Modeling method document
+- .planning/memory/formulas-{id}.json - Structured formula definitions
 </context>
