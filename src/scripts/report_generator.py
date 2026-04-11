@@ -15,6 +15,44 @@ from typing import Dict, List, Any, Optional, Callable
 from dataclasses import dataclass, field
 
 # --------------------------------
+# Exception Hierarchy
+# --------------------------------
+
+class ReportGenerationError(Exception):
+    """Base exception for report generation errors."""
+    pass
+
+
+class LLMFailureError(ReportGenerationError):
+    """Raised when LLM generation fails."""
+    pass
+
+
+class TemplateNotFoundError(ReportGenerationError):
+    """Raised when template file is not found."""
+    pass
+
+
+class PDFCompilationError(ReportGenerationError):
+    """Raised when PDF compilation fails."""
+    def __init__(self, message: str, log_content: str = ""):
+        super().__init__(message)
+        self.log_content = log_content
+
+
+class ChapterGenerationError(ReportGenerationError):
+    """Raised when a single chapter fails to generate."""
+    def __init__(self, chapter_path: str, message: str):
+        super().__init__(f"Failed to generate {chapter_path}: {message}")
+        self.chapter_path = chapter_path
+
+
+class MetadataError(ReportGenerationError):
+    """Raised when metadata is invalid or missing required fields."""
+    pass
+
+
+# --------------------------------
 # Data Models
 # --------------------------------
 
