@@ -25,8 +25,8 @@
 ### Knowledge Retrieval
 
 - [ ] **KNOW-01**: 系统可加载预计算的 HMML embedding 文件
-- [ ] **KNOW-02**: 系统可根据任务描述检索相关建模方法（Top-K）
-- [ ] **KNOW-03**: 系统可输出检索结果到 retrieved-methods.json
+- [x] **KNOW-02**: 系统可根据任务描述检索相关建模方法（Top-K）
+- [x] **KNOW-03**: 系统可输出检索结果到 retrieved-methods.json
 
 ### Mathematical Modeling
 
@@ -118,8 +118,8 @@
 | TASK-04 | Phase 3 | Pending |
 | TASK-05 | Phase 3 | Pending |
 | KNOW-01 | Phase 4 | Pending |
-| KNOW-02 | Phase 4 | Pending |
-| KNOW-03 | Phase 4 | Pending |
+| KNOW-02 | Phase 4 | Complete |
+| KNOW-03 | Phase 4 | Complete |
 | MODEL-01 | Phase 5 | Pending |
 | MODEL-02 | Phase 5 | Pending |
 | MODEL-03 | Phase 5 | Pending |
