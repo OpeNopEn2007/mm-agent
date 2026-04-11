@@ -176,7 +176,7 @@ This roadmap delivers the MM-Agent mathematical modeling system in Claude Code. 
 
 **Depends on:** Phase 6
 
-**Requirements:** RPT-01, RPT-02, RPT-03, RPT-04, RPT-05
+**Requirements:** RPT-01, RPT-02, RPT-03, RPT-04, RPT-05, RPT-06
 
 **Key Design** (IDEA.md §11):
 - Fixed outline structure with dynamic Task chapters (§11.2)
@@ -217,7 +217,7 @@ This roadmap delivers the MM-Agent mathematical modeling system in Claude Code. 
 | 4. HMML Knowledge Retrieval | 4/5 | Complete | 2026-04-11 |
 | 5. Mathematical Modeling with Actor-Critic | 4/4 | Complete | 2026-04-11 |
 | 6. Code Generation & Execution | 3/4 | In Progress|  |
-| 7. Report Generation | 0/4 planned | Not started | - |
+| 7. Report Generation | 0/4 | Planning complete | 2026-04-11 |
 
 ---
 
@@ -228,3 +228,4 @@ This roadmap delivers the MM-Agent mathematical modeling system in Claude Code. 
 *Phase 4 planned: 2026-04-11*
 *Phase 5 planned: 2026-04-11*
 *Phase 6 planned: 2026-04-11*
+*Phase 7 planned: 2026-04-11*
