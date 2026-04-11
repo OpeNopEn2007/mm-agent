@@ -1,41 +1,396 @@
-# Mathematical Modeling Sub-Skill
-
-**Purpose:** Generate mathematical modeling solutions using Actor-Critic iteration.
-
-**Parent:** mm-agent coordinator.md
-
+---
+name: mm-agent-modeling
+description: Mathematical modeling with Actor-Critic iteration
 ---
 
-## Invocation
+<objective>
+Generate mathematical modeling solutions through Actor-Critic iteration.
 
-Called by coordinator.md as Phase 5 of mm-agent workflow.
+Actor-Critic iteration (IDEA.md §8):
+- max_rounds: 3 (maximum improvement iterations)
+- satisfaction_threshold: 8 (critic score to stop early)
+- Actor: Generate/improve modeling solution
+- Critic: Evaluate quality (score 1-10), provide feedback
+- Stop when score >= threshold OR rounds exhausted
 
-## Input
+Implementation: Single agent with internal iteration (v1 design).
+</objective>
 
-- `.planning/memory/task-desc-{task_id}.txt` — Task description
-- `.planning/memory/retrieved-methods-{task_id}.json` — HMML retrieval results
-- `.planning/memory/task-{dep_id}.json` — Dependency task memories (if applicable)
+<context>
+**TASK_ID variable:**
+The task ID is passed from coordinator workflow. Use this to construct file paths.
 
-## Output
+**Inputs from Phase 4:**
+- .planning/memory/task-desc-{task_id}.txt - Task description
+- .planning/memory/retrieved-methods-{task_id}.json - HMML retrieval results
 
-- `.planning/memory/model-{task_id}.md` — Modeling method, formulas, variables, assumptions
+**Dependency context (if applicable):**
+- .planning/memory/context-for-task-{task_id}.txt - Previous task results
+
+**Iteration parameters (IDEA.md §8):**
+- max_rounds = 3
+- satisfaction_threshold = 8
+</context>
+
+<input>
+- task_id: Task identifier (from coordinator)
+- task_description: Task description text (from Phase 4)
+- retrieved_methods: HMML method candidates (from Phase 4)
+- dependency_context: Previous task results (if applicable)
+</input>
+
+<output>
+输出文件:
+- `.planning/memory/model-{task_id}.md` — Modeling method document
 - `.planning/memory/formulas-{task_id}.json` — Structured formula definitions
+</output>
 
-## Actor-Critic Iteration
+<process>
+
+## Step 1: Load inputs
+
+Read task description and retrieved methods:
+
+```bash
+TASK_ID=$1
+
+# Read task description
+TASK_DESC=$(cat .planning/memory/task-desc-$TASK_ID.txt 2>/dev/null || echo "")
+if [ -z "$TASK_DESC" ]; then
+  echo "Error: task-desc-$TASK_ID.txt not found"
+  exit 1
+fi
+
+# Read retrieved methods
+RETRIEVED_METHODS=$(cat .planning/memory/retrieved-methods-$TASK_ID.json 2>/dev/null || echo '{"methods":[]}')
+if [ ! -f ".planning/memory/retrieved-methods-$TASK_ID.json" ]; then
+  echo "Warning: retrieved-methods-$TASK_ID.json not found, continuing without methods"
+fi
+
+# Read dependency context (if exists)
+DEPENDENCY_CONTEXT=$(cat .planning/memory/context-for-task-$TASK_ID.txt 2>/dev/null || echo "")
+
+echo "Task $TASK_ID: $TASK_DESC"
+echo "Methods retrieved: $(echo "$RETRIEVED_METHODS" | jq '.methods | length')"
+```
+
+## Step 2: Initialize Actor-Critic iteration
+
+Set iteration parameters:
+- max_rounds = 3
+- satisfaction_threshold = 8
+
+```bash
+MAX_ROUNDS=3
+SATISFACTION_THRESHOLD=8
+current_round=0
+best_score=0
+solution=""
+```
+
+## Step 3: Actor - Generate initial modeling solution
+
+Generate initial plan based on task description and retrieved methods:
 
 ```
-max_rounds: 3
+You are a mathematical modeling expert. Generate a modeling solution for this task:
+
+Task Description:
+{task_desc}
+
+Retrieved Methods (for reference):
+{retrieved_methods}
+
+Dependency Context (previous task results):
+{dependency_context}
+
+Generate a comprehensive modeling solution with these sections:
+
+1. Modeling Method - Describe the approach, selected method, and rationale
+2. Formulas - Mathematical formulas with LaTeX notation ($$...$$)
+3. Variables - Table of all variables with symbols, descriptions, types, ranges
+4. Assumptions - List of modeling assumptions with justifications
+
+Output format:
+## Modeling Method
+[Your modeling approach description]
+
+## Formulas
+[Mathematical formulas using LaTeX]
+
+## Variables
+| Variable | Description | Type | Range |
+|----------|-------------|------|-------|
+| $x$ | description | Type | [min,max] |
+
+## Assumptions
+1. [Assumption with justification]
+2. [Another assumption]
+```
+
+Store the solution in a variable: `solution_0`
+
+## Step 4: Critic - Evaluate solution quality (Round 0)
+
+Evaluate the modeling solution and provide feedback:
+
+```
+You are a critical reviewer. Evaluate this mathematical modeling solution:
+
+Task: {task_desc}
+
+Modeling Solution:
+{solution_0}
+
+Evaluate on these dimensions:
+1. Method Selection - Is the selected method appropriate for the task?
+2. Formulation - Are the formulas mathematically correct and complete?
+3. Variables - Are all variables defined with clear meanings and types?
+4. Assumptions - Are assumptions justified and not contradictory?
+
+Output JSON:
+{
+  "score": <1-10 integer>,
+  "strengths": ["strength 1", "strength 2"],
+  "weaknesses": ["weakness 1", "weakness 2"],
+  "improvements": ["improvement 1", "improvement 2"]
+}
+
+Scoring guidelines:
+- 9-10: Excellent - ready for implementation
+- 7-8: Good - minor improvements needed
+- 5-6: Acceptable - moderate improvements needed
+- 1-4: Poor - significant revisions needed
+```
+
+Parse the score from the JSON response: `score_0`
+
+Check stopping condition:
+```bash
+if [ $score_0 -ge $SATISFACTION_THRESHOLD ]; then
+  echo "Round 0: Score $score_0 >= $SATISFACTION_THRESHOLD, accepting solution"
+  solution="$solution_0"
+  best_score=$score_0
+else
+  echo "Round 0: Score $score_0 < $SATISFACTION_THRESHOLD, continuing iteration"
+fi
+```
+
+## Step 5: Iterative improvement (Rounds 1-2)
+
+For round in 1 to max_rounds-1:
+- If previous score >= threshold: STOP (already satisfied)
+- Actor: Improve solution based on feedback
+- Critic: Re-evaluate improved solution
+- Update best solution if score improves
+
+Round 1 (if continuing):
+```
+Improve this modeling solution based on critic feedback:
+
+Original Solution:
+{solution_0}
+
+Critic Feedback:
+- Score: {score_0}
+- Weaknesses: {weaknesses}
+- Improvements: {improvements}
+
+Generate an improved solution addressing the weaknesses.
+Keep the same structure (Modeling Method, Formulas, Variables, Assumptions).
+```
+
+Store improved solution: `solution_1`
+
+Evaluate improved solution:
+```
+Evaluate this improved modeling solution:
+
+Task: {task_desc}
+
+Improved Solution:
+{solution_1}
+
+Provide evaluation score and feedback (same format as Round 0).
+```
+
+Parse score: `score_1`
+
+Update best solution:
+```bash
+if [ $score_1 -gt $best_score ]; then
+  best_score=$score_1
+  solution="$solution_1"
+fi
+
+if [ $score_1 -ge $SATISFACTION_THRESHOLD ]; then
+  echo "Round 1: Score $score_1 >= $SATISFACTION_THRESHOLD, accepting solution"
+  break
+fi
+```
+
+Round 2 (if continuing):
+```
+Improve this modeling solution further:
+
+Current Best Solution (Score {best_score}):
+{solution_1}
+
+Critic Feedback:
+- Score: {score_1}
+- Weaknesses: {weaknesses}
+- Improvements: {improvements}
+
+Generate the final improved solution.
+```
+
+Store final solution: `solution_2`
+
+Evaluate:
+```
+Evaluate this final modeling solution:
+
+Task: {task_desc}
+
+Final Solution:
+{solution_2}
+
+Provide final evaluation score and feedback.
+```
+
+Parse score: `score_2`
+
+Update best solution:
+```bash
+if [ $score_2 -gt $best_score ]; then
+  best_score=$score_2
+  solution="$solution_2"
+fi
+
+echo "Final score: $best_score"
+```
+
+## Step 6: Extract formulas for structured JSON
+
+From the final solution, extract formulas, variables, and assumptions:
+
+```
+Extract structured information from this modeling solution:
+
+Modeling Solution:
+{solution}
+
+Output JSON:
+{
+  "task_id": "{task_id}",
+  "equations": [
+    {
+      "name": "Equation name (e.g., Linear Regression Model)",
+      "latex": "LaTeX representation (e.g., y = \\beta_0 + \\beta_1 x_1)",
+      "description": "Equation description"
+    }
+  ],
+  "variables": [
+    {
+      "symbol": "Variable symbol (e.g., y, x_1)",
+      "description": "Variable meaning",
+      "type": "Type (e.g., Continuous, Binary, Integer)",
+      "range": "Range (e.g., [0,1], [0,∞))"
+    }
+  ],
+  "assumptions": [
+    "Assumption 1 with justification",
+    "Assumption 2 with justification"
+  ]
+}
+
+Extract ALL equations, variables, and assumptions from the solution.
+```
+
+Store JSON result: `formulas_json`
+
+## Step 7: Write outputs
+
+Write model.md with frontmatter:
+```markdown
+---
+task_id: {task_id}
+phase: mathematical-modeling
+iteration_rounds: {rounds_executed}
+final_score: {best_score}
 satisfaction_threshold: 8
-
-Actor: Generate/improve modeling solution
-Critic: Evaluate quality (score 1-10), provide feedback
-Stop: score >= threshold OR rounds exhausted
-```
-
 ---
 
-## Integration
+{solution}
+```
 
-Phase 5 of mm-agent workflow. Called by coordinator after Phase 4 (HMML Retrieval) completes.
+Write to `.planning/memory/model-{task_id}.md`
 
-Output consumed by Phase 6 (Code Generation) programmer.md agent.
+Write formulas.json:
+```bash
+echo "$formulas_json" > .planning/memory/formulas-{task_id}.json
+```
+
+## Step 8: Update task memory
+
+Update the task memory file with modeling results:
+```python
+import json
+import sys
+from datetime import datetime
+
+task_id = sys.argv[1]
+memory_path = f".planning/memory/task-{task_id}.json"
+
+with open(memory_path) as f:
+    memory = json.load(f)
+
+memory['status'] = 'completed'
+memory['phase'] = 'mathematical-modeling'
+memory['mathematical_modeling_process'] = solution
+memory['preliminary_formulas'] = formulas_json
+memory['updated_at'] = datetime.now().isoformat()
+
+with open(memory_path, 'w') as f:
+    json.dump(memory, f, indent=2, ensure_ascii=False)
+```
+
+## Summary
+
+The modeling skill:
+1. Loads task description and HMML retrieval results
+2. Generates initial solution using retrieved methods as reference
+3. Iteratively improves solution through Actor-Critic (max 3 rounds)
+4. Stops early if satisfaction threshold (8) is reached
+5. Outputs model.md (human-readable) and formulas.json (structured)
+6. Updates task memory with modeling results
+
+</process>
+
+<quality_gate>
+- [ ] Task description loaded from task-desc-{id}.txt
+- [ ] Retrieved methods loaded from retrieved-methods-{id}.json
+- [ ] Initial modeling solution generated
+- [ ] Critic evaluates solution with 1-10 score
+- [ ] Iteration performs at most 3 rounds
+- [ ] Iteration stops early if score >= 8
+- [ ] model.md written with required sections
+- [ ] formulas.json written with correct schema
+- [ ] Task memory updated with modeling results
+</quality_gate>
+
+<notes>
+**Actor-Critic iteration (IDEA.md §8):**
+- v1 uses single agent with internal iteration (not dual agents)
+- max_rounds = 3 balances quality and cost
+- satisfaction_threshold = 8 stops iteration when solution is good enough
+
+**Output format (IDEA.md §10.1):**
+- model.md: Markdown with Modeling Method, Formulas, Variables, Assumptions sections
+- formulas.json: Structured with equations[], variables[], assumptions[] arrays
+
+**Integration:**
+- Invoked by coordinator.md after Phase 4 (HMML Retrieval)
+- Inputs from Phase 4: task-desc-{id}.txt, retrieved-methods-{id}.json
+- Output consumed by Phase 6 (code-execution.md)
+</notes>
