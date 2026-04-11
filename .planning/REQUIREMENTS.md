@@ -53,12 +53,12 @@
 
 ### Report Generation
 
-- [ ] **RPT-01**: 系统可基于建模过程和结果生成 LaTeX 报告
-- [ ] **RPT-02**: 系统可输出 PDF 格式论文报告
-- [ ] **RPT-03**: 报告使用固定大纲结构 + 动态 Task 章节（IDEA.md §11.2）
-- [ ] **RPT-04**: 系统支持 mcmthesis（美赛）和 cumcmthesis（国赛）模板切换（IDEA.md §11.6）
-- [ ] **RPT-05**: 系统使用精细化章节依赖图进行上下文传递（IDEA.md §11.3）
-- [ ] **RPT-06**: LaTeX 生成遵循科学语言规范（无 Markdown，连贯叙事，学术风格）
+- [x] **RPT-01**: 系统可基于建模过程和结果生成 LaTeX 报告
+- [x] **RPT-02**: 系统可输出 PDF 格式论文报告
+- [x] **RPT-03**: 报告使用固定大纲结构 + 动态 Task 章节（IDEA.md §11.2）
+- [x] **RPT-04**: 系统支持 mcmthesis（美赛）和 cumcmthesis（国赛）模板切换（IDEA.md §11.6）
+- [x] **RPT-05**: 系统使用精细化章节依赖图进行上下文传递（IDEA.md §11.3）
+- [x] **RPT-06**: LaTeX 生成遵循科学语言规范（无 Markdown，连贯叙事，学术风格）
 
 ### Claude Code Integration
 
@@ -134,12 +134,12 @@
 | MEM-01 | Phase 3 | Pending |
 | MEM-02 | Phase 3 | Pending |
 | MEM-03 | Phase 3 | Complete |
-| RPT-01 | Phase 7 | Pending |
-| RPT-02 | Phase 7 | Pending |
-| RPT-03 | Phase 7 | Pending |
-| RPT-04 | Phase 7 | Pending |
-| RPT-05 | Phase 7 | Pending |
-| RPT-06 | Phase 7 | Pending |
+| RPT-01 | Phase 7 | Complete |
+| RPT-02 | Phase 7 | Complete |
+| RPT-03 | Phase 7 | Complete |
+| RPT-04 | Phase 7 | Complete |
+| RPT-05 | Phase 7 | Complete |
+| RPT-06 | Phase 7 | Complete |
 | INTG-01 | Phase 1 | Pending |
 | INTG-02 | Phase 1 | Pending |
 | INTG-03 | Phase 1 | Complete |
