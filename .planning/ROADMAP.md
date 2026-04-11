@@ -84,7 +84,7 @@ This roadmap delivers the MM-Agent mathematical modeling system in Claude Code. 
 5. System loads dependency task results from Memory files before starting dependent tasks
 6. System writes task results to `task-{id}.json` Memory files after completion
 
-**Plans:** 3/5 plans executed
+**Plans:** 5/5 complete
 
 **Plan List:**
 - [x] 03-01-PLAN.md — Create test scaffolds for DAG operations, Memory system, and Task Decomposition (Wave 0)
@@ -108,7 +108,14 @@ This roadmap delivers the MM-Agent mathematical modeling system in Claude Code. 
 2. Given task description, system retrieves Top-K most relevant modeling methods
 3. System outputs retrieval results to `retrieved-methods.json` with method names, descriptions, and similarity scores
 
-**Plans:** TBD
+**Plans:** 5/5 planned
+
+**Plan List:**
+- [ ] 04-01-PLAN.md — Create test scaffolds for HMML retrieval (Wave 0)
+- [ ] 04-02-PLAN.md — Create embedding precomputation script and generate HMML embeddings (Wave 1)
+- [ ] 04-03-PLAN.md — Create HMML retrieval script with cosine similarity and parent weighting (Wave 2)
+- [ ] 04-04-PLAN.md — Integrate HMML retrieval into coordinator workflow (Wave 3)
+- [ ] 04-05-PLAN.md — Verify Phase 4 completion with comprehensive artifact checks (Wave 4)
 
 ---
 
@@ -188,8 +195,8 @@ This roadmap delivers the MM-Agent mathematical modeling system in Claude Code. 
 |-------|----------------|--------|-----------|
 | 1. Claude Code Integration | 4/4 | Complete | 2026-04-10 |
 | 2. Problem Analysis Pipeline | 4/4 | Complete | 2026-04-10 |
-| 3. Task Decomposition with DAG | 1/5 | In Progress|  |
-| 4. HMML Knowledge Retrieval | 0/3 | Not started | - |
+| 3. Task Decomposition with DAG | 5/5 | Complete | 2026-04-11 |
+| 4. HMML Knowledge Retrieval | 0/5 | Planned | - |
 | 5. Mathematical Modeling with Actor-Critic | 0/5 | Not started | - |
 | 6. Code Generation & Execution | 0/6 | Not started | - |
 | 7. Report Generation | 0/3 | Not started | - |
@@ -200,3 +207,4 @@ This roadmap delivers the MM-Agent mathematical modeling system in Claude Code. 
 *Phase 1 planned: 2026-04-10*
 *Phase 2 planned: 2026-04-10*
 *Phase 3 planned: 2026-04-11*
+*Phase 4 planned: 2026-04-11*
