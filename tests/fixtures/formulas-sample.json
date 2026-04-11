@@ -1,0 +1,35 @@
+{
+  "task_id": "sample",
+  "equations": [
+    {
+      "name": "Linear Regression Model",
+      "latex": "y = \\beta_0 + \\beta_1 x_1 + \\beta_2 x_2 + \\epsilon",
+      "description": "预测比赛结果的线性回归模型"
+    }
+  ],
+  "variables": [
+    {
+      "symbol": "y",
+      "description": "比赛结果",
+      "type": "Binary",
+      "range": "[0, 1]"
+    },
+    {
+      "symbol": "x_1",
+      "description": "历史动量指标",
+      "type": "Continuous",
+      "range": "[0, 1]"
+    },
+    {
+      "symbol": "\\beta_0",
+      "description": "截距",
+      "type": "Real",
+      "range": "(-\\infty, \\infty)"
+    }
+  ],
+  "assumptions": [
+    "动量效应对比赛结果有线性影响",
+    "历史数据能够准确反映当前状态",
+    "误差项服从正态分布"
+  ]
+}
