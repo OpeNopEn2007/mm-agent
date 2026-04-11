@@ -163,7 +163,7 @@ This roadmap delivers the MM-Agent mathematical modeling system in Claude Code. 
 **Plans:** 4/4 planned
 
 **Plan List:**
-- [ ] 06-01-PLAN.md — Create test scaffolds for code generation (Wave 1)
+- [ ] 06-01-PLAN.md — Create test scaffolds for code generation (Wave 0)
 - [ ] 06-02-PLAN.md — Implement code generation skill (Wave 1)
 - [ ] 06-03-PLAN.md — Implement code execution with error handling (Wave 2)
 - [ ] 06-04-PLAN.md — Integrate code execution into coordinator (Wave 3)
