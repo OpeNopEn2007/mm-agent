@@ -87,9 +87,9 @@ Added comprehensive verification step:
 ### 4. Updated Phase Invocation (Step 4.7)
 
 Renumbered step to reflect Phase 3 integration:
-- Removed Phase 3 from GSD phase list
-- Updated to start from Phase 4 (HMML Retrieval)
-- Added note about Phase 3 setting up DAG and context
+- Phase 3 workflow integrated into coordinator (internal execution)
+- Phase 4+ use mm-agent internal mechanism (hmml-retrieval.md, modeling.md, etc.)
+- Added note about runtime independence from GSD framework
 
 ### 5. Updated Context Section
 
