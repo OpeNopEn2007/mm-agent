@@ -205,6 +205,633 @@ if __name__ == "__main__":
 
 ---
 
+## Step 8: Execute Code with Subprocess (Decision D-07)
+
+After code generation, execute the Python code with timeout protection and output capture.
+
+### Execution Function
+
+```python
+import subprocess
+import ast
+import json
+import os
+import time
+from datetime import datetime
+from typing import Dict, Any, List, Tuple, Optional
+
+def execute_code_with_retry(
+    code_path: str,
+    task_id: str,
+    max_execute: int = 5,
+    max_repair: int = 3,
+    timeout: int = 300
+) -> dict:
+    """
+    Execute generated Python code with timeout and error repair.
+
+    Per Decision D-07: Local subprocess with timeout protection (300s).
+    Per Decision D-08: LLM auto-repair with max_repair=3, max_execute=5.
+
+    Args:
+        code_path: Path to generated Python code file
+        task_id: Task identifier for results tracking
+        max_execute: Maximum total execution attempts (default: 5)
+        max_repair: Maximum repair attempts before giving up (default: 3)
+        timeout: Execution timeout in seconds (default: 300)
+
+    Returns:
+        dict: Execution results following D-11 schema
+    """
+    result = {
+        "task_id": task_id,
+        "status": "failed",
+        "execution_time": 0.0,
+        "stdout": "",
+        "stderr": "",
+        "results": {},
+        "plots": [],
+        "created_at": datetime.now().isoformat()
+    }
+
+    execute_attempts = 0
+    repair_attempts = 0
+
+    while execute_attempts < max_execute:
+        execute_attempts += 1
+
+        try:
+            start_time = time.time()
+
+            # Execute code with timeout (Decision D-07)
+            process = subprocess.run(
+                ["python3", code_path],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                cwd=".planning"
+            )
+
+            execution_time = time.time() - start_time
+            result["execution_time"] = execution_time
+            result["stdout"] = process.stdout
+            result["stderr"] = process.stderr
+
+            if process.returncode == 0:
+                result["status"] = "success"
+                # Parse stdout for results JSON
+                result["results"] = _parse_results_from_stdout(process.stdout)
+
+                # Check for generated plots (Decision D-10)
+                result["plots"] = _discover_plots(task_id)
+
+                return result  # Success - exit retry loop
+            else:
+                # Non-zero exit code - error occurred
+                error_msg = process.stderr or f"Exit code {process.returncode}"
+                raise RuntimeError(error_msg)
+
+        except subprocess.TimeoutExpired as e:
+            # Timeout handling (Decision D-07)
+            e.kill()  # Terminate process
+            e.wait()  # Reap zombie process
+            result["status"] = "timeout"
+            result["stderr"] = f"Execution exceeded {timeout}s timeout"
+
+            # First timeout: try simplifying code
+            if execute_attempts == 1:
+                # LLM repair for timeout: simplify computation
+                with open(code_path, 'r') as f:
+                    original_code = f.read()
+
+                repair_code = llm_repair_timeout(original_code, timeout)
+                if repair_code:
+                    # Validate repaired code with AST
+                    try:
+                        ast.parse(repair_code)
+                        with open(code_path, 'w') as f:
+                            f.write(repair_code)
+                        repair_attempts += 1
+                        continue  # Retry with simplified code
+                    except SyntaxError:
+                        pass  # Repair failed validation, return timeout result
+
+            return result  # Timeout after failed repair or on retry
+
+        except Exception as e:
+            # Other errors - LLM repair (Decision D-08)
+            result["stderr"] = str(e)
+            error_class = classify_error(str(e))
+
+            # Only attempt repair for fixable error types
+            if repair_attempts < max_repair and error_class in ["syntax", "runtime", "import", "value"]:
+                # Read current code
+                with open(code_path, 'r') as f:
+                    original_code = f.read()
+
+                # Attempt LLM repair
+                repaired_code = llm_repair_code(
+                    original_code=original_code,
+                    traceback=str(e),
+                    error_class=error_class
+                )
+
+                if repaired_code:
+                    # Validate repaired code with AST
+                    try:
+                        ast.parse(repaired_code)
+                        with open(code_path, 'w') as f:
+                            f.write(repaired_code)
+                        repair_attempts += 1
+                        continue  # Retry with repaired code
+                    except SyntaxError:
+                        pass  # Repair failed validation
+
+            # Max retries exhausted or unfixable error - return failure
+            return result
+
+    # All execution attempts exhausted
+    result["status"] = "failed"
+    result["stderr"] = f"Max execution attempts ({max_execute}) exhausted"
+    return result
+
+
+def classify_error(error_message: str) -> str:
+    """
+    Classify error type for targeted repair (Decision D-08).
+
+    Based on traceback keywords to determine error category.
+    """
+    error_lower = error_message.lower()
+
+    if "syntaxerror" in error_lower or "indentationerror" in error_lower:
+        return "syntax"
+    elif "nameerror" in error_lower or "name '" in error_lower:
+        return "name"
+    elif "typeerror" in error_lower or "type '" in error_lower:
+        return "type"
+    elif "attributeerror" in error_lower:
+        return "attribute"
+    elif "valueerror" in error_lower or "value '" in error_lower:
+        return "value"
+    elif "importerror" in error_lower or "modulenotfound" in error_lower or "no module named" in error_lower:
+        return "import"
+    elif "filenotfound" in error_lower or "file not found" in error_lower:
+        return "file"
+    else:
+        return "logic"  # Unhandled or semantic errors
+
+
+def _parse_results_from_stdout(stdout: str) -> dict:
+    """
+    Parse numerical results from stdout JSON output.
+
+    Looks for JSON in stdout lines and extracts results.
+    """
+    if not stdout:
+        return {}
+
+    stdout_lines = stdout.strip().split('\n')
+    for line in stdout_lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            parsed = json.loads(line)
+            # Check if this looks like results JSON
+            if isinstance(parsed, dict) and any(
+                key in parsed for key in ["numerical_solution", "fitting_parameters",
+                                         "metrics", "results", "status"]
+            ):
+                return parsed
+        except json.JSONDecodeError:
+            continue
+
+    # No structured JSON found - return empty with raw output
+    return {"raw_output": stdout[:1000]}  # Truncate long output
+
+
+def _discover_plots(task_id: str) -> List[Dict[str, str]]:
+    """
+    Discover generated plots in task output directory (Decision D-10).
+
+    Per-task directory: .planning/output/plots/{task_id}/
+    """
+    plots = []
+    plot_dir = f".planning/output/plots/{task_id}"
+
+    if not os.path.exists(plot_dir):
+        return plots
+
+    for plot_file in os.listdir(plot_dir):
+        if plot_file.endswith('.png') or plot_file.endswith('.pdf'):
+            plot_path = os.path.join(plot_dir, plot_file)
+            plot_type = plot_file.split('.')[0]
+
+            # Map file name to description
+            description = _get_plot_description(plot_type, task_id)
+
+            plots.append({
+                "path": plot_path,
+                "type": plot_type,
+                "description": description
+            })
+
+    return plots
+
+
+def _get_plot_description(plot_type: str, task_id: str) -> str:
+    """
+    Get human-readable description for plot type (Decision D-09).
+    """
+    descriptions = {
+        "regression-line": "回归拟合效果图",
+        "residuals": "残差分析图",
+        "prediction": "预测结果图",
+        "scatter": "散点图",
+        "time-series": "时间序列图",
+        "acf": "自相关函数图",
+        "pacf": "偏自相关函数图",
+        "convergence": "优化收敛图",
+        "objective-surface": "目标函数曲面图",
+        "cluster": "聚类结果图",
+        "cluster-centers": "聚类中心热力图",
+        "weights": "权重分布图",
+        "ranking": "排名雷达图",
+        "trajectory": "轨迹演化图",
+        "heatmap": "热力图",
+        "bar": "柱状图",
+        "box": "箱线图",
+    }
+
+    return descriptions.get(plot_type, f"图表: {plot_type}")
+
+
+def llm_repair_code(original_code: str, traceback: str, error_class: str) -> Optional[str]:
+    """
+    Use LLM to repair code based on error traceback (Decision D-08).
+
+    Structured repair prompt with:
+    - Original code
+    - Error traceback
+    - Error classification
+
+    Returns repaired code string or None if repair failed.
+    """
+    # This function is called by the coordinator/agent that has LLM access
+    # The actual implementation uses Claude API for code repair
+    #
+    # Repair prompt structure:
+    # """
+    # 代码执行失败，请修复：
+    #
+    # 原代码：
+    # {original_code}
+    #
+    # 错误信息：
+    # {traceback}
+    #
+    # 错误分类：{error_class}
+    #
+    # 请分析错误原因并输出修复后的完整代码。
+    # """
+    #
+    # Returns: Repaired code or None if repair not possible
+    pass  # Implementation via Claude API
+
+
+def llm_repair_timeout(original_code: str, timeout: int) -> Optional[str]:
+    """
+    Use LLM to simplify code for timeout situations (Decision D-07).
+
+    When code times out, attempt to simplify computation:
+    - Reduce iteration count
+    - Simplify algorithm
+    - Use smaller sample size
+
+    Returns simplified code or None if simplification not possible.
+    """
+    # This function is called by the coordinator/agent that has LLM access
+    #
+    # Simplified repair prompt:
+    # """
+    # 代码执行超时（{timeout}s），请简化计算步骤：
+    #
+    # 原代码：
+    # {original_code}
+    #
+    # 请输出简化后的完整代码，确保结果正确性不受显著影响。
+    # """
+    #
+    # Returns: Simplified code or None if simplification not possible
+    pass  # Implementation via Claude API
+```
+
+---
+
+## Step 9: Write Results.json (Decision D-11)
+
+After execution completes (success or failure), write results to `.planning/memory/results-{task_id}.json`.
+
+### Results Schema (D-11)
+
+```json
+{
+  "task_id": "1",
+  "status": "success|failed|timeout",
+  "execution_time": 12.5,
+  "stdout": "Complete output text",
+  "stderr": "Error message (if any)",
+  "results": {
+    "numerical_solution": {...},
+    "fitting_parameters": {...},
+    "metrics": {"MSE": 0.05, "R2": 0.95}
+  },
+  "plots": [
+    {
+      "path": ".planning/output/plots/1/regression-line.png",
+      "type": "scatter",
+      "description": "回归拟合效果图"
+    }
+  ],
+  "created_at": "2026-04-11T..."
+}
+```
+
+### Writing Results
+
+```python
+def write_results(results: dict, task_id: str) -> str:
+    """
+    Write execution results to results-{task_id}.json.
+
+    Args:
+        results: Execution results dict from execute_code_with_retry
+        task_id: Task identifier
+
+    Returns:
+        str: Path to written results file
+    """
+    results_path = f".planning/memory/results-{task_id}.json"
+
+    # Ensure directory exists
+    os.makedirs(os.path.dirname(results_path), exist_ok=True)
+
+    with open(results_path, 'w', encoding='utf-8') as f:
+        json.dump(results, f, indent=2, ensure_ascii=False)
+
+    return results_path
+```
+
+---
+
+## Step 10: Intelligent Chart Selection (Decision D-09)
+
+After successful execution, handle visualization output with intelligent selection.
+
+### Chart Type Mapping Table
+
+| Modeling Method | Required Charts | Optional Charts |
+|----------------|----------------|-----------------|
+| Regression | Scatter + regression line | Residuals, prediction interval |
+| Time series | Time series plot | ACF/PACF, forecast comparison |
+| Optimization | Convergence plot | 3D objective function surface |
+| Clustering | Scatter + cluster labels | Cluster center heatmap |
+| Evaluation | Weight bar chart | TOPSIS ranking radar |
+| ODE | Trajectory plot | Phase portrait |
+| Interpolation | Curve fitting plot | Error distribution |
+
+### Chart Selection Logic
+
+```python
+def select_charts_for_modeling_method(modeling_method: str) -> list:
+    """
+    Select required and optional charts based on modeling method (D-09).
+
+    Args:
+        modeling_method: String describing the modeling method
+
+    Returns:
+        list of tuples: [(chart_type, required_or_optional), ...]
+    """
+    method_lower = modeling_method.lower()
+
+    if "regression" in method_lower or "linear" in method_lower:
+        return [
+            ("regression-line", "required"),
+            ("residuals", "optional"),
+            ("prediction", "optional")
+        ]
+    elif "time" in method_lower or "arima" in method_lower or "forecast" in method_lower:
+        return [
+            ("time-series", "required"),
+            ("acf", "optional"),
+            ("pacf", "optional")
+        ]
+    elif "optim" in method_lower or "linear program" in method_lower:
+        return [
+            ("convergence", "required"),
+            ("objective-surface", "optional")
+        ]
+    elif "cluster" in method_lower or "kmeans" in method_lower:
+        return [
+            ("cluster", "required"),
+            ("cluster-centers", "optional")
+        ]
+    elif "evaluation" in method_lower or "ahp" in method_lower or "topsis" in method_lower:
+        return [
+            ("weights", "required"),
+            ("ranking", "optional")
+        ]
+    elif "ode" in method_lower or "differential" in method_lower:
+        return [
+            ("trajectory", "required"),
+            ("phase", "optional")
+        ]
+    elif "interpol" in method_lower or "spline" in method_lower:
+        return [
+            ("curve-fitting", "required"),
+            ("error-dist", "optional")
+        ]
+    else:
+        # Default: scatter plot for unknown methods
+        return [("scatter", "required")]
+```
+
+### User Confirmation (Interactive Mode)
+
+```python
+def confirm_chart_selection(plots: list, interactive: bool = True) -> list:
+    """
+    Confirm chart selection with user (Decision D-09).
+
+    Interactive mode: Use AskUserQuestion to confirm chart list.
+    Auto mode: Skip confirmation, use rule-based defaults.
+
+    Args:
+        plots: List of plot dicts from execution results
+        interactive: Whether to prompt user for confirmation
+
+    Returns:
+        list: Confirmed list of plots to include in report
+    """
+    if not interactive:
+        # Auto mode: return all plots
+        return plots
+
+    # Interactive mode: prompt user
+    # Chart confirmation prompt:
+    # """
+    # 已生成以下图表：
+    # {plot_list}
+    #
+    # 请选择要保留的图表（保留/删除/添加）：
+    # """
+    #
+    # Returns: User-confirmed list of plots
+    pass  # Implementation via user interaction
+```
+
+---
+
+## Step 11: Update Task Memory (IDEA.md Section 7.2)
+
+After execution completes, update task-{task_id}.json Memory file with execution results.
+
+### Memory Update Schema (IDEA.md Section 7.2)
+
+```python
+def update_task_memory_with_execution(
+    task_id: str,
+    code_path: str,
+    execution_result: dict
+) -> None:
+    """
+    Update task-{task_id}.json with code execution results.
+
+    Updates the following Memory schema fields (IDEA.md §7.2):
+    - task_code: Generated code content
+    - execution_result: Execution results dict
+    - code_structure: File outputs array
+    - charts: Plots array
+    - status: "completed" or "failed"
+    - phase: "code-execution"
+    - updated_at: Current timestamp
+
+    Args:
+        task_id: Task identifier
+        code_path: Path to generated code file
+        execution_result: Results from execute_code_with_retry
+    """
+    memory_path = f".planning/memory/task-{task_id}.json"
+
+    # Load existing memory
+    if os.path.exists(memory_path):
+        with open(memory_path, 'r', encoding='utf-8') as f:
+            memory = json.load(f)
+    else:
+        # Create new memory if doesn't exist
+        memory = {
+            "task_id": task_id,
+            "phase": "code-execution",
+            "created_at": datetime.now().isoformat()
+        }
+
+    # Read generated code
+    with open(code_path, 'r') as f:
+        code_content = f.read()
+
+    # Update Memory schema fields
+    memory["task_code"] = code_content
+    memory["execution_result"] = {
+        "status": execution_result.get("status"),
+        "stdout": execution_result.get("stdout", ""),
+        "stderr": execution_result.get("stderr", ""),
+        "execution_time": execution_result.get("execution_time", 0),
+        "results": execution_result.get("results", {})
+    }
+    memory["code_structure"] = {
+        "file_outputs": [
+            {
+                "path": f".planning/memory/results-{task_id}.json",
+                "description": "Execution results",
+                "type": "json"
+            },
+            {
+                "path": code_path,
+                "description": "Generated Python code",
+                "type": "python"
+            }
+        ]
+    }
+    memory["charts"] = execution_result.get("plots", [])
+    memory["status"] = "completed" if execution_result.get("status") == "success" else "failed"
+    memory["phase"] = "code-execution"
+    memory["updated_at"] = datetime.now().isoformat()
+
+    # Write updated memory
+    with open(memory_path, 'w', encoding='utf-8') as f:
+        json.dump(memory, f, indent=2, ensure_ascii=False)
+```
+
+---
+
+## Integration with Coordinator
+
+### Execution Flow
+
+```
+Coordinator calls code-execution skill with task_id
+    |
+    v
+Step 1-7: Generate code (from 06-02 plan)
+    |
+    v
+Step 8: Execute code with retry
+    |--> success --> Step 9: Write results.json
+    |               Step 10: Chart selection
+    |               Step 11: Update memory
+    |                   |
+    |                   v
+    |               Return success to coordinator
+    |
+    +--> failure/timeout --> Step 9: Write results.json (failed status)
+                             Step 11: Update memory (failed status)
+                                 |
+                                 v
+                             Return failure to coordinator
+                                 |
+                                 v
+                             Coordinator continues DAG execution
+```
+
+### Input Parameters
+
+| Parameter | Source | Description |
+|-----------|--------|-------------|
+| task_id | coordinator | Task identifier |
+| model_path | Phase 5 output | `.planning/memory/model-{task_id}.md` |
+| formulas_path | Phase 5 output | `.planning/memory/formulas-{task_id}.json` |
+| dependencies | DAG | List of dependency task IDs |
+
+### Output Files
+
+| File | Purpose | Consumer |
+|------|---------|----------|
+| `.planning/code/task-{id}.py` | Generated Python code | Execution |
+| `.planning/memory/results-{id}.json` | Execution results | Phase 7 (Report) |
+| `.planning/output/plots/{id}/` | Visualization plots | Phase 7 (Report) |
+| `.planning/memory/task-{id}.json` | Updated memory | Coordinator, Phase 7 |
+
+### Graceful Failure
+
+- Failed tasks do NOT block DAG execution
+- Results marked with status: "failed" or "timeout"
+- Error information preserved in results.json
+- Coordinator continues to next task in topological order
+
+---
+
 ## Template Library (Phase 6 v1 - Core Methods)
 
 ### 1. Linear Regression Template
