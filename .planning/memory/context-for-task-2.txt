@@ -1,0 +1,12 @@
+---
+# Task 1: Test task
+
+## Modeling Method
+Statistical analysis with pandas
+
+## Result Interpretation
+Data analysis completed with 95% accuracy
+
+## Code Outputs
+[]
+---

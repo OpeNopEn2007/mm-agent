@@ -1,0 +1,1 @@
+{"tasks":{"1":{"description":"Analyze data","dependencies":[],"status":"completed"},"2":{"description":"Build model","dependencies":["1"],"status":"pending"}},"execution_order":["1","2"]}

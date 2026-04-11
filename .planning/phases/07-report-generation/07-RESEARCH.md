@@ -38,7 +38,7 @@ Phase 7 transforms completed modeling artifacts (problem.md, dag.json, task-*.js
 | ID | Description | Research Support |
 |----|-------------|------------------|
 | RPT-01 | System generates LaTeX report from modeling artifacts | report-generator.py `LatexDocumentAssembler` class (lines 369-524) provides full LaTeX assembly |
-| RPT-02 | System outputs PDF format paper report | report-generator.py `FileManager.generate_pdf()` uses xelatex double-compile (lines 542-555) |
+| RPT-02 | System outputs PDF format paper report | report-generator.py `FileManager.generate_pdf()` uses pdflatex double-compile (lines 548-549) - Plan 07-02 MUST change to xelatex (xelatex required per anti-pattern on line 184) |
 | RPT-03 | Fixed outline + dynamic Task chapters | `OutlineGenerator._create_base_outline()` (lines 122-151) creates task-count-driven structure |
 | RPT-04 | mcmthesis/cumcmthesis template switching | `LatexDocumentAssembler._create_preamble()` (lines 447-475) shows template selection via documentclass |
 | RPT-05 | Fine-grained chapter relevance context passing | `OutlineGenerator.generate_chapter_relevance_map()` (lines 153-188) + `PaperGenerator._get_relevant_chapters()` (lines 641-657) |
@@ -307,7 +307,7 @@ def generate_report_chapters(json_data: Dict, llm, chapter_relevance_map: Dict) 
     task_count = len(json_data.get("tasks", []))
     outline_gen = OutlineGenerator()
     chapters = outline_gen.create_outline(task_count)
-    
+
     completed_chapters = []
     for chapter in chapters:
         if chapter.needs_content:
