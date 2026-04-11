@@ -360,14 +360,44 @@ except Exception as e:
 EOF
     "$TASK_ID"
 
-  # Task execution placeholder
-  # Note: In Phase 3, we only set up infrastructure
-  # Actual modeling happens in Phase 5 (Mathematical Modeling)
-  # For now, we create a placeholder result
-  echo "  ✓ Task $TASK_ID setup complete"
+  ### Step 4.5.6: Code Generation & Execution
+  # Generate and execute Python code for numerical simulation
+  echo "  Generating and executing code..."
 
-  # Update task status to pending (ready for next phase)
-  python3 << 'EOF'
+  # Invoke code-execution skill
+  # The skill will:
+  # - Generate Python code based on model.md and formulas.json
+  # - Execute code with timeout=300s
+  # - Capture output (stdout/stderr)
+  # - Handle errors with auto-retry (max_repair=3, max_execute=5)
+  # - Output results.json and plots
+  CODE_EXECUTION=$(Skill code-execution --task-id $TASK_ID || echo "FAILED")
+
+  # Check code execution succeeded
+  if [ "$CODE_EXECUTION" = "FAILED" ]; then
+    echo "  ⚠ Warning: Code generation/execution failed for task $TASK_ID"
+    echo "  Continuing DAG execution (Phase 6 is non-blocking)..."
+  else
+    echo "  ✓ Code execution complete"
+
+    # Verify results.json was created
+    if [ -f ".planning/memory/results-$TASK_ID.json" ]; then
+      STATUS=$(python3 -c "import json; print(json.load(open('.planning/memory/results-$TASK_ID.json'))['status'])" 2>/dev/null || echo "unknown")
+      EXEC_TIME=$(python3 -c "import json; print(json.load(open('.planning/memory/results-$TASK_ID.json')).get('execution_time', 0))" 2>/dev/null || echo "0")
+      echo "     Status: $STATUS (${EXEC_TIME}s)"
+
+      # Check for plots
+      if [ -d ".planning/output/plots/$TASK_ID" ]; then
+        PLOT_COUNT=$(ls .planning/output/plots/$TASK_ID/*.{png,pdf} 2>/dev/null | wc -l)
+        echo "     Plots: $PLOT_COUNT generated"
+      fi
+    else
+      echo "  ⚠ Warning: results-$TASK_ID.json not created"
+    fi
+  fi
+
+  # Update task memory with execution results
+  python3 << EOF
 import json
 import sys
 from datetime import datetime
@@ -375,16 +405,51 @@ from datetime import datetime
 task_id = sys.argv[1]
 memory_path = f".planning/memory/task-{task_id}.json"
 
-with open(memory_path) as f:
-    memory = json.load(f)
+try:
+    with open(memory_path) as f:
+        memory = json.load(f)
 
-memory['status'] = 'pending'
-memory['updated_at'] = datetime.now().isoformat()
+    # Update status and phase
+    memory['status'] = 'completed' if memory.get('status') != 'failed' else 'failed'
+    memory['phase'] = 'code-execution'
+    memory['updated_at'] = datetime.now().isoformat()
 
-with open(memory_path, 'w') as f:
-    json.dump(memory, f, indent=2, ensure_ascii=False)
+    # Read results.json if exists
+    try:
+        with open(f".planning/memory/results-{task_id}.json", 'r', encoding='utf-8') as f:
+            execution_result = json.load(f)
+            memory['execution_result'] = {
+                'status': execution_result.get('status'),
+                'stdout': execution_result.get('stdout', ''),
+                'stderr': execution_result.get('stderr', ''),
+                'execution_time': execution_result.get('execution_time', 0),
+                'results': execution_result.get('results', {})
+            }
+            memory['code_structure'] = {
+                'file_outputs': [
+                    {'path': f".planning/memory/results-{task_id}.json", 'description': 'Execution results'}
+                ]
+            }
+            memory['charts'] = execution_result.get('plots', [])
+    except FileNotFoundError:
+        # No results.json (execution failed)
+        memory['execution_result'] = {'status': 'failed', 'error': 'No results file created'}
+        memory['code_structure'] = {}
+        memory['charts'] = []
 
-print(f"Updated task-{task_id}.json: status=pending")
+    # Read generated code if exists
+    try:
+        with open(f".planning/code/task-{task_id}.py", 'r', encoding='utf-8') as f:
+            memory['task_code'] = f.read()
+    except FileNotFoundError:
+        memory['task_code'] = ""
+
+    with open(memory_path, 'w', encoding='utf-8') as f:
+        json.dump(memory, f, indent=2, ensure_ascii=False)
+
+    print(f"Updated task-{task_id}.json with code execution results")
+except Exception as e:
+    print(f"Error updating memory: {e}")
 EOF
     "$TASK_ID"
 
@@ -400,6 +465,49 @@ The context loading process:
 - Formats context following IDEA.md §7.3
 - Writes context-for-task-{id}.txt for task execution
 - Creates initial Memory file with status=in_progress
+
+## Step 4.5.7: Verify Phase 6 Completion
+
+After all tasks complete, verify Phase 6 artifacts were created successfully:
+
+```bash
+echo ""
+echo "━━━ Verifying Phase 6 Completion ━━━"
+
+# Check results.json for each task
+for TASK_ID in $(cat .planning/memory/execution-order.txt); do
+    if [ -f ".planning/memory/results-$TASK_ID.json" ]; then
+        STATUS=$(python3 -c "import json; print(json.load(open('.planning/memory/results-$TASK_ID.json'))['status'])")
+        echo "✓ Task $TASK_ID: $STATUS"
+    else
+        echo "⚠ Task $TASK_ID: No results file"
+    fi
+done
+
+# Check plots directory
+if [ -d ".planning/output/plots" ]; then
+    TOTAL_PLOTS=$(find .planning/output/plots -name "*.png" -o -name "*.pdf" 2>/dev/null | wc -l)
+    echo "✓ Total plots generated: $TOTAL_PLOTS"
+else
+    echo "⚠ No plots directory found"
+fi
+
+# Verify task memory updated
+for TASK_ID in $(cat .planning/memory/execution-order.txt); do
+    MEMORY_FILE=".planning/memory/task-$TASK_ID.json"
+    if [ -f "$MEMORY_FILE" ]; then
+        # Check for execution_result field
+        HAS_EXEC=$(python3 -c "import json; print('yes' if 'execution_result' in json.load(open('$MEMORY_FILE')) else 'no')" 2>/dev/null || echo "no")
+        if [ "$HAS_EXEC" = "yes" ]; then
+            echo "✓ Task $TASK_ID: memory updated with execution results"
+        else
+            echo "⚠ Task $TASK_ID: memory missing execution_result field"
+        fi
+    fi
+done
+
+echo "━━━ Phase 6 Verification Complete ━━━"
+```
 
 ## Step 4.6: Verify Phase 3 Completion
 
@@ -592,4 +700,23 @@ Located at .claude/skills/mm-agent/parse-problem.md. Handles all file format det
 **Phase 5 output:**
 - .planning/memory/model-{id}.md - Modeling method document
 - .planning/memory/formulas-{id}.json - Structured formula definitions
+
+**Phase 6 integration:**
+- Code generation and execution (code-execution.md skill)
+- Invoked per-task in DAG execution loop (Step 4.5.6)
+- Template + LLM fill strategy for code generation (Decision D-06)
+- Subprocess execution with timeout=300s (Decision D-07)
+- LLM auto-repair with max_repair=3, max_execute=5 (Decision D-08)
+- Graceful error handling: failed tasks don't block DAG execution
+
+**Phase 6 output:**
+- .planning/code/task-{id}.py - Generated Python code
+- .planning/memory/results-{id}.json - Execution results (status, stdout, stderr, execution_time, results, plots)
+- .planning/output/plots/{id}/ - Visualization plots per task
+- .planning/memory/task-{id}.json - Updated memory with task_code, execution_result, code_structure, charts fields
+
+**Phase 6 parameters:**
+- max_retries (max_execute): 5 total execution attempts
+- max_repair: 3 repair attempts per execution
+- timeout: 300s (5 minutes) per execution
 </context>
