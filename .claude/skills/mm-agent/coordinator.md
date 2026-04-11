@@ -218,6 +218,39 @@ for TASK_ID in $EXECUTION_ORDER; do
     continue
   fi
 
+  ### Step 4.5.4: HMML Knowledge Retrieval
+  # Retrieve relevant modeling methods from HMML knowledge base
+  echo "  Retrieving HMML methods..."
+
+  # Write task description to query file
+  echo "$TASK_DESC" > .planning/memory/query-task-$TASK_ID.txt
+
+  # Run HMML retrieval
+  python3 .claude/scripts/hmml_retrieval.py \
+      --query-file .planning/memory/query-task-$TASK_ID.txt \
+      --output .planning/memory/retrieved-methods-$TASK_ID.json \
+      --top-k 6 \
+      --knowledge-dir .planning/knowledge > /dev/null 2>&1
+
+  # Check retrieval succeeded
+  if [ $? -ne 0 ]; then
+    echo "  ⚠ Warning: HMML retrieval failed for task $TASK_ID"
+    echo "  Continuing without retrieved methods..."
+  else
+    METHOD_COUNT=$(python3 -c "import json; print(len(json.load(open('.planning/memory/retrieved-methods-$TASK_ID.json'))['methods']))")
+    echo "  ✓ Retrieved $METHOD_COUNT methods"
+
+    # Display top methods
+    python3 -c "
+import json
+data = json.load(open('.planning/memory/retrieved-methods-$TASK_ID.json'))
+for i, m in enumerate(data['methods'][:3], 1):
+    print(f'     {i}. {m[\"method\"]} ({m[\"domain\"]}/{m[\"subdomain\"]}) - score: {m[\"score\"]:.3f}')
+if len(data['methods']) > 3:
+    print(f'     ... and {len(data[\"methods\"]) - 3} more')
+"
+  fi
+
   # Task execution placeholder
   # Note: In Phase 3, we only set up infrastructure
   # Actual modeling happens in Phase 5 (Mathematical Modeling)
@@ -429,4 +462,14 @@ Located at .claude/skills/mm-agent/parse-problem.md. Handles all file format det
 - .planning/memory/execution-order.txt - Task order
 - .planning/memory/task-{id}.json - Task Memory files
 - .planning/memory/context-for-task-{id}.txt - Context files
+
+**Phase 4 integration:**
+- HMML retrieval (hmml_retrieval.py script)
+- Method candidates for each task
+- Top-K retrieval with cosine similarity
+- retrieved-methods-{task_id}.json per task
+
+**Phase 4 output:**
+- .planning/memory/query-task-{id}.txt - Query text per task
+- .planning/memory/retrieved-methods-{id}.json - Retrieval results per task
 </context>
