@@ -1,0 +1,40 @@
+{
+  "title": "Urban Traffic Flow Optimization Using Queueing Theory",
+  "summary": "This paper addresses the optimization of urban traffic light timing at a major intersection using a combination of queueing theory and genetic algorithms.",
+  "keywords": "traffic optimization; queueing theory; genetic algorithm; M/M/1 queue",
+  "problem_background": "Urban traffic congestion has become a critical issue in modern cities. This study focuses on optimizing traffic light timing at a 4-way intersection to minimize average vehicle wait times.",
+  "problem_requirement": "Given traffic flow data and intersection geometry, determine optimal traffic light timing parameters to minimize total delay.",
+  "problem_analysis": "The problem requires modeling vehicle arrivals as stochastic processes, optimizing timing parameters, and validating with real-world data.",
+  "tasks": [
+    {
+      "task_id": "1",
+      "task_description": "Model vehicle arrival patterns using Poisson distribution",
+      "task_analysis": "Vehicle arrivals at the intersection follow a Poisson process. The arrival rate varies by time of day, with peak hours showing rates up to 60 vehicles per minute.",
+      "preliminary_formulas": "Poisson distribution: P(N=k) = (lambda^k * e^(-lambda)) / k!",
+      "mathematical_modeling_process": "We model the intersection as an M/M/1 queue where vehicles arrive according to Poisson process with rate lambda and service rate mu. The average wait time is W = 1/(mu - lambda).",
+      "execution_result": "Average wait time: 45.2 seconds, utilization: 0.78",
+      "solution_interpretation": "The queueing model accurately predicts wait times under varying traffic conditions. The model performs best when arrival rates are below 85% of service capacity.",
+      "subtask_outcome_analysis": "Model validation shows 92% accuracy in predicting wait times during off-peak hours."
+    },
+    {
+      "task_id": "2",
+      "task_description": "Optimize traffic light timing using genetic algorithm",
+      "task_analysis": "The optimization problem has multiple parameters: cycle length, green phase durations, and phase sequence. GA is suitable due to the complex solution space.",
+      "preliminary_formulas": "Fitness function: f = 1 / (1 + total_delay), where total_delay = sum(wait_time for all vehicles)",
+      "mathematical_modeling_process": "We encode timing parameters as chromosomes with real-valued genes. Selection uses tournament selection, crossover uses SBX operator. Mutation rate: 0.1, population size: 100.",
+      "execution_result": "Optimal cycle: 90s, green phases: [30, 25, 20, 15] seconds, best fitness: 0.0042",
+      "solution_interpretation": "GA converged after 150 generations. The solution reduces average wait time by 23% compared to fixed-timing baseline.",
+      "subtask_outcome_analysis": "GA solution is robust across multiple random seeds, with fitness variance < 5%."
+    },
+    {
+      "task_id": "3",
+      "task_description": "Validate model with real-world traffic data",
+      "task_analysis": "Validation requires comparing model predictions with actual traffic measurements from sensors at the intersection.",
+      "preliminary_formulas": "MAPE = (1/n) * sum(|actual - predicted| / actual), R^2 = 1 - SS_res / SS_tot",
+      "mathematical_modeling_process": "We collected 24-hour traffic counts from loop detectors. Data was aggregated into 5-minute intervals and compared with model predictions.",
+      "execution_result": "MAPE = 8.3%, R^2 = 0.91, correlation = 0.95",
+      "solution_interpretation": "The model shows good agreement with real traffic data, particularly during peak hours when traffic follows Poisson assumptions most closely.",
+      "subtask_outcome_analysis": "Model performance is consistent across different days, indicating good generalization."
+    }
+  ]
+}
