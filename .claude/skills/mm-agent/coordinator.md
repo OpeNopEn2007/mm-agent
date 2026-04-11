@@ -509,6 +509,172 @@ done
 echo "━━━ Phase 6 Verification Complete ━━━"
 ```
 
+## Step 4.8: Execute Phase 7 - Report Generation
+
+After Phase 6 completes, invoke the report-generation skill to produce the final PDF.
+
+### Step 7.1: Prepare Report Metadata
+
+Collect metadata from problem.md and execution results:
+
+```bash
+# Load problem.md for title, summary, keywords
+problem_path=".planning/memory/problem.md"
+if [ -f "$problem_path" ]; then
+    # Parse YAML frontmatter if present, otherwise use defaults
+    metadata=$(python3 << 'EOF'
+import json
+import os
+from pathlib import Path
+
+metadata = {
+    "title": "Mathematical Modeling Paper",
+    "summary": "This paper presents solutions to...",
+    "keywords": "optimization; modeling; simulation",
+    "team": "2500001",
+    "year": "2025",
+    "problem_type": "A",
+    "template": "mcm"  # or "cumcm" based on problem
+}
+
+# Load task memories
+memory_dir = Path(".planning/memory")
+task_files = sorted(memory_dir.glob("task-*.json"))
+tasks = []
+for task_file in task_files:
+    with open(task_file) as f:
+        tasks.append(json.load(f))
+
+# Collect figures and code
+plots_dir = Path(".planning/output/plots")
+codes_dir = Path(".planning/output/code")
+metadata["figures"] = [str(f) for f in plots_dir.glob("*.png")] if plots_dir.exists() else []
+metadata["codes"] = [str(f) for f in codes_dir.glob("*.py")] if codes_dir.exists() else []
+
+# Combine into json_data
+json_data = {
+    "title": metadata.get("title", ""),
+    "summary": metadata.get("summary", ""),
+    "keywords": metadata.get("keywords", ""),
+    "problem_background": tasks[0].get("problem_background", "") if tasks else "",
+    "problem_requirement": tasks[0].get("problem_requirement", "") if tasks else "",
+    "problem_analysis": tasks[0].get("problem_analysis", "") if tasks else "",
+    "tasks": [
+        {
+            "task_id": t.get("task_id", ""),
+            "task_description": t.get("task_description", ""),
+            "task_analysis": t.get("task_analysis", ""),
+            "preliminary_formulas": t.get("preliminary_formulas", ""),
+            "mathematical_modeling_process": t.get("mathematical_modeling_process", ""),
+            "execution_result": t.get("execution_result", ""),
+            "solution_interpretation": t.get("solution_interpretation", ""),
+            "subtask_outcome_analysis": t.get("subtask_outcome_analysis", "")
+        }
+        for t in tasks
+    ]
+}
+
+# Save for report generation
+os.makedirs(".planning/memory", exist_ok=True)
+with open(".planning/memory/report-memory.json", "w") as f:
+    json.dump(json_data, f, indent=2, ensure_ascii=False)
+
+with open(".planning/memory/report-metadata.json", "w") as f:
+    json.dump(metadata, f, indent=2, ensure_ascii=False)
+
+print("Metadata prepared successfully")
+EOF
+)
+else
+    echo "Warning: problem.md not found, using default metadata"
+fi
+```
+
+### Step 7.2: Invoke Report Generation
+
+Use the report-generation skill to generate the final paper:
+
+```bash
+# Invoke report generation skill
+# The skill will generate report.tex and compile to report.pdf
+REPORT_GEN=$(Skill report-generation || echo "FAILED")
+
+if [ "$REPORT_GEN" = "FAILED" ]; then
+    echo "Warning: Report generation skill failed"
+    echo "Attempting direct script invocation..."
+
+    # Fallback: invoke report_generator.py directly
+    python3 << 'EOF'
+import sys
+sys.path.insert(0, '.')
+from src.scripts.report_generator import PaperGenerator
+import json
+import os
+
+# Ensure output directory exists
+os.makedirs(".planning/output", exist_ok=True)
+
+# Load prepared data
+with open(".planning/memory/report-memory.json") as f:
+    json_data = json.load(f)
+
+with open(".planning/memory/report-metadata.json") as f:
+    metadata = json.load(f)
+
+# Generate report
+generator = PaperGenerator(llm=None)  # LLM provided by Skill environment
+generator.generate_paper(
+    json_data=json_data,
+    metadata=metadata,
+    output_dir=".planning/output",
+    filename="report"
+)
+EOF
+else
+    echo "✓ Report generation completed"
+fi
+```
+
+### Step 7.3: Verify Report Generation
+
+After Phase 7 completes:
+
+```bash
+echo ""
+echo "━━━ Phase 7 Verification ━━━"
+
+# Check LaTeX source
+if [ -f ".planning/output/report.tex" ]; then
+    TEX_SIZE=$(wc -c < ".planning/output/report.tex")
+    echo "✓ report.tex exists (${TEX_SIZE} bytes)"
+else
+    echo "⚠ report.tex not found"
+fi
+
+# Check PDF (may be 0 bytes if compilation failed)
+if [ -f ".planning/output/report.pdf" ]; then
+    PDF_SIZE=$(wc -c < ".planning/output/report.pdf")
+    if [ "$PDF_SIZE" -gt 0 ]; then
+        echo "✓ report.pdf exists (${PDF_SIZE} bytes)"
+    else
+        echo "⚠ report.pdf is empty (LaTeX compilation may have failed)"
+        echo "  Check .planning/output/report.tex for source"
+    fi
+else
+    echo "⚠ report.pdf not found"
+fi
+
+# Check appendix directory
+if [ -d ".planning/output/appendix" ]; then
+    APPENDIX_COUNT=$(find .planning/output/appendix -type f 2>/dev/null | wc -l)
+    echo "✓ appendix/ contains $APPENDIX_COUNT files"
+else
+    echo "⚠ appendix/ directory not found"
+fi
+
+echo "━━━ Phase 7 Verification Complete ━━━"
+```
+
 ## Step 4.6: Verify Phase 3 Completion
 
 Verify all Phase 3 artifacts were created successfully:
