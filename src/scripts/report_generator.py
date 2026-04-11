@@ -63,6 +63,9 @@ def strip_markdown(text: str) -> str:
 
 def escape_underscores_in_quotes(text: str) -> str:
     """Escape underscores inside quoted strings to prevent LaTeX errors."""
+    # Handle non-string inputs gracefully (e.g., from broken mocks in tests)
+    if not isinstance(text, str):
+        return str(text)
     pattern = r'(".*?")|(\'.*?\')'
     def replace_underscores(match):
         content = match.group(0)[1:-1]
@@ -811,7 +814,10 @@ class FileManager:
         for ext in ["aux", "log", "toc", "out"]:
             aux_file = latex_path.replace('.tex', f'.{ext}')
             if os.path.exists(aux_file):
-                os.remove(aux_file)
+                try:
+                    os.remove(aux_file)
+                except FileNotFoundError:
+                    pass  # File was deleted between check and remove
 
 
 # --------------------------------
