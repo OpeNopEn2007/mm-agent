@@ -809,7 +809,24 @@ class FileManager:
         print(f"Document saved to {filepath}")
 
     @staticmethod
-    def generate_pdf(latex_path: str) -> bool:
+    def check_xelatex_availability() -> bool:
+        """Check if xelatex is available in the system.
+
+        Returns:
+            True if xelatex is found and executable, False otherwise
+        """
+        import shutil
+        xelatex_path = shutil.which("xelatex")
+        if xelatex_path:
+            print(f"[FileManager] xelatex found at: {xelatex_path}")
+            return True
+        else:
+            print("[FileManager] Warning: xelatex not found in PATH")
+            print("[FileManager] PDF compilation will likely fail")
+            return False
+
+    @staticmethod
+    def generate_pdf(latex_path: str, timeout: int = 60) -> bool:
         """Generate a PDF from a LaTeX file using xelatex.
 
         XeLaTeX is required for Chinese font support (mcmthesis/cumcmthesis).
@@ -817,23 +834,50 @@ class FileManager:
 
         Args:
             latex_path: Path to the .tex file
+            timeout: Maximum seconds to wait for each compilation pass (default: 60)
 
         Returns:
             True if PDF generation succeeded, False otherwise
+
+        Raises:
+            PDFCompilationError: If xelatex is not available or compilation fails
         """
+        # Pre-flight validation: check xelatex availability
+        if not FileManager.check_xelatex_availability():
+            raise PDFCompilationError(
+                "xelatex not found in system PATH. Please install TeX Live.",
+                log_content=""
+            )
+
         print(f"Generating PDF from {latex_path}...")
 
         latex_dir = os.path.dirname(latex_path) or "."
+
         # Pass 1: Generate TOC and references
-        result1 = subprocess.run(
-            ["xelatex", "-interaction=nonstopmode", f"-output-directory={latex_dir}", latex_path],
-            capture_output=True, text=True
-        )
+        try:
+            result1 = subprocess.run(
+                ["xelatex", "-interaction=nonstopmode", f"-output-directory={latex_dir}", latex_path],
+                capture_output=True, text=True,
+                timeout=timeout  # Prevent deadlock
+            )
+        except subprocess.TimeoutExpired:
+            raise PDFCompilationError(
+                f"xelatex timed out after {timeout}s on first pass",
+                log_content=""
+            )
+
         # Pass 2: Resolve references
-        result2 = subprocess.run(
-            ["xelatex", "-interaction=nonstopmode", f"-output-directory={latex_dir}", latex_path],
-            capture_output=True, text=True
-        )
+        try:
+            result2 = subprocess.run(
+                ["xelatex", "-interaction=nonstopmode", f"-output-directory={latex_dir}", latex_path],
+                capture_output=True, text=True,
+                timeout=timeout  # Prevent deadlock
+            )
+        except subprocess.TimeoutExpired:
+            raise PDFCompilationError(
+                f"xelatex timed out after {timeout}s on second pass",
+                log_content=""
+            )
 
         # Clean up auxiliary files
         FileManager._clean_temp_files(latex_path)
@@ -843,8 +887,16 @@ class FileManager:
             print(f"PDF generated at {pdf_path}")
             return True
         else:
-            print(f"PDF generation failed. Check {latex_path.replace('.tex', '.log')}")
-            return False
+            # Capture error log for debugging
+            log_path = latex_path.replace('.tex', '.log')
+            log_content = ""
+            if os.path.exists(log_path):
+                with open(log_path, 'r', encoding='utf-8', errors='replace') as f:
+                    log_content = f.read()[-2000:]  # Last 2000 chars of log
+            raise PDFCompilationError(
+                f"xelatex compilation failed (rc={result1.returncode}, {result2.returncode})",
+                log_content=log_content
+            )
 
     @staticmethod
     def _clean_temp_files(latex_path: str) -> None:
