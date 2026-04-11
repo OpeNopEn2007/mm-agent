@@ -68,24 +68,24 @@ def compute_embeddings(method_texts: List[str], model_name: str = "BAAI/bge-m3")
         Tuple of (embeddings numpy array, embedding_dim)
     """
     try:
-        from FlagEmbedding import BGEM3FlagModel
+        from sentence_transformers import SentenceTransformer
     except ImportError:
-        print("Error: FlagEmbedding not installed. Install with:")
-        print("  pip install -U FlagEmbedding")
+        print("Error: sentence-transformers not installed. Install with:")
+        print("  pip install -U sentence-transformers")
         sys.exit(1)
 
     print(f"Loading BGE-m3 model ({model_name})...")
     print("Note: First run will download the model (~2GB) from HuggingFace")
 
-    model = BGEM3FlagModel(model_name, use_fp16=True)
+    model = SentenceTransformer(model_name)
 
     print(f"Computing embeddings for {len(method_texts)} methods...")
-    embeddings = model.encode(method_texts, batch_size=12)['dense_emb']
+    embeddings = model.encode(method_texts, batch_size=12, convert_to_numpy=True)
 
     embedding_dim = embeddings.shape[1]
     print(f"Embeddings computed: shape={embeddings.shape}, dtype={embeddings.dtype}")
 
-    return embeddings, embedding_dim
+    return embeddings.astype('float32'), embedding_dim
 
 
 def main() -> int:
