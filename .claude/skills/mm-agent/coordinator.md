@@ -223,11 +223,11 @@ for TASK_ID in $EXECUTION_ORDER; do
   echo "  Retrieving HMML methods..."
 
   # Write task description to query file
-  echo "$TASK_DESC" > .planning/memory/query-task-$TASK_ID.txt
+  echo "$TASK_DESC" > .planning/memory/task-desc-$TASK_ID.txt
 
   # Run HMML retrieval
   python3 .claude/scripts/hmml_retrieval.py \
-      --query-file .planning/memory/query-task-$TASK_ID.txt \
+      --query-file .planning/memory/task-desc-$TASK_ID.txt \
       --output .planning/memory/retrieved-methods-$TASK_ID.json \
       --top-k 6 \
       --knowledge-dir .planning/knowledge > /dev/null 2>&1
@@ -515,47 +515,108 @@ After Phase 6 completes, invoke the report-generation skill to produce the final
 
 ### Step 7.1: Prepare Report Metadata
 
-Collect metadata from problem.md and execution results:
+Before generating the report, validate prerequisites and parse metadata:
 
-```bash
-# Load problem.md for title, summary, keywords
-problem_path=".planning/memory/problem.md"
-if [ -f "$problem_path" ]; then
-    # Parse YAML frontmatter if present, otherwise use defaults
-    metadata=$(python3 << 'EOF'
+```python
 import json
 import os
+import re
 from pathlib import Path
 
-metadata = {
-    "title": "Mathematical Modeling Paper",
-    "summary": "This paper presents solutions to...",
-    "keywords": "optimization; modeling; simulation",
-    "team": "2500001",
-    "year": "2025",
-    "problem_type": "A",
-    "template": "mcm"  # or "cumcm" based on problem
-}
+def parse_problem_metadata(problem_path: Path) -> dict:
+    """Parse problem.md with YAML frontmatter support.
 
-# Load task memories
+    Args:
+        problem_path: Path to problem.md
+
+    Returns:
+        Dictionary with title, summary, keywords, team, year, problem_type, template
+        Returns empty dict if parsing fails
+    """
+    if not problem_path.exists():
+        print(f"[Phase 7] Warning: {problem_path} not found, using defaults")
+        return {}
+
+    with open(problem_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    # Parse YAML frontmatter (--- delimited)
+    if content.startswith('---'):
+        parts = content.split('---', 2)
+        if len(parts) >= 3:
+            import yaml
+            try:
+                frontmatter = yaml.safe_load(parts[1])
+                return {
+                    'title': frontmatter.get('title', ''),
+                    'summary': frontmatter.get('summary', ''),
+                    'keywords': frontmatter.get('keywords', ''),
+                    'team': frontmatter.get('team', ''),
+                    'year': frontmatter.get('year', ''),
+                    'problem_type': frontmatter.get('problem_type', ''),
+                    'template': frontmatter.get('template', 'mcm')
+                }
+            except yaml.YAMLError as e:
+                print(f"[Phase 7] YAML parse error: {e}")
+
+    # Fallback: try to extract from markdown content
+    return {
+        'title': '',
+        'summary': '',
+        'keywords': '',
+        'team': '',
+        'year': '',
+        'problem_type': '',
+        'template': 'mcm'  # Default to mcm
+    }
+
+# Validate task memory files exist
 memory_dir = Path(".planning/memory")
 task_files = sorted(memory_dir.glob("task-*.json"))
+
+if not task_files:
+    print("[Phase 7] Error: No task-*.json files found in .planning/memory/")
+    print("[Phase 7] Cannot proceed without task memories")
+    exit(1)
+
+print(f"[Phase 7] Found {len(task_files)} task memory files")
+
+# Parse problem.md for metadata
+problem_path = Path(".planning/memory/problem.md")
+metadata = parse_problem_metadata(problem_path)
+
+# Use defaults only for missing fields (not wrong hardcoded values)
+metadata.setdefault('title', 'Mathematical Modeling Paper')
+metadata.setdefault('team', '2500001')  # Generic team placeholder
+metadata.setdefault('year', '2025')
+metadata.setdefault('problem_type', 'A')
+metadata.setdefault('template', 'mcm')
+
+# Validate critical metadata
+if not metadata.get('title'):
+    print("[Phase 7] Warning: No title found in problem.md, using placeholder")
+if not metadata.get('team'):
+    print("[Phase 7] Warning: No team number found, using placeholder")
+
+# Load task memories
 tasks = []
 for task_file in task_files:
     with open(task_file) as f:
         tasks.append(json.load(f))
 
-# Collect figures and code
+print(f"[Phase 7] Loaded {len(tasks)} task memories")
+
+# Collect figures and code from Phase 6 output
 plots_dir = Path(".planning/output/plots")
 codes_dir = Path(".planning/output/code")
 metadata["figures"] = [str(f) for f in plots_dir.glob("*.png")] if plots_dir.exists() else []
 metadata["codes"] = [str(f) for f in codes_dir.glob("*.py")] if codes_dir.exists() else []
 
-# Combine into json_data
+# Build json_data from task memories
 json_data = {
-    "title": metadata.get("title", ""),
-    "summary": metadata.get("summary", ""),
-    "keywords": metadata.get("keywords", ""),
+    "title": metadata.get('title', ''),
+    "summary": metadata.get('summary', ''),
+    "keywords": metadata.get('keywords', ''),
     "problem_background": tasks[0].get("problem_background", "") if tasks else "",
     "problem_requirement": tasks[0].get("problem_requirement", "") if tasks else "",
     "problem_analysis": tasks[0].get("problem_analysis", "") if tasks else "",
@@ -582,58 +643,101 @@ with open(".planning/memory/report-memory.json", "w") as f:
 with open(".planning/memory/report-metadata.json", "w") as f:
     json.dump(metadata, f, indent=2, ensure_ascii=False)
 
-print("Metadata prepared successfully")
-EOF
-)
-else
-    echo "Warning: problem.md not found, using default metadata"
-fi
+print(f"[Phase 7] Metadata prepared: title='{metadata.get('title', 'N/A')}', tasks={len(tasks)}")
 ```
 
 ### Step 7.2: Invoke Report Generation
 
-Use the report-generation skill to generate the final paper:
+Pre-flight check and invoke report generation:
 
 ```bash
-# Invoke report generation skill
-# The skill will generate report.tex and compile to report.pdf
-REPORT_GEN=$(Skill report-generation || echo "FAILED")
+# Pre-flight: Check xelatex availability
+echo "[Phase 7] Checking xelatex availability..."
+XELATEX_PATH=$(which xelatex 2>/dev/null || echo "")
+if [ -z "$XELATEX_PATH" ]; then
+    echo "[Phase 7] ERROR: xelatex not found in PATH"
+    echo "[Phase 7] Please install TeX Live or MacTeX to compile PDF"
+    echo "[Phase 7] LaTeX source will still be generated at .planning/output/report.tex"
+    # Continue without PDF - user can compile manually
+    XELATEX_AVAILABLE=0
+else
+    echo "[Phase 7] xelatex found at: $XELATEX_PATH"
+    XELATEX_AVAILABLE=1
+fi
 
-if [ "$REPORT_GEN" = "FAILED" ]; then
-    echo "Warning: Report generation skill failed"
-    echo "Attempting direct script invocation..."
+# Invoke report generation
+if [ -f "src/scripts/report_generator.py" ]; then
+    # Direct Python invocation (development mode)
+    echo "[Phase 7] Invoking report_generator.py directly..."
 
-    # Fallback: invoke report_generator.py directly
-    python3 << 'EOF'
+    python3 -c "
 import sys
-sys.path.insert(0, '.')
-from src.scripts.report_generator import PaperGenerator
+sys.path.insert(0, 'src/scripts')
+from report_generator import PaperGenerator, FileManager
 import json
 import os
 
 # Ensure output directory exists
-os.makedirs(".planning/output", exist_ok=True)
+os.makedirs('.planning/output', exist_ok=True)
 
-# Load prepared data
-with open(".planning/memory/report-memory.json") as f:
-    json_data = json.load(f)
+# Pre-flight xelatex check
+if not FileManager.check_xelatex_availability():
+    print('[Phase 7] Warning: xelatex not available, PDF may not compile')
 
-with open(".planning/memory/report-metadata.json") as f:
-    metadata = json.load(f)
-
-# Generate report
-generator = PaperGenerator(llm=None)  # LLM provided by Skill environment
-generator.generate_paper(
+# Generate report (PaperGenerator now auto-acquires LLM if not provided)
+generator = PaperGenerator(llm=None)
+results = generator.generate_paper(
     json_data=json_data,
     metadata=metadata,
-    output_dir=".planning/output",
-    filename="report"
+    output_dir='.planning/output',
+    filename='report'
 )
-EOF
+
+# Print results
+print(f'[Phase 7] Generation complete: {results[\"chapters_generated\"]}/{results[\"chapters_generated\"]+results[\"chapters_failed\"]} chapters succeeded')
+if results['partial_chapters']:
+    print(f'[Phase 7] Partial chapters: {results[\"partial_chapters\"]}')
+if results['error']:
+    print(f'[Phase 7] Error: {results[\"error\"]}')
+
+# Exit with error if critical failure
+if not results['success'] and results['chapters_failed'] > 0:
+    print('[Phase 7] WARNING: Some chapters failed to generate')
+    # Don't exit - partial report is still useful
+" || {
+    echo "[Phase 7] ERROR: Report generation Python script failed"
+    exit 1
+}
 else
-    echo "✓ Report generation completed"
+    # Fallback: Use Skill tool
+    echo "[Phase 7] Using report-generation skill..."
+    REPORT_GEN=$(Skill report-generation || echo "FAILED")
+
+    if [ "$REPORT_GEN" = "FAILED" ]; then
+        echo "[Phase 7] ERROR: Report generation skill failed"
+        exit 1
+    fi
+fi
+
+# Verify output exists
+if [ -f ".planning/output/report.tex" ]; then
+    echo "[Phase 7] LaTeX source saved: .planning/output/report.tex"
+    TEX_SIZE=$(wc -c < ".planning/output/report.tex")
+    echo "[Phase 7] LaTeX size: $TEX_SIZE bytes"
+else
+    echo "[Phase 7] ERROR: report.tex not found after generation"
+    exit 1
+fi
+
+if [ -f ".planning/output/report.pdf" ]; then
+    PDF_SIZE=$(wc -c < ".planning/output/report.pdf")
+    echo "[Phase 7] PDF generated: .planning/output/report.pdf ($PDF_SIZE bytes)"
+else
+    echo "[Phase 7] WARNING: report.pdf not found (LaTeX compilation may have failed)"
 fi
 ```
+
+Error propagation: The script now captures errors and exits with non-zero status, propagating failures to the coordinator.
 
 ### Step 7.3: Verify Report Generation
 

@@ -1,3 +1,8 @@
+---
+name: report-generation
+description: Generate LaTeX/PDF report from modeling workflow artifacts
+---
+
 # Report Generation Sub-Skill
 
 **Purpose:** Generate LaTeX/PDF report from modeling workflow artifacts.
@@ -90,12 +95,40 @@ metadata = {
     'codes': ['.planning/output/code/solution.py']
 }
 
-# Generate report
-generator = PaperGenerator(llm=None)  # LLM provided by Skill environment
-generator.generate_paper(json_data, metadata, '.planning/output', 'report')
+# Pre-flight check: verify xelatex availability
+if not FileManager.check_xelatex_availability():
+    print("Warning: xelatex not found, PDF may not compile")
 
-# PDF is generated at .planning/output/report.pdf
+# Generate report - LLM is auto-acquired if not provided
+generator = PaperGenerator(llm=None)  # or pass explicit LLM
+results = generator.generate_paper(json_data, metadata, '.planning/output', 'report')
+
+# Check results
+print(f"Success: {results['success']}")
+print(f"Chapters: {results['chapters_generated']}/{results['chapters_generated']+results['chapters_failed']}")
+if results['partial_chapters']:
+    print(f"Partial: {results['partial_chapters']}")
+if results['error']:
+    print(f"Error: {results['error']}")
+
+# PDF is generated at .planning/output/report.pdf (may be missing if xelatex unavailable)
 ```
+
+## Error Handling
+
+The report generator provides granular error handling:
+
+- **LLM Auto-Acquisition**: If no LLM is provided, PaperGenerator attempts to acquire from environment (Anthropic SDK). Falls back to placeholder mode gracefully.
+
+- **Partial Result Preservation**: If chapter generation fails, partial results are preserved and generation continues. Check `results['partial_chapters']` for chapters with incomplete content.
+
+- **PDF Compilation Errors**: If PDF compilation fails, LaTeX source is still saved. Check `.planning/output/report.log` for errors.
+
+- **Exception Hierarchy**:
+  - `ReportGenerationError` - base exception
+  - `LLMFailureError` - LLM generation failed
+  - `ChapterGenerationError` - single chapter failed
+  - `PDFCompilationError` - PDF compilation failed (includes log content)
 
 ## Core Classes
 
@@ -114,3 +147,8 @@ generator.generate_paper(json_data, metadata, '.planning/output', 'report')
 Phase 7 of mm-agent workflow. Final phase, produces output report.
 
 Called by coordinator after Phase 6 (Code Execution) completes.
+
+Prerequisites:
+- `.planning/memory/task-*.json` files must exist
+- `.planning/memory/problem.md` with YAML frontmatter for metadata
+- xelatex must be available in PATH for PDF compilation
