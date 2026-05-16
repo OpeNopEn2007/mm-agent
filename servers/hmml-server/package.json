@@ -1,0 +1,19 @@
+{
+  "name": "hmml-server",
+  "version": "0.1.0",
+  "description": "HMML (Hierarchical Mathematical Modeling Library) MCP Server for Claude Code",
+  "main": "server.py",
+  "type": "module",
+  "scripts": {
+    "start": "python server.py"
+  },
+  "dependencies": {
+    "mcp": "^1.0.0",
+    "sentence-transformers": ">=2.2.0",
+    "numpy": ">=1.24.0",
+    "scipy": ">=1.10.0"
+  },
+  "keywords": ["mcp", "hmml", "mathematical-modeling", "claude-code"],
+  "author": "OpeNopEn2007",
+  "license": "MIT"
+}
