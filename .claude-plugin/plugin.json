@@ -9,5 +9,8 @@
   "homepage": "https://github.com/OpeNopEn2007/mm-agent",
   "repository": "https://github.com/OpeNopEn2007/mm-agent",
   "license": "MIT",
-  "keywords": ["mathematical-modeling", "mm-agent", "latex", "report-generation", "hmml", "math", "competition"]
+  "keywords": ["mathematical-modeling", "mm-agent", "latex", "report-generation", "hmml", "math", "competition"],
+  "skills": "./skills",
+  "agents": "./agents",
+  "hooks": "./hooks/hooks.json"
 }
