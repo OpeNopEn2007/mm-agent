@@ -31,7 +31,7 @@ This roadmap delivers the MM-Agent mathematical modeling system in Claude Code. 
 **Success Criteria** (what must be TRUE):
 1. User can invoke `/mm-agent --problem <file>` command and receive initial workflow response
 2. System inherits Claude Code's model configuration without requiring separate API keys
-3. Workflow is defined as a Claude Code Skill with auto-discovery in `.claude/skills/`
+3. Workflow is defined as a Claude Code Skill with auto-discovery in `skills/` (plugin structure)
 4. Agents are registered for executing workflow phases with proper isolation
 
 **Plans:** 4/4 complete

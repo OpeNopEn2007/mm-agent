@@ -303,8 +303,8 @@ Task 3 开始时：
 
 | 类型 | 文件位置 | 数量 | 示例 |
 |------|---------|------|------|
-| Skills | `.claude/skills/mm-agent/` | 2-3 | SKILL.md, coordinator.md |
-| Agents | `.claude/agents/` | 5-6 | modeler.md, programmer.md |
+| Skills | `skills/mm-agent/` | 2-3 | SKILL.md, coordinator.md |
+| Agents | `agents/` | 5-6 | modeler.md, programmer.md |
 
 ---
 

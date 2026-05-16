@@ -1,0 +1,13 @@
+{
+  "name": "mm-agent",
+  "version": "0.1.0",
+  "description": "数学建模工作流插件 - 解析赛题、构建模型、执行仿真、生成报告",
+  "author": {
+    "name": "OpeNopEn2007",
+    "email": "openopen2007@163.com"
+  },
+  "homepage": "https://github.com/OpeNopEn2007/mm-agent",
+  "repository": "https://github.com/OpeNopEn2007/mm-agent",
+  "license": "MIT",
+  "keywords": ["mathematical-modeling", "mm-agent", "latex", "report-generation", "hmml", "math", "competition"]
+}

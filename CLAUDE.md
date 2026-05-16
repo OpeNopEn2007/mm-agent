@@ -112,8 +112,8 @@
 ### Embedding & Knowledge Retrieval
 | Technology | Version | Purpose | Why |
 |------------|---------|---------|-----|
-| FlagEmbedding (BGE-m3) | Latest | Embedding computation | Multi-lingual (100+), multi-function retrieval, 8192 token context |
-| sentence-transformers | Latest | Model wrapper | Simplified BGE-m3 loading and usage |
+| Alibaba-NLP/gte-multilingual-base | Latest | Embedding computation | 768-dim, 8192 token context, 多语言支持（论文实际使用） |
+| sentence-transformers | Latest | Model wrapper | 模型加载与推理 |
 ### Report Generation
 | Technology | Version | Purpose | Why |
 |------------|---------|---------|-----|
@@ -133,7 +133,7 @@
 | Category | Recommended | Alternative | Why Not |
 |----------|-------------|-------------|---------|
 | Framework | GSD Framework | LangGraph/LangChain | GSD provides better phase orchestration for Claude Code |
-| Embedding | BGE-m3 | mGTE | BGE-m3 has more established community, better documentation |
+| Embedding | gte-multilingual-base | BGE-m3 | 论文工程仓库实际使用 gte-multilingual-base，768维，推理更快 |
 | Report | Jinja2 + Pandoc | WeasyPrint | Pandoc is standard for academic papers |
 | State | JSON files | Database | File system simpler for v1, avoids deployment complexity |
 | Python | 3.12 | 3.11/3.10 | Latest stable, better performance |
@@ -144,19 +144,17 @@
 # Report generation
 # PDF parsing
 # Configuration
-### Claude Code Skills Setup
-# Skills are markdown files in ~/.claude/skills/ or project .claude/skills/
-# No npm install needed - native Claude Code mechanism
-# Example skill structure:
-# .claude/skills/mm-agent/
-#   SKILL.md          # Entry point definition
-#   parse-problem.md  # Problem parsing hook
-#   model-task.md     # Task modeling agent
-#   execute-code.md   # Code execution hook
-#   generate-report.md # Report generation hook
+### Claude Code Plugin Setup
+# 本项目是 Claude Code 插件，结构遵循 docs/reference/claude-code-plugin-dev.md
+# 插件结构：
+# .claude-plugin/plugin.json  ← 插件元数据
+# skills/mm-agent/SKILL.md    ← 唯一 skill 入口
+# agents/*.md                 ← subagent 定义
+# hooks/hooks.json            ← hook 配置
+# 安装方式：claude --plugin-dir ./mm-agent-in-cc
 ### Embedding Model Download
-# BGE-m3 model (recommended)
-# Automatically downloaded on first use via FlagEmbedding
+# gte-multilingual-base (Alibaba-NLP, 论文实际使用)
+# Automatically downloaded on first use via transformers
 ## Configuration Files
 ### Project Structure
 ### Environment Variables
@@ -173,7 +171,7 @@
 |------|------------|--------|
 | Core Framework | HIGH | Claude Code native + GSD verified patterns |
 | Python Stack | HIGH | Based on LLM-MM-Agent requirements.txt |
-| Embedding | HIGH | Official FlagEmbedding docs verified |
+| Embedding | HIGH | 论文工程仓库代码确认使用 gte-multilingual-base |
 | Report Generation | MEDIUM | Standard tools, less math-specific validation |
 | Installation | MEDIUM | Based on package docs, not fully tested in this project |
 <!-- GSD:stack-end -->
@@ -181,13 +179,86 @@
 <!-- GSD:conventions-start source:CONVENTIONS.md -->
 ## Conventions
 
-Conventions not yet established. Will populate as patterns emerge during development.
+- **插件入口**: `.claude-plugin/plugin.json`（name, version, description）
+- **Skill 定义**: `skills/mm-agent/SKILL.md`（唯一入口，自然语言指令）
+- **Skill 支撑文件**: `skills/mm-agent/*.md`（coordinator.md 等，不是独立 skill）
+- **Agent 定义**: `agents/*.md`（frontmatter: name, description）
+- **Hook 配置**: `hooks/hooks.json` + `hooks/session-start`
+- **脚本**: `scripts/*.py`（独立 CLI 工具）
+- **知识库**: `knowledge/`（写作指南、HMML 方法库）
+- **模板**: `templates/`（LaTeX 论文模板）
+- **完整规范**: `docs/reference/claude-code-plugin-dev.md`
 <!-- GSD:conventions-end -->
+
+## Plugin Development Standards (CRITICAL)
+
+**完整规范**: `docs/reference/claude-code-plugin-dev.md`
+**参考实现**: [superpowers](https://github.com/obra/superpowers) — 最成熟的 Claude Code 插件
+
+### 结构规范
+
+```
+mm-agent-in-cc/
+├── .claude-plugin/
+│   └── plugin.json              ← 插件元数据（name, version, description）
+├── skills/
+│   └── mm-agent/
+│       ├── SKILL.md             ← 唯一入口，自然语言指令
+│       ├── coordinator.md       ← 支撑文件，不是独立 skill
+│       └── ...
+├── agents/
+│   └── mm-agent-*.md            ← subagent 定义
+├── hooks/
+│   ├── hooks.json               ← hook 配置
+│   └── session-start            ← 启动 hook 脚本
+└── scripts/
+    └── *.py                     ← 可执行脚本
+```
+
+### Skill 编写规则（最常违反）
+
+1. **SKILL.md 是给 Claude 看的自然语言指令**，不是 bash 脚本
+2. **禁止伪代码**：不要写 `$(Skill parse-problem ...)` 或 `if [ "$X" = "FAILED" ]`
+3. **Skill 间引用用自然语言**："使用 /parse-problem 解析问题文件"
+4. **`@path` 语法不存在**：用 `!`cat path`` 动态注入或 markdown 链接
+5. **`$ARGUMENTS` 直接可用**：不需要 bash grep 解析
+6. **支撑文件放 skill 目录下**：如 `skills/mm-agent/coordinator.md`
+7. **只有 SKILL.md 会被注册为 skill**：其他 .md 文件只是参考文档
+
+### Agent 编写规则
+
+1. **Agent ≠ Skill**：Agent 是 subagent，Skill 是指令，两者独立
+2. **Agent 通过 Agent tool 调用**：`subagent_type: "mm-agent-modeler"`
+3. **Skill 里调用 Agent**：写 "使用 Agent 工具，subagent_type 设为 mm-agent-modeler"
+4. **frontmatter 必需**：`name` 和 `description` 是唯一必需字段
+
+### Hook 规范
+
+1. **hooks.json 放在 `hooks/` 目录**，不是 `.claude/settings.json`
+2. **用 `${CLAUDE_PLUGIN_ROOT}`** 引用插件内文件
+3. **SessionStart hook** 用于注入引导上下文
+
+### 反模式检查清单
+
+在修改任何 skill/agent 文件前，检查：
+- [ ] 没有 bash 伪代码（`$()`, `if []`, `exit 1`）
+- [ ] 没有 `@path` 引用语法
+- [ ] 没有 `Skill name --flag` 调用语法
+- [ ] SKILL.md 是自然语言步骤，不是程序逻辑
+- [ ] Agent 被正确引用（通过 Agent tool，不是 Skill tool）
 
 <!-- GSD:architecture-start source:ARCHITECTURE.md -->
 ## Architecture
 
-Architecture not yet mapped. Follow existing patterns found in the codebase.
+**四阶段流水线**（基于论文 §3.3 + 工程仓库分析）：
+1. **Problem Analysis** — 问题理解(Actor-Critic×3) → 任务分解 → DAG 构建
+2. **Mathematical Modeling** — HMML 检索(top-6) → 公式 Actor-Critic
+3. **Computational Solving** — 代码生成 → 执行 → 调试循环(3轮×5次)
+4. **Solution Reporting** — 章节生成 → LaTeX 组装 → PDF 编译
+
+**核心模式**: 三层次 Actor-Critic（问题理解、建模方案、公式），Coordinator Memory 跨任务传递。
+
+详见 `docs/research/llm-mm-agent-engineering-analysis.md`。
 <!-- GSD:architecture-end -->
 
 <!-- GSD:workflow-start source:GSD defaults -->
@@ -209,3 +280,50 @@ Do not make direct repo edits outside a GSD workflow unless the user explicitly 
 > Profile not yet configured. Run `/gsd:profile-user` to generate your developer profile.
 > This section is managed by `generate-claude-profile` -- do not edit manually.
 <!-- GSD:profile-end -->
+
+---
+
+## Project Info (2026-05-16 更新)
+
+### 当前状态
+
+**版本**: v0.1.0（Phase 1-7 文档完成，但核心流水线有断裂）
+
+**关键发现**（详见 `docs/research/paper-vs-implementation-gap-analysis.md`）：
+- Prompt 模板 100% 完整（28/28）
+- Scripts 100% 完整（4/4 可执行）
+- Skill 定义 100% 正确（7/7）
+- HMML 知识库 100% 完整
+- **核心问题**: `templates/report-generator.py` 导入路径断裂
+- **架构问题**: Actor-Critic 不独立（同一 Skill 执行）、HMML 检索脱离 Claude 生态、Agent 未被实际调用
+
+### 关键文档
+
+| 文档 | 职责 | 何时阅读 |
+|------|------|---------|
+| `PLAN.md` | 重构计划与任务跟踪 | **必读**（当前工作上下文） |
+| `CHANGELOG.md` | 版本变动记录 | 了解历史 |
+| `docs/research/paper-vs-implementation-gap-analysis.md` | 详细差距分析 | 理解问题根源 |
+| `docs/research/claude-code-architecture-refactor.md` | 架构重构方案 | 理解解决方案 |
+| `docs/reference/claude-code-plugin-dev.md` | Claude Code 插件开发规范 | **必读**（开发前） |
+| `IDEA.md` | 设计决策文档 | 理解原始设计 |
+| `ROADMAP.md` | 原始路线图 | 了解 Phase 规划 |
+
+### 下一步行动
+
+**当前阶段**: Phase A — 最小可行修复
+
+**首要任务**: 修复 `templates/report-generator.py` 导入路径
+
+**目标**: 让核心流水线能跑通（Smoke Test 验证）
+
+### Claude Code 机制要点
+
+1. **Skill ≠ Python 代码**: Skill 是自然语言指令，由 Claude 执行
+2. **Agent 需通过 Agent tool 调用**: 写了 Agent .md 文件不代表 Agent 被使用
+3. **MCP 是工具集成正确方式**: HMML 检索应该用 MCP，不是 Python 脚本
+4. **Actor-Critic 需独立 Agent**: Actor 和 Critic 应该在独立 context 中执行
+
+---
+
+*Project Info 更新: 2026-05-16*
