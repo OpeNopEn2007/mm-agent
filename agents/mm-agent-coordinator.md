@@ -2,6 +2,7 @@
 name: mm-agent-coordinator
 description: DAG orchestration and Memory system management for task dependencies
 tools: Read, Write, Bash
+memory: project
 color: blue
 ---
 

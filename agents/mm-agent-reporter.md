@@ -2,6 +2,7 @@
 name: mm-agent-reporter
 description: Report generation - LaTeX/PDF paper reports
 tools: Read, Write, Bash
+memory: project
 color: purple
 ---
 

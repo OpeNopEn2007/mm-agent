@@ -2,6 +2,7 @@
 name: mm-agent-programmer
 description: Code generation and execution for numerical simulation
 tools: Read, Write, Bash, Agent
+memory: project
 color: yellow
 ---
 

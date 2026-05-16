@@ -2,6 +2,7 @@
 name: mm-agent-modeler
 description: Mathematical modeling with Actor-Critic iterative improvement
 tools: Read, Write, Bash, Agent
+memory: project
 color: green
 ---
 
