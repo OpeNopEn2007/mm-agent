@@ -8,12 +8,14 @@ Integrates with Claude Code via MCP protocol.
 Tools:
 - hmml_retrieve: Retrieve relevant modeling methods
 - hmml_insert: Insert new methods into the library
+- hmml_recompute_embeddings: Update embeddings after insert
 
 Based on scripts/hmml_retrieval.py implementation.
 """
 
 import json
 import sys
+import subprocess
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -43,6 +45,7 @@ KNOWLEDGE_DIR = SERVER_DIR / "knowledge" / "hmml"
 EMBEDDINGS_PATH = KNOWLEDGE_DIR / "hmml-embeddings.npy"
 INDEX_PATH = KNOWLEDGE_DIR / "method-index.json"
 HMML_PATH = KNOWLEDGE_DIR / "hmml.json"
+PRECOMPUTE_SCRIPT = SERVER_DIR / "scripts" / "hmml_precompute_embeddings.py"
 
 # Load knowledge base at startup
 print("Loading HMML knowledge base...")
@@ -103,9 +106,29 @@ async def list_tools() -> list[Tool]:
                     "application": {
                         "type": "string",
                         "description": "Application scenarios"
+                    },
+                    "auto_recompute": {
+                        "type": "boolean",
+                        "description": "Automatically recompute embeddings after insert (default: true)",
+                        "default": True
                     }
                 },
                 "required": ["domain", "subdomain", "method", "core_idea", "application"]
+            }
+        ),
+        Tool(
+            name="hmml_recompute_embeddings",
+            description="Recompute embeddings for all methods in HMML after adding new methods",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "model": {
+                        "type": "string",
+                        "description": "Embedding model to use (default: BAAI/bge-m3)",
+                        "default": "BAAI/bge-m3"
+                    }
+                },
+                "required": []
             }
         )
     ]
@@ -212,12 +235,36 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> Sequence[TextConten
             with open(HMML_PATH, 'w', encoding='utf-8') as f:
                 json.dump(current_hmml, f, indent=2, ensure_ascii=False)
 
+            # Check if auto_recompute is requested
+            auto_recompute = arguments.get("auto_recompute", True)
+            recompute_result = None
+
+            if auto_recompute:
+                try:
+                    result = subprocess.run(
+                        ["python", str(PRECOMPUTE_SCRIPT)],
+                        capture_output=True,
+                        text=True,
+                        timeout=300  # 5 minutes timeout
+                    )
+                    if result.returncode == 0:
+                        recompute_result = "Embeddings updated successfully"
+                        # Reload embeddings
+                        global embeddings, method_index
+                        embeddings, method_index, hmml_data = load_method_embeddings(
+                            EMBEDDINGS_PATH, INDEX_PATH, HMML_PATH
+                        )
+                    else:
+                        recompute_result = f"Recompute failed: {result.stderr}"
+                except Exception as e:
+                    recompute_result = f"Recompute error: {str(e)}"
+
             return [TextContent(
                 type="text",
                 text=json.dumps({
                     "success": True,
                     "message": f"Method '{method}' inserted into {domain}/{subdomain}",
-                    "note": "Run hmml_precompute_embeddings.py to update embeddings"
+                    "embedding_update": recompute_result or "Skipped (auto_recompute=false)"
                 }, indent=2)
             )]
 
@@ -225,6 +272,56 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> Sequence[TextConten
             return [TextContent(
                 type="text",
                 text=f"Error during insert: {str(e)}"
+            )]
+
+    elif name == "hmml_recompute_embeddings":
+        model = arguments.get("model", "BAAI/bge-m3")
+
+        try:
+            result = subprocess.run(
+                ["python", str(PRECOMPUTE_SCRIPT), "--model", model],
+                capture_output=True,
+                text=True,
+                timeout=300
+            )
+
+            if result.returncode == 0:
+                # Reload embeddings after recomputation
+                global embeddings, method_index
+                embeddings, method_index, hmml_data = load_method_embeddings(
+                    EMBEDDINGS_PATH, INDEX_PATH, HMML_PATH
+                )
+
+                return [TextContent(
+                    type="text",
+                    text=json.dumps({
+                        "success": True,
+                        "message": "Embeddings recomputed successfully",
+                        "method_count": len(method_index),
+                        "model": model
+                    }, indent=2)
+                )]
+            else:
+                return [TextContent(
+                    type="text",
+                    text=json.dumps({
+                        "success": False,
+                        "error": result.stderr
+                    }, indent=2)
+                )]
+
+        except subprocess.TimeoutExpired:
+            return [TextContent(
+                type="text",
+                text=json.dumps({
+                    "success": False,
+                    "error": "Timeout: Embedding computation took too long (>5min)"
+                }, indent=2)
+            )]
+        except Exception as e:
+            return [TextContent(
+                type="text",
+                text=f"Error during recompute: {str(e)}"
             )]
 
     else:
