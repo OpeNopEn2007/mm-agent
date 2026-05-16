@@ -59,27 +59,43 @@ Generate modeling plan including:
 ```
 
 ## Step 4: Critic - Evaluate quality
-Self-critique the modeling plan:
+Call independent Critic Agent for evaluation:
 
-Evaluation criteria:
-- Assumption合理性 (1-10)
-- 公式正确性 (1-10)
-- 方法适配度 (1-10)
+Use Agent tool with:
+```yaml
+subagent_type: mm-agent-critic
+description: Evaluate modeling plan quality
+prompt: |
+  Evaluate the modeling plan at .planning/memory/model.md
+  Task description at .planning/memory/task-desc.txt
+  HMML methods at .planning/memory/retrieved-methods.json
+```
 
-Average score = (合理性 + 正确性 + 适配度) / 3
+The Critic will output structured evaluation to .planning/memory/critique.json.
 
-If score >= 8 → STOP, accept plan
-If score < 8 → Continue to Step 5
+Read critique.json to check:
+- overall score
+- recommendation (accept|improve|reject)
+
+If overall >= 8 → STOP, accept plan
+If overall < 8 → Continue to Step 5
 
 ## Step 5: Actor - Improve plan
-Generate improved plan based on Critic feedback:
+Read .planning/memory/critique.json for specific feedback.
+
+Generate improved plan addressing Critic's improvements list:
 ```
 Original plan: {plan}
-Feedback: {critic_feedback}
+Critique scores: {scores}
+Weaknesses: {weaknesses}
+Improvements needed: {improvements_list}
 
-Improve the plan to address:
-- {specific_issues}
+Address each specific issue:
+- {issue_1} → fix with {suggestion}
+- {issue_2} → fix with {suggestion}
 ```
+
+Write updated plan to .planning/memory/model.md
 
 ## Step 6: Iterate until satisfied or max_rounds
 Repeat Steps 4-5 until:
