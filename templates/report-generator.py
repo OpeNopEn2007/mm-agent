@@ -12,10 +12,22 @@ import re
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 
-# Import statements would be here in a real application
-from prompt.template import PAPER_CHAPTER_PROMPT, PAPER_CHAPTER_WITH_PRECEDING_PROMPT, PAPER_INFO_PROMPT, PAPER_NOTATION_PROMPT
-from llm.llm import LLM
-from utils.utils import parse_llm_output_to_json
+# Claude Code Plugin Integration
+# Import prompts from the correct path
+from prompts.mm_agent_prompts import (
+    PAPER_CHAPTER_PROMPT,
+    PAPER_CHAPTER_WITH_PRECEDING_PROMPT,
+    PAPER_INFO_PROMPT,
+    PAPER_NOTATION_PROMPT
+)
+
+# LLM integration via Anthropic SDK (fallback for standalone execution)
+try:
+    from anthropic import Anthropic
+    HAS_ANTHROPIC = True
+except ImportError:
+    HAS_ANTHROPIC = False
+    print("Warning: anthropic package not installed. LLM calls will fail.")
 
 # --------------------------------
 # Data Models
@@ -729,4 +741,94 @@ def generate_paper(llm, output_dir, name):
 
     # Generate paper with chapter relevance mapping
     generate_paper_from_json(llm, json_data, metadata, f"{output_dir}/latex", 'solution')
+
+
+# --------------------------------
+# Utility Functions
+# --------------------------------
+
+def parse_llm_output_to_json(text: str) -> Dict[str, Any]:
+    """
+    Parse LLM output text to extract JSON data.
+    Handles various formats: raw JSON, JSON in code blocks, or key-value pairs.
+    """
+    import re
+
+    # Try to extract JSON from code blocks first
+    json_block_pattern = r'```(?:json)?\s*([\s\S]*?)\s*```'
+    matches = re.findall(json_block_pattern, text)
+
+    for match in matches:
+        try:
+            return json.loads(match.strip())
+        except json.JSONDecodeError:
+            continue
+
+    # Try to find raw JSON in the text
+    json_pattern = r'\{[\s\S]*\}'
+    match = re.search(json_pattern, text)
+    if match:
+        try:
+            return json.loads(match.group(0))
+        except json.JSONDecodeError:
+            pass
+
+    # Try to parse key-value format
+    result = {}
+    kv_pattern = r'(\w+)\s*[:=]\s*(.+?)(?:\n|$)'
+    for match in re.finditer(kv_pattern, text):
+        key = match.group(1).strip()
+        value = match.group(2).strip()
+        # Remove quotes if present
+        if value.startswith('"') and value.endswith('"'):
+            value = value[1:-1]
+        elif value.startswith("'") and value.endswith("'"):
+            value = value[1:-1]
+        result[key] = value
+
+    return result if result else {}
+
+
+# --------------------------------
+# LLM Adapter for Claude Code Integration
+# --------------------------------
+
+class AnthropicLLM:
+    """
+    LLM adapter using Anthropic SDK.
+    Used when running report-generator standalone (not through Claude Code Skill).
+    """
+
+    def __init__(self, model: str = "claude-sonnet-4-20250514"):
+        if not HAS_ANTHROPIC:
+            raise RuntimeError("anthropic package required for standalone execution")
+        self.client = Anthropic()
+        self.model = model
+
+    def generate(self, prompt: str, max_tokens: int = 4096) -> str:
+        """Generate text using Anthropic API"""
+        response = self.client.messages.create(
+            model=self.model,
+            max_tokens=max_tokens,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return response.content[0].text
+
+
+# --------------------------------
+# Entry Point for Standalone Execution
+# --------------------------------
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Generate academic paper from JSON data")
+    parser.add_argument("--output-dir", required=True, help="Output directory")
+    parser.add_argument("--name", required=True, help="Paper name (format: YEAR_PROBLEM)")
+    parser.add_argument("--model", default="claude-sonnet-4-20250514", help="Claude model to use")
+    args = parser.parse_args()
+
+    llm = AnthropicLLM(args.model)
+    generate_paper(llm, args.output_dir, args.name)
+    print(f"Paper generation complete: {args.output_dir}/latex/solution.tex")
 
