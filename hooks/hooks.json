@@ -12,6 +12,28 @@
         ]
       }
     ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"[$(date '+%Y-%m-%d %H:%M:%S')] Agent started: ${CLAUDE_SUBAGENT_NAME}\" >> \"${CLAUDE_PLUGIN_ROOT}/.planning/logs/agent-events.log\"",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"[$(date '+%Y-%m-%d %H:%M:%S')] Agent completed: ${CLAUDE_SUBAGENT_NAME} (${CLAUDE_SUBAGENT_RESULT})\" >> \"${CLAUDE_PLUGIN_ROOT}/.planning/logs/agent-events.log\"",
+            "async": true
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Write",
@@ -20,6 +42,21 @@
             "type": "command",
             "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.tool_input.file_path // empty'); if [[ \"$FILE\" =~ .planning/memory/.*\\.json$ ]]; then python3 -c \"import json; json.load(open('$FILE'))\" 2>/dev/null || echo 'Warning: Invalid JSON in memory file'; fi",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r '.tool_input.file_path // empty'); if [[ \"$FILE\" =~ .planning/memory/.*\\.md$ ]]; then echo \"Memory file written: $FILE\"; fi",
+            "async": true
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); AGENT=$(echo \"$INPUT\" | jq -r '.tool_input.subagent_type // \"unknown\"'); echo \"[$(date '+%Y-%m-%d %H:%M:%S')] Agent tool invoked: $AGENT\" >> \"${CLAUDE_PLUGIN_ROOT}/.planning/logs/agent-events.log\"",
+            "async": true
           }
         ]
       }
@@ -32,6 +69,16 @@
             "type": "command",
             "command": "INPUT=$(cat); CMD=$(echo \"$INPUT\" | jq -r '.tool_input.command // empty'); if [[ \"$CMD\" =~ python3.*\\.py ]]; then python3 --version 2>/dev/null | head -1 || echo 'Warning: Python3 not available'; fi",
             "timeout": 3
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); AGENT=$(echo \"$INPUT\" | jq -r '.tool_input.subagent_type // \"unknown\"'); echo \"Preparing to launch agent: $AGENT\"",
+            "timeout": 2
           }
         ]
       }
