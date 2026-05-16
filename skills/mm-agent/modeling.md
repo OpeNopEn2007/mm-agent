@@ -1,11 +1,11 @@
 ---
 name: modeling
-description: Mathematical modeling with Actor-Critic iterative improvement
+description: Mathematical modeling with Actor-Critic iterative improvement using Agent Team
 ---
 
 # Modeling Skill
 
-Generate mathematical modeling solutions through Actor-Critic iteration for a single task.
+Generate mathematical modeling solutions through Actor-Critic iteration using independent Agents.
 
 **Invocation:** The coordinator invokes this skill with `--task-id {id}` after Phase 4 (HMML Retrieval) completes.
 
@@ -18,122 +18,170 @@ Generate mathematical modeling solutions through Actor-Critic iteration for a si
 - `max_rounds`: 3 (maximum improvement iterations)
 - `satisfaction_threshold`: 8 (stop when critic score >= 8)
 
-## Step 1: Load inputs
+## Agent Team Architecture
 
-Read these files using the Read tool:
-
-1. `.planning/memory/task-desc-{task_id}.txt` — Task description
-2. `.planning/memory/retrieved-methods-{task_id}.json` — HMML retrieval results (may not exist)
-3. `.planning/memory/context-for-task-{task_id}.txt` — Dependency context from prior tasks (may not exist)
-
-If the task description file is missing, report an error and stop.
-
-## Step 2: Generate initial modeling solution (Actor)
-
-Ask the LLM to generate a modeling solution. Use this prompt structure:
-
-> You are a mathematical modeling expert. Generate a modeling solution for this task:
->
-> Task Description: {task_desc}
-> Retrieved Methods (for reference): {retrieved_methods}
-> Dependency Context (previous task results): {dependency_context}
->
-> Generate a comprehensive modeling solution with these sections:
-> 1. **Modeling Method** — Describe the approach, selected method, and rationale
-> 2. **Formulas** — Mathematical formulas with LaTeX notation ($$...$$)
-> 3. **Variables** — Table of all variables with symbols, descriptions, types, ranges
-> 4. **Assumptions** — List of modeling assumptions with justifications
-
-Store the result as `solution`.
-
-## Step 3: Critic evaluation
-
-Ask the LLM to evaluate the solution. Use this prompt structure:
-
-> You are a critical reviewer. Evaluate this mathematical modeling solution:
->
-> Task: {task_desc}
-> Modeling Solution: {solution}
->
-> Evaluate on these dimensions:
-> 1. Method Selection — Is the selected method appropriate for the task?
-> 2. Formulation — Are the formulas mathematically correct and complete?
-> 3. Variables — Are all variables defined with clear meanings and types?
-> 4. Assumptions — Are assumptions justified and not contradictory?
->
-> Output JSON: {"score": <1-10>, "strengths": [...], "weaknesses": [...], "improvements": [...]}
-
-Parse the `score` from the JSON response.
-
-## Step 4: Iterate if needed
-
-If the score is **>= 8** (satisfaction_threshold), skip to Step 5.
-
-Otherwise, for rounds 1 and 2 (up to `max_rounds` total):
-
-1. **Actor:** Ask the LLM to improve the solution based on the critic's weaknesses and improvements feedback
-2. **Critic:** Re-evaluate the improved solution with the same evaluation prompt
-3. Track the best score and solution across all rounds
-4. If score >= 8, stop iterating early
-
-## Step 5: Extract structured formulas
-
-From the best solution, ask the LLM to extract structured data:
-
-> Extract structured information from this modeling solution:
->
-> Modeling Solution: {solution}
->
-> Output JSON:
-> {
->   "task_id": "{task_id}",
->   "equations": [{"name": "...", "latex": "...", "description": "..."}],
->   "variables": [{"symbol": "...", "description": "...", "type": "...", "range": "..."}],
->   "assumptions": ["Assumption 1 with justification", ...]
-> }
-
-## Step 6: Write outputs
-
-### model.md
-
-Write to `.planning/memory/model-{task_id}.md` with this structure:
-
-```markdown
----
-task_id: {task_id}
-phase: mathematical-modeling
-iteration_rounds: {rounds_executed}
-final_score: {best_score}
-satisfaction_threshold: 8
----
-
-{best_solution}
+```
+┌─────────────────────────────────────────┐
+│     modeling Skill (Orchestrator)        │
+│  - Coordinates Actor-Critic cycle        │
+│  - Uses Agent tool for independent ctx   │
+└─────────────────────────────────────────┘
+         ↑ Agent tool ↓
+    ┌─────┴─────┬─────────────┐
+    ↓           ↓             ↓
+┌────────┐ ┌────────┐ ┌──────────┐
+│ Modeler│ │ Critic │ │ Reporter │
+│(Actor) │ │(opus)  │ │(optional)│
+└────────┘ └────────┘ └──────────┘
 ```
 
-### formulas.json
+## Step 1: HMML Retrieval
 
-Write the extracted JSON to `.planning/memory/formulas-{task_id}.json`.
+Use MCP tool or Bash script to retrieve relevant methods:
+
+**Option A (MCP):**
+Use hmml_retrieve MCP tool if available:
+- query: Read task description from `.planning/memory/task-desc-{task_id}.txt`
+- top_k: 6
+
+**Option B (Bash):**
+```bash
+python scripts/hmml_retrieval.py \
+  --query-file .planning/memory/task-desc-{task_id}.txt \
+  --top-k 6 \
+  --output .planning/memory/retrieved-methods-{task_id}.json
+```
+
+Save results to `.planning/memory/retrieved-methods-{task_id}.json`.
+
+## Step 2: Actor - Generate modeling solution
+
+Use Agent tool to call mm-agent-modeler in independent context:
+
+```yaml
+Agent tool call:
+  subagent_type: mm-agent-modeler
+  description: Generate modeling solution for task {task_id}
+  prompt: |
+    Generate mathematical modeling solution for task {task_id}.
+    
+    Inputs:
+    - Task description: .planning/memory/task-desc-{task_id}.txt
+    - HMML methods: .planning/memory/retrieved-methods-{task_id}.json
+    - Dependency context: .planning/memory/context-for-task-{task_id}.txt (if exists)
+    
+    Output to:
+    - .planning/memory/model-{task_id}.md
+    - .planning/memory/formulas-{task_id}.json
+```
+
+The modeler Agent will:
+1. Load task description and HMML methods
+2. Generate initial modeling plan
+3. Write model.md and formulas.json
+
+## Step 3: Critic - Evaluate solution
+
+Use Agent tool to call mm-agent-critic with opus model:
+
+```yaml
+Agent tool call:
+  subagent_type: mm-agent-critic
+  description: Evaluate modeling solution quality for task {task_id}
+  prompt: |
+    Evaluate the modeling solution for task {task_id}.
+    
+    Files to evaluate:
+    - .planning/memory/model-{task_id}.md
+    - .planning/memory/formulas-{task_id}.json
+    - .planning/memory/task-desc-{task_id}.txt (original task)
+    
+    Output critique to: .planning/memory/critique-{task_id}.json
+```
+
+The critic Agent will output structured JSON:
+```json
+{
+  "scores": {
+    "assumption_reasonability": <1-10>,
+    "formula_correctness": <1-10>,
+    "method_fitness": <1-10>,
+    "overall": <average>
+  },
+  "recommendation": "<accept|improve|reject>"
+}
+```
+
+## Step 4: Check iteration
+
+Read `.planning/memory/critique-{task_id}.json` to check:
+- `scores.overall` value
+- `recommendation` value
+
+If recommendation is "accept" or overall score >= 8:
+- STOP iteration, proceed to Step 6
+
+If recommendation is "improve" and current_round < max_rounds:
+- Continue to Step 5
+
+If recommendation is "reject" or max_rounds reached:
+- Use best available solution, proceed to Step 6
+
+## Step 5: Actor - Improve solution (Round 2/3)
+
+Use Agent tool again to improve:
+
+```yaml
+Agent tool call:
+  subagent_type: mm-agent-modeler
+  description: Improve modeling solution based on critique (round {round})
+  prompt: |
+    Improve the modeling solution for task {task_id} based on critic feedback.
+    
+    Current solution: .planning/memory/model-{task_id}.md
+    Critique: .planning/memory/critique-{task_id}.json
+    
+    Address the specific weaknesses and improvements listed in critique.
+    Write updated model.md and formulas.json.
+```
+
+After improvement, repeat Step 3 (Critic evaluation).
+
+## Step 6: Write final outputs
+
+After iteration completes (accepted or max_rounds reached):
+
+### model.md
+Verify `.planning/memory/model-{task_id}.md` contains:
+- Modeling Method description
+- Mathematical formulas
+- Variable definitions
+- Assumptions
+
+### formulas.json
+Verify `.planning/memory/formulas-{task_id}.json` contains:
+- equations array
+- variables array
+- assumptions array
 
 ## Step 7: Update task memory
 
-Read `.planning/memory/task-{task_id}.json`, update these fields, and write it back:
-
+Read `.planning/memory/task-{task_id}.json`, update:
 - `phase`: `"mathematical-modeling"`
 - `status`: `"completed"`
-- `mathematical_modeling_process`: the best solution text (without frontmatter)
-- `preliminary_formulas`: the parsed formulas JSON object
+- `mathematical_modeling_process`: best solution text
+- `preliminary_formulas`: parsed formulas
 - `updated_at`: current ISO timestamp
 
 ---
 
 ## Quality Checklist
 
-- [ ] Task description loaded from task-desc-{id}.txt
-- [ ] Retrieved methods loaded (if available)
-- [ ] Initial modeling solution generated
-- [ ] Critic evaluates solution with 1-10 score
-- [ ] Iteration performs at most 3 rounds
-- [ ] Iteration stops early if score >= 8
-- [ ] model.md written with required sections (Modeling Method, Formulas, Variables, Assumptions)
-- [ ] formulas.json written with correct schema (equations[], variables[], assumptions[])
-- [ ] Task memory updated with modeling results
+- [ ] HMML retrieval completed (MCP or Bash)
+- [ ] modeler Agent called via Agent tool
+- [ ] critic Agent called via Agent tool (opus model)
+- [ ] Actor-Critic in independent contexts
+- [ ] Iteration stops when score >= 8
+- [ ] Maximum 3 rounds executed
+- [ ] model.md and formulas.json written
+- [ ] Task memory updated
