@@ -506,8 +506,9 @@ C3 (Hooks) ─────────────────→ C4 ✅
 | 文档 | 职责 |
 |------|------|
 | `CHANGELOG.md` | 版本变动记录 |
-| `docs/research/paper-vs-implementation-gap-analysis.md` | 详细差距分析 |
-| `docs/research/claude-code-architecture-refactor.md` | 架构重构方案 |
+| `docs/research/paper-vs-implementation-gap-analysis.md` | 论文设计 vs 当前实现的准确差距 |
+| `docs/research/llm-mm-agent-engineering-analysis.md` | 原始工程仓库分析（Prompt 差异表已过时） |
+| `docs/research/gsd-plugin-architecture-analysis.md` | GSD 框架架构分析 |
 | `IDEA.md` | 设计决策文档 |
 | `ROADMAP.md` | 原始路线图 |
 
