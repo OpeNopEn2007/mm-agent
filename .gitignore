@@ -1,1 +1,13 @@
-tests/__pycache__/
+__pycache__/
+*.py[cod]
+*$py.class
+.DS_Store
+node_modules/
+dist/
+build/
+.cache/
+*.log
+
+# Runtime outputs
+runs/
+feedback/

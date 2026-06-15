@@ -13,6 +13,25 @@
 - 2026-05-16: 创建 `docs/research/claude-code-architecture-refactor.md` 架构重构方案
 - 2026-05-16: 更新 `docs/research/paper-vs-implementation-gap-analysis.md` 全面差距分析
 
+### 开发方向
+- 下一阶段从 `1.0.0` 开始，主线转向 Pi CLI Extension + Lean MM-Agent Harness。
+- 旧 Claude/Codex 插件方向进入 legacy 维护/归档状态，不再作为后续架构主线。
+
+---
+
+## [0.2.0] - 2026-06-15
+
+### Legacy Final Snapshot
+- 标记 `0.x` 旧方向最后快照，用于保留 Claude/Codex 插件化探索阶段的可回溯状态。
+- 清理 Python `__pycache__` 等生成残留。
+- 更新 `.gitignore`，忽略 Python 缓存、系统文件、构建产物、日志和运行期输出目录。
+- 移除已跟踪的 `.DS_Store`。
+- 明确 `AGENTS.md` 不进入本次旧版本快照。
+
+### 迁移说明
+- 后续主线以 `1.0.0` 开始，目标是基于 Pi CLI Extension 搭建论文 MM-Agent 的轻量 Harness。
+- 旧方向资产仍保留在仓库中，后续将按归档/迁移策略逐步处理。
+
 ---
 
 ## [0.1.0] - 2026-04-11
