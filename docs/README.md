@@ -1,29 +1,30 @@
-# docs/ — 项目文档索引
+# docs
 
-## reference/ — 原始参考资料
+这个目录用于区分当前项目真相和历史调研证据。
 
-| 文件 | 说明 |
+## 当前设计
+
+| 目录 | 职责 |
 |------|------|
-| `MM-Agent-Paper.pdf` | NeurIPS 2025 论文原文（47页） |
-| `claude-code-plugin-dev.md` | Claude Code 插件开发完整指南 |
+| `context/` | 项目级协作、Handoff、artifact 和反馈协议。设计或实现 Harness 行为前应先读这里。 |
+| `architecture/` | Pi Extension Harness 和论文对齐的工程设计。 |
+| `roadmap/` | 简短里程碑文档。 |
 
-## research/ — 调研分析报告
+## 证据与参考
 
-| 文件 | 说明 |
+| 目录 | 职责 |
 |------|------|
-| `llm-mm-agent-engineering-analysis.md` | 论文官方工程仓库代码分析 |
-| `paper-vs-implementation-gap-analysis.md` | 论文设计 vs 当前实现逐项差距 |
-| `gsd-plugin-architecture-analysis.md` | GSD 插件在 Claude Code 中的构建模式 |
-| `gsd-project-analysis.md` | GSD 框架架构与开发模式分析 |
+| `reference/` | 一手资料。MM-Agent 论文放在这里。 |
+| `research/` | 历史分析和外部项目调研。它们是证据，不是活跃指令。 |
 
-## codebase-map/ — 代码库分析
+## 边界规则
 
-| 文件 | 说明 |
-|------|------|
-| `ARCHITECTURE.md` | 系统架构分析 |
-| `STRUCTURE.md` | 目录结构分析 |
-| `STACK.md` | 技术栈分析 |
-| `CONCERNS.md` | 关键问题与风险 |
-| `CONVENTIONS.md` | 代码规范分析 |
-| `TESTING.md` | 测试覆盖分析 |
-| `INTEGRATIONS.md` | 外部集成分析 |
+- 持久项目规则放进 `context/`。
+- 当前交接状态写进根目录 `HANDOFF.md`，不要写进 `docs/context/`。
+- 实现设计放进 `architecture/`。
+- 版本目标放进 `roadmap/`。
+- 论文、规范、原始材料放进 `reference/`。
+- 调研、比较、分析放进 `research/`。
+- 与旧 Claude/Codex 插件实现状态绑定的研究文档，应归档到 `.archived/legacy-claude-codex-plugin/`。
+
+不要在多个文档里重复同一个结论。需要引用时，链接到负责该结论的文档。

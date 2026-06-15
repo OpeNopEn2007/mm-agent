@@ -9,6 +9,27 @@
 
 ## [Unreleased]
 
+### 文档
+- 将活跃项目文档重置为 `1.x` Pi CLI Extension + MM-Agent Harness 方向。
+- 将 `IDEA.md` 重写为项目具象哲学和动机文档。
+- 围绕 v1 项目结构重写 `README.md`、`PLAN.md`、`docs/README.md`、`CLAUDE.md` 和 `AGENTS.md`。
+- 新增 `docs/context/`、`docs/architecture/` 和 `docs/roadmap/` 作为活跃文档层。
+- 同步 `CLAUDE.md` 和 `AGENTS.md`，作为跨智能体 Handoff 入口。
+- 新增 `HANDOFF.md` 和 `docs/context/handoff-protocol.md`，将跨智能体交接状态与交接协议分离。
+- 将本轮新增/重写的项目文档统一改为中文。
+- 将 `README.md` 调整为克制的项目入口：状态、目标、文档入口、文件树和参考资料。
+- 将 `README.md` 文件树与当前根目录结构对齐。
+
+### 项目结构
+- 保留 `runs/.gitkeep` 以记录运行期 Case 输出目录边界。
+- 更新 `.gitignore`，忽略 `runs/**` 运行产物但保留 `runs/.gitkeep`。
+
+### 归档
+- 将旧 Claude/Codex 插件资产和 GSD 运行期规划产物移动到 `.archived/legacy-claude-codex-plugin/`。
+- 归档旧 `INSPIRATION.md`，因为它的 Claude Code/GSD 插件方向与新 `IDEA.md` 职责重叠。
+- 归档 `docs/research/paper-vs-implementation-gap-analysis.md`，因为它绑定旧实现状态，已不再代表 v1 当前项目真相。
+- 归档 `docs/research/gsd-plugin-architecture-analysis.md`，保留 `docs/research/gsd-project-analysis.md` 作为 GSD 通用上下文工程参考。
+
 ### 架构分析
 - 2026-05-16: 创建 `docs/research/claude-code-architecture-refactor.md` 架构重构方案
 - 2026-05-16: 更新 `docs/research/paper-vs-implementation-gap-analysis.md` 全面差距分析

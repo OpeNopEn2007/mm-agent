@@ -9,5 +9,6 @@ build/
 *.log
 
 # Runtime outputs
-runs/
+runs/**
+!runs/.gitkeep
 feedback/

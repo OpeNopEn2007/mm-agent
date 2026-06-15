@@ -1,181 +1,88 @@
-# MM-Agent Plugin for Claude Code
+# mm-agent
 
-**将 NeurIPS 2025 论文 MM-Agent 的数学建模能力复刻为 Claude Code 工作流插件**
+基于 Pi CLI Extension 的数学建模 MM-Agent Harness。
 
-> **当前状态 (2026-05-16)**: Phase 1-7 文档完成，但核心流水线有断裂。详见 [PLAN.md](./PLAN.md)。
+`mm-agent` 试图把 MM-Agent 论文中的数学建模多智能体框架，变成本地可运行、可检查、可反馈、可迭代的工程系统。
 
----
-
-## 核心价值
-
-```
-输入非结构化赛题 → 自动化数学建模全流程 → 输出符合要求的论文报告
+```text
+赛题输入 -> MM-Agent 四阶段工作流 -> 可编译 LaTeX -> PDF 论文
 ```
 
-## 功能特性
+## 状态
 
-- **4 阶段完整流程**：Problem Analysis → Mathematical Modeling → Computational Solving → Solution Reporting
-- **HMML 知识库**：内置 98 种数学建模方法（5 大领域、17 个子领域），支持语义检索
-- **DAG 依赖管理**：多任务自动拓扑排序执行
-- **LaTeX 报告生成**：支持 MCM/ICM 两种模板
+当前主线从 `v1.0.0` 开始重建。
 
-## 安装
+- `v0.2.0` 是旧 Claude/Codex 插件方向的最终快照。
+- `v1.0.0` 目标是基于 Pi CLI Extension 跑通论文四阶段闭环。
+- 当前还不是可安装、可直接使用的稳定工具。
 
-### 1. 复制插件到项目
+## 核心目标
 
-将插件复制到你的数学建模项目：
+`v1.0.0` 的第一原则是闭环优先：
 
-```bash
-# 插件结构应包含：
-# skills/mm-agent/           # Skill 定义
-# scripts/                   # 工具脚本
-# knowledge/hmml/             # HMML 知识库
-# templates/                 # LaTeX 模板
+- 跑完 Problem Analysis、Mathematical Modeling、Computational Solving、Solution Reporting 四阶段。
+- 为每个 Case 保存可检查的阶段 artifacts。
+- 生成可编译的 LaTeX。
+- 编译出最终 PDF 论文。
+- 记录人类反馈，为后续监督迭代提供样本。
+
+第一个可用版本可以质量一般，但不能跳过 artifact 流转和报告编译。
+
+## 文档入口
+
+- [IDEA.md](IDEA.md)：项目思想和动机。
+- [PLAN.md](PLAN.md)：当前 `v1.0.0` 执行计划。
+- [HANDOFF.md](HANDOFF.md)：当前交接状态，供不同智能体接手项目。
+- [docs/context/](docs/context/)：项目上下文、artifact 协议和监督反馈规则。
+- [docs/architecture/](docs/architecture/)：Pi Harness 设计、论文对齐和参考工程取舍。
+- [docs/roadmap/v1.0.0.md](docs/roadmap/v1.0.0.md)：第一个可用版本的验收标准。
+- [docs/README.md](docs/README.md)：`docs/` 内部分类说明。
+
+## 项目结构
+
+```text
+mm-agent/
+├── .gitignore             # 忽略缓存、构建产物和运行期 Case 输出
+├── .mcp.json              # 项目级 MCP 配置，当前作为可迁移资产保留
+├── .archived/             # 历史资产，可回溯但不参与活跃开发
+├── README.md              # 项目入口
+├── IDEA.md                # 项目思想：为什么做、反对什么、相信什么
+├── PLAN.md                # 当前计划：v1.0.0 的近期执行目标
+├── HANDOFF.md             # 当前交接状态，供不同智能体恢复现场
+├── CHANGELOG.md           # 版本历史和迁移记录
+├── CLAUDE.md              # Claude 系智能体入口，与 AGENTS.md 同步
+├── AGENTS.md              # 通用智能体入口，与 CLAUDE.md 同步
+├── requirements.txt       # 当前 Python 依赖记录
+├── docs/
+│   ├── README.md          # docs 内部分类说明
+│   ├── context/           # 项目级上下文协议、artifact 和反馈规则
+│   ├── architecture/      # Pi Harness、论文对齐、参考工程取舍
+│   ├── roadmap/           # 简短版本目标
+│   ├── research/          # 调研材料，不是当前项目真相
+│   └── reference/         # 一手参考资料，尤其是 MM-Agent 论文
+├── knowledge/             # HMML 和数学建模知识资产
+├── prompts/               # prompt 资产
+├── scripts/               # DAG、HMML、memory 等本地工具
+├── servers/               # 可复用的工具/服务实验
+├── templates/             # LaTeX 报告模板和报告生成资产
+├── tests/                 # 现有验证 fixtures，后续按 v1.0.0 对齐
+└── runs/                  # 运行期 Case 输出；仅 .gitkeep 入库
 ```
 
-### 2. 安装 Python 依赖
+根目录只保留项目入口、活跃资产和归档入口。文档分类以 [docs/README.md](docs/README.md) 为准。
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install numpy scipy matplotlib statsmodels pandas symPy pymupdf pyyaml sentence-transformers
+## 参考资料
+
+- 理论支撑：[MM-Agent: LLM as Agents for Real-world Mathematical Modeling Problem](https://arxiv.org/abs/2505.14148)
+- 官方实现参考：[LLM-MM-Agent](https://github.com/usail-hkust/LLM-MM-Agent)
+- 上下文工作流参考：[GSD Core](https://github.com/open-gsd/gsd-core)
+
+## 旧方向归档
+
+旧 Claude/Codex 插件实验资产保存在：
+
+```text
+.archived/legacy-claude-codex-plugin/
 ```
 
-### 3. 安装 LaTeX (可选，用于 PDF 生成)
-
-```bash
-brew install --cask mactex  # macOS
-# 或
-# Ubuntu: sudo apt install texlive-xetex
-```
-
-## 使用
-
-```bash
-# 在 Claude Code 中运行
-/mm-agent --problem 赛题.pdf
-
-# 交互模式（逐步确认）
-/mm-agent --problem 赛题.pdf --interactive
-```
-
-## 插件结构
-
-```
-├── .claude-plugin/
-│   └── plugin.json              # 插件元数据
-├── skills/
-│   └── mm-agent/
-│       ├── SKILL.md             # 主入口（自然语言指令）
-│       ├── coordinator.md       # 流程编排
-│       ├── parse-problem.md     # 问题解析
-│       ├── task-decomposition.md # 任务分解
-│       ├── hmml-retrieval.md    # 知识检索
-│       ├── modeling.md          # 数学建模（Actor-Critic）
-│       ├── code-execution.md    # 代码生成与执行
-│       └── report-generation.md # 报告生成
-├── agents/
-│   ├── mm-agent-coordinator.md  # DAG 编排 agent
-│   ├── mm-agent-modeler.md      # 建模 agent
-│   ├── mm-agent-programmer.md   # 编程 agent
-│   └── mm-agent-reporter.md     # 报告 agent
-├── hooks/
-│   ├── hooks.json               # Hook 配置
-│   └── session-start            # 会话启动 hook
-├── scripts/
-│   ├── dag_topological_sort.py  # DAG 拓扑排序
-│   ├── hmml_retrieval.py        # HMML 语义检索
-│   ├── hmml_precompute_embeddings.py # 预计算嵌入
-│   └── load_dependency_memory.py     # 依赖记忆加载
-├── knowledge/
-│   ├── hmml/                    # HMML 方法库（98种方法）
-│   └── *.md                     # 写作指南、排版规范
-├── templates/
-│   ├── mcmthesis/               # MCM 美赛模板
-│   └── cumcmthesis/             # CUMCM 国赛模板
-├── prompts/
-└── docs/
-```
-
-## 工作流程
-
-```
-Stage 1: Problem Analysis
-  输入: PDF/MD/TXT 赛题
-  过程: 问题理解(Actor-Critic×3) → 任务分解+细化 → DAG 构建
-  输出: problem_analysis, task_descriptions, dag_order
-
-Stage 2 & 3: Mathematical Modeling & Computational Solving（按 DAG 顺序迭代）
-  对每个任务:
-    建模: HMML 检索(top-6) → 公式 Actor-Critic → 建模过程
-    求解: 代码生成 → 执行 → 调试循环 → 结果解释
-  输出: 各任务的模型、代码、结果
-
-Stage 4: Solution Reporting（可选）
-  输入: 所有阶段输出
-  过程: 大纲生成 → 逐章 LaTeX 生成 → 元信息 → PDF 编译
-  输出: report.tex, report.pdf
-```
-
-## 输出文件
-
-运行后生成：
-
-```
-output/
-├── json/
-│   └── {task}.json         # 完整求解结果（含所有阶段输出）
-├── markdown/
-│   └── {task}.md           # Markdown 格式报告
-├── code/
-│   ├── main1.py ~ mainN.py # 各任务代码
-│   └── *.png               # 生成的图表
-├── latex/
-│   └── solution.tex        # LaTeX 源文件（+ PDF）
-└── usage/
-    └── {task}.json         # Token 使用统计
-```
-
-## 依赖
-
-- **Python**: 3.10+
-- **LaTeX**: XeLaTeX (TeX Live 2026+)
-- **模型**: Claude Code 内置模型（继承配置，无需单独 API Key）
-
-## 论文来源
-
-本项目基于 [MM-Agent (NeurIPS 2025)](https://arxiv.org/abs/2505.14148)：
-
-**GitHub**: https://github.com/OpeNopEn2007/mm-agent
-
-```bibtex
-@misc{mmagent2025,
-  title={MM-Agent: LLM as Agents for Real-world Mathematical Modeling Problem},
-  author={Fan Liu et al.},
-  year={2025},
-  eprint={2505.14148},
-  archivePrefix={arXiv},
-  primaryClass={cs.AI}
-}
-```
-
----
-
-## 已知问题 (2026-05-16)
-
-当前版本存在以下问题：
-
-| 问题 | 影响 | 解决方案 |
-|------|------|---------|
-| `templates/report-generator.py` 导入断裂 | Phase 7 无法执行 | 修复导入路径或重构为纯 Skill |
-| Actor-Critic 同一 Skill 执行 | Critic 评估不独立 | 重构为独立 Agent |
-| HMML 检索用 Python 脚本 | 脱离 Claude 生态 | 转为 MCP Server |
-| Agent 文件未被调用 | Agent Team 架构未实现 | 使用 Agent tool 调用 |
-
-**详细分析**: `docs/research/paper-vs-implementation-gap-analysis.md`
-**重构方案**: `docs/research/claude-code-architecture-refactor.md`
-**执行计划**: `PLAN.md`
-
----
-
-*MM-Agent in Claude Code - 让数学建模更简单*
+这些内容用于回溯和迁移参考，不再作为活跃开发入口。

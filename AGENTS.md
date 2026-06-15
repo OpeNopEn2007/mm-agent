@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 本文件在 `CLAUDE.md` 与 `AGENTS.md` 之间保持镜像同步。
 
