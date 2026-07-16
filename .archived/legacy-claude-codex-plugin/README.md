@@ -1,6 +1,6 @@
 # Legacy Claude/Codex 插件归档
 
-本目录保存 `v0.2.0` 最终快照之后，`0.x` Claude/Codex 插件方向的历史资产。
+本目录保存 `v0.2.0` 最终快照之后，`0.x` Claude/Codex 插件方向的历史资产，以及一度出现在 `Unreleased` 文档重置中的 Pi CLI Extension 方向资产。
 
 这些文件是历史资产：
 
@@ -15,4 +15,10 @@
 
 它们不应被视为活跃项目指令。
 
-如果其中有可复用思想，应先迁移到当前的 `docs/context/` 或 `docs/architecture/`，再被 `1.x` Pi Extension Harness 使用。
+`v1.0.0` 的活跃设计入口固定为：
+
+- [Canonical Core](../docs/architecture/canonical-core.md)：宿主无关的 Case、artifact、context manifest、review 和 gate 协议。
+- [Artifact 协议](../docs/context/artifact-protocol.md)：Case 文件职责、状态推进和完成规则。
+- [OpenCode Plugin Harness](../docs/architecture/opencode-plugin-harness.md)：v1 唯一 Adapter 的实现接口。
+
+如果归档目录中有可复用思想，应先迁移到 `docs/context/` 或 `docs/architecture/`，再由 OpenCode Adapter 使用。归档内容不得被 OpenCode Adapter 直接 import 或 link。

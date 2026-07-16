@@ -36,13 +36,15 @@ Claude Code、Codex 以及类似智能体环境都很有价值，但它们的 Ha
 
 Harness 应该服务项目，而不是成为项目。
 
-## 为什么选择 Pi
+## 为什么选择 OpenCode Adapter
 
-Pi 的吸引力在于轻、透明、可造。
+`v1.0.0` 的 Adapter 是 OpenCode Plugin。OpenCode 提供了 v1 所需的宿主能力：Plugin、原生 Tool、Agent 配置、Skill 发现和隔离的 `task` session。它承担模型会话与通用文件工具，`mm-agent` 则保留数学建模方法、Case 状态、artifact 协议和报告纪律。
 
-对 `v1.x` 来说，Pi CLI Extension 不是最终梦想，而是合适的起点：小到可以理解，成熟到可以运行，开放到足以让这个项目长出自己的工作流，而不是继承一套沉重的外部机器。
+这个选择不把产品锁死在 OpenCode。项目的长期价值存在 Canonical Core：`runs/<case-id>/` 中的 Case、artifact、context manifest、review 和 gate 协议。OpenCode 只是第一个 Adapter，不是系统事实的唯一存放处。Canonical Core 由 [docs/architecture/canonical-core.md](docs/architecture/canonical-core.md) 与 [docs/context/artifact-protocol.md](docs/context/artifact-protocol.md) 定义，不依赖任何宿主。
 
-重点不是 Pi 功能更多。重点是 Pi 给得更少，因此留出了空间，让这个项目定义自己的品味。
+Pi CLI Extension 一度是 `Unreleased` 中考虑的运行底座；该方向在 `4ce82cd`（Canonical Core 提交）后结束，资产进入 `.archived/legacy-claude-codex-plugin/`。Pi 不再是活跃 runtime 决策。
+
+重点不是建设另一套 Agent runtime。重点是使用足够开放的宿主，把项目自己的工作流、可恢复状态和验收标准落到本地文件中。
 
 ## 报告是唯一最终产物
 

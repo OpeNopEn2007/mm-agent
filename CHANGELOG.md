@@ -10,15 +10,12 @@
 ## [Unreleased]
 
 ### 文档
-- 将活跃项目文档重置为 `1.x` Pi CLI Extension + MM-Agent Harness 方向。
-- 将 `IDEA.md` 重写为项目具象哲学和动机文档。
-- 围绕 v1 项目结构重写 `README.md`、`PLAN.md`、`docs/README.md`、`CLAUDE.md` 和 `AGENTS.md`。
-- 新增 `docs/context/`、`docs/architecture/` 和 `docs/roadmap/` 作为活跃文档层。
-- 同步 `CLAUDE.md` 和 `AGENTS.md`，作为跨智能体 Handoff 入口。
-- 新增 `HANDOFF.md` 和 `docs/context/handoff-protocol.md`，将跨智能体交接状态与交接协议分离。
-- 将本轮新增/重写的项目文档统一改为中文。
-- 将 `README.md` 调整为克制的项目入口：状态、目标、文档入口、文件树和参考资料。
-- 将 `README.md` 文件树与当前根目录结构对齐。
+- 接受 `4ce82cd` 提交的 Canonical Core（`docs/architecture/canonical-core.md` + `docs/context/artifact-protocol.md`）作为宿主无关机制唯一来源。
+- 重写 `README.md` 与 `docs/architecture/opencode-plugin-harness.md`，按 Core 同步 Context Manifest（`attempt_id`、`scope`、`sequence`、`created_at`、`base_revision`、`required_reads`、`expected_outputs`、`promotions`、`review.rubric`、`review.required_reads`、`latest_review`、`resolves_blocker`）、Gate 输入 `expected_revision`、Case Policy、Rubric 快照、per-task solving budget、Blocker、Stage 转换、Runtime Evidence、promotion 白名单和派生 completion evidence。
+- 同步 `PLAN.md`、`HANDOFF.md`、`AGENTS.md`、`CLAUDE.md`、`IDEA.md`、`docs/README.md`、`docs/roadmap/v1.0.0.md` 与 `.archived/legacy-claude-codex-plugin/README.md` 到 Canonical Core 与 OpenCode Adapter 决策。
+- 必读顺序调整为 `README.md` → `IDEA.md` → `HANDOFF.md` → `PLAN.md` → `docs/context/project-kernel.md` → `docs/architecture/canonical-core.md` → `docs/context/artifact-protocol.md` → `docs/architecture/opencode-plugin-harness.md` → `docs/architecture/paper-alignment.md`。
+- `AGENTS.md` 与 `CLAUDE.md` 保持字节内容一致。
+- 删除 `docs/architecture/pi-extension-harness.md` 与依赖 `${CLAUDE_PLUGIN_ROOT}` 的过期 `.mcp.json`。
 
 ### 项目结构
 - 保留 `runs/.gitkeep` 以记录运行期 Case 输出目录边界。
@@ -30,28 +27,29 @@
 - 归档 `docs/research/paper-vs-implementation-gap-analysis.md`，因为它绑定旧实现状态，已不再代表 v1 当前项目真相。
 - 归档 `docs/research/gsd-plugin-architecture-analysis.md`，保留 `docs/research/gsd-project-analysis.md` 作为 GSD 通用上下文工程参考。
 
-### 架构分析
-- 2026-05-16: 创建 `docs/research/claude-code-architecture-refactor.md` 架构重构方案
-- 2026-05-16: 更新 `docs/research/paper-vs-implementation-gap-analysis.md` 全面差距分析
+### 架构分析（历史）
+- 2026-05-16: 创建 `docs/research/claude-code-architecture-refactor.md` 架构重构方案（历史，已通过归档处理）。
+- 2026-05-16: 更新 `docs/research/paper-vs-implementation-gap-analysis.md` 全面差距分析（历史，已通过归档处理）。
 
 ### 开发方向
-- 下一阶段从 `1.0.0` 开始，主线转向 Pi CLI Extension + Lean MM-Agent Harness。
-- 旧 Claude/Codex 插件方向进入 legacy 维护/归档状态，不再作为后续架构主线。
+- 当前提交为预构建文档收口，不包含实现代码。
+- 下一阶段按 `PLAN.md` 第 1 步执行 OpenCode Plugin Spike，验证宿主假设后再开始 CaseContextStore 与端到端闭环。
+- 旧 Pi、Claude/Codex Plugin 方向进入历史维护/归档状态，不再作为后续架构主线。
 
 ---
 
 ## [0.2.0] - 2026-06-15
 
-### Legacy Final Snapshot
+### Legacy Final Snapshot（历史）
 - 标记 `0.x` 旧方向最后快照，用于保留 Claude/Codex 插件化探索阶段的可回溯状态。
 - 清理 Python `__pycache__` 等生成残留。
 - 更新 `.gitignore`，忽略 Python 缓存、系统文件、构建产物、日志和运行期输出目录。
 - 移除已跟踪的 `.DS_Store`。
 - 明确 `AGENTS.md` 不进入本次旧版本快照。
 
-### 迁移说明
-- 后续主线以 `1.0.0` 开始，目标是基于 Pi CLI Extension 搭建论文 MM-Agent 的轻量 Harness。
-- 旧方向资产仍保留在仓库中，后续将按归档/迁移策略逐步处理。
+### 迁移说明（历史）
+- 该历史快照曾计划使用 Pi；该计划已在 `Unreleased` 中被 OpenCode Plugin 主线取代，Pi 不再是活跃 runtime 决策。
+- 旧方向资产仍保留在 `.archived/legacy-claude-codex-plugin/`，仅供回溯，不进入 v1 主线。
 
 ---
 
