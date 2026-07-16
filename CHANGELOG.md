@@ -9,6 +9,12 @@
 
 ## [Unreleased]
 
+### 实现
+- 接受 `315c319 feat: validate OpenCode plugin harness`，完成 `@mm-agent/opencode` 的 ESM Plugin Spike、最小 hidden Agent、只读 context Tool、`mm-agent` Skill 和显式 install/update/remove CLI。
+- installer 使用 receipt hash、Plugin 注册所有权、路径/realpath 边界、junction escape 拒绝和带 rollback 的 staged transaction，保护用户修改和非拥有文件。
+- 真实 OpenCode `1.18.2` runtime gate 覆盖 Plugin/Agent/Skill、slash command、模型驱动 Tool、built-in `task` fresh child linkage、重启和 compaction-off 磁盘恢复。
+- 固定 npm package positive allowlist；`npm pack --dry-run` 排除旧 `templates/report-generator.py`、测试、运行产物、配置、cache 和凭据类文件。
+
 ### 文档
 - 接受 `4ce82cd` 提交的 Canonical Core（`docs/architecture/canonical-core.md` + `docs/context/artifact-protocol.md`）作为宿主无关机制唯一来源。
 - 重写 `README.md` 与 `docs/architecture/opencode-plugin-harness.md`，按 Core 同步 Context Manifest（`attempt_id`、`scope`、`sequence`、`created_at`、`base_revision`、`required_reads`、`expected_outputs`、`promotions`、`review.rubric`、`review.required_reads`、`latest_review`、`resolves_blocker`）、Gate 输入 `expected_revision`、Case Policy、Rubric 快照、per-task solving budget、Blocker、Stage 转换、Runtime Evidence、promotion 白名单和派生 completion evidence。
@@ -32,8 +38,8 @@
 - 2026-05-16: 更新 `docs/research/paper-vs-implementation-gap-analysis.md` 全面差距分析（历史，已通过归档处理）。
 
 ### 开发方向
-- 当前提交为预构建文档收口，不包含实现代码。
-- 下一阶段按 `PLAN.md` 第 1 步执行 OpenCode Plugin Spike，验证宿主假设后再开始 CaseContextStore 与端到端闭环。
+- OpenCode Plugin Spike 已通过宿主与安装安全 gate；下一阶段按 `PLAN.md` 第 2 步实现 CaseContextStore 与文件契约。
+- Spike 只验证 Adapter 宿主假设，不代表四阶段、HMML、Compute/Compile 或 Golden Case 已实现。
 - 旧 Pi、Claude/Codex Plugin 方向进入历史维护/归档状态，不再作为后续架构主线。
 
 ---

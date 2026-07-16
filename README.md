@@ -14,10 +14,11 @@
 
 ## 当前状态
 
-`v1.0.0` 的 Canonical Core 由 `4ce82cd` 接受，OpenCode Adapter 设计由 `1040e63` 接受；实现尚未开始。
+`v1.0.0` 的 Canonical Core 由 `4ce82cd` 接受，OpenCode Adapter 设计由 `1040e63` 接受。OpenCode Plugin Spike 已由 `315c319` 接受；下一实施切口是 CaseContextStore，尚未开始。
 
 - Canonical Core：[`docs/architecture/canonical-core.md`](docs/architecture/canonical-core.md) 与 [`docs/context/artifact-protocol.md`](docs/context/artifact-protocol.md) 是宿主无关机制唯一来源。
 - OpenCode Adapter：[`docs/architecture/opencode-plugin-harness.md`](docs/architecture/opencode-plugin-harness.md) 定义 v1 唯一 Adapter 的实现接口。
+- Plugin Spike：`315c319 feat: validate OpenCode plugin harness` 已验证安装生命周期、Plugin/Agent/Tool/Skill、fresh child session、重启和 compaction-off 恢复；它不是完整四阶段实现。
 - `v0.2.0` 是旧 Claude/Codex Plugin 方向的最终快照；Pi CLI Extension 一度出现在 `Unreleased` 文档重置中，也已结束。
 - 旧实现保存在 `.archived/legacy-claude-codex-plugin/`，只用于回溯。
 - 当前目标是交付 Canonical Core 的 OpenCode Adapter 与一个真实赛题到 PDF 的 Golden Case。
@@ -715,7 +716,7 @@ mm-agent/
 └── .archived/             # 非活跃历史资产
 ```
 
-计划中的 `src/`、`skills/`、`runtime/` 和 npm package 文件将在实现阶段按 [PLAN.md](PLAN.md) 创建。README 不把尚未实现的命令描述为可用功能。
+Step 1 已创建 npm package、最小 Plugin/Agent/installer、`mm-agent` Spike Skill 与宿主验证测试。`src/core/`、其余 Skills、`runtime/`、完整 Tools 和 Golden Case 仍按 [PLAN.md](PLAN.md) 后续步骤创建；README 不把它们描述为可用功能。
 
 ## 文档入口
 

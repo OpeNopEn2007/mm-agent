@@ -2,7 +2,7 @@
 
 ## 当前阶段
 
-`v1.0.0` 采用 Canonical Core + OpenCode Adapter。当前已经完成架构决策和协议设计，下一步是按下面的切口实现并验证第一个输入到 PDF 闭环。
+`v1.0.0` 采用 Canonical Core + OpenCode Adapter。架构决策、协议设计和第 1 步 OpenCode Plugin Spike 已完成；下一步按下面的切口实现 CaseContextStore，并继续推进第一个输入到 PDF 闭环。
 
 唯一公开入口是 `/mm-agent`。首个目标 Case 是 MM-Bench `2024_C` Wimbledon Momentum，但先用本地最小 fixture 验证每个确定性模块。
 
@@ -23,7 +23,7 @@
 
 ## 目标文件布局
 
-以下是实现完成后的活跃文件面。`src/`、`skills/`、`runtime/`、`problems/` 和新测试文件尚不存在，必须在对应任务中创建。
+以下是实现完成后的活跃文件面。Step 1 已创建 package、`src/index.ts`、`src/agents.ts`、`src/install.ts`、最小 `skills/mm-agent/` 和 Spike 测试；其余 `src/`、Skills、`runtime/`、`problems/` 和测试文件必须在对应任务中创建。
 
 ```text
 package.json                         npm package、Plugin 与管理 CLI
@@ -267,4 +267,4 @@ problems/.gitkeep                    默认用户输入目录
 
 ## 当前下一步
 
-执行第 1 步 OpenCode Plugin Spike。只有 Spike 验证宿主行为后，才能开始第 2 步的 CaseContextStore。
+第 1 步 OpenCode Plugin Spike 已由 `315c319` 接受。下一步只执行第 2 步 CaseContextStore 与文件契约；在该 gate 通过前不进入 Preflight、HMML、Compute/Compile 或 Golden Case。
