@@ -4,7 +4,7 @@
 
 ## 项目方向
 
-`mm-agent` 是一个以 OpenCode Plugin 为首个 Adapter 的数学建模 Harness。Canonical Core 与 OpenCode Adapter 由 `4ce82cd` 接受，是宿主无关机制和 v1 实现的唯一来源。它把赛题转化为四阶段 artifacts、可编译 LaTeX 和 PDF 论文：
+`mm-agent` 是一个以 OpenCode Plugin 为首个 Adapter 的数学建模 Harness。Canonical Core 由 `4ce82cd` 接受，OpenCode Adapter 设计由 `1040e63` 接受；两者分别是宿主无关机制和 v1 Adapter 实现接口的唯一来源，当前实现尚未开始。它把赛题转化为四阶段 artifacts、可编译 LaTeX 和 PDF 论文：
 
 ```text
 赛题输入 -> 四阶段工作流 -> 可编译 LaTeX -> PDF 论文

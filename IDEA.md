@@ -42,7 +42,7 @@ Harness 应该服务项目，而不是成为项目。
 
 这个选择不把产品锁死在 OpenCode。项目的长期价值存在 Canonical Core：`runs/<case-id>/` 中的 Case、artifact、context manifest、review 和 gate 协议。OpenCode 只是第一个 Adapter，不是系统事实的唯一存放处。Canonical Core 由 [docs/architecture/canonical-core.md](docs/architecture/canonical-core.md) 与 [docs/context/artifact-protocol.md](docs/context/artifact-protocol.md) 定义，不依赖任何宿主。
 
-Pi CLI Extension 一度是 `Unreleased` 中考虑的运行底座；该方向在 `4ce82cd`（Canonical Core 提交）后结束，资产进入 `.archived/legacy-claude-codex-plugin/`。Pi 不再是活跃 runtime 决策。
+Pi CLI Extension 一度是 `Unreleased` 中考虑的运行底座；该方向由 `8b25667` 归档，后续 Canonical Core 提交 `4ce82cd` 不再涉及 Pi。历史资产位于 `.archived/legacy-claude-codex-plugin/`，Pi 不再是活跃 runtime 决策。
 
 重点不是建设另一套 Agent runtime。重点是使用足够开放的宿主，把项目自己的工作流、可恢复状态和验收标准落到本地文件中。
 
