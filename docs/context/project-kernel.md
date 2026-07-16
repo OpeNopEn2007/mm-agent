@@ -18,7 +18,7 @@ Project Kernel 是任何智能体都能读取并接续工作的本地项目上�
 2. `IDEA.md`
 3. `PLAN.md`
 4. `docs/context/artifact-protocol.md`
-5. `docs/architecture/pi-extension-harness.md`
+5. `docs/architecture/canonical-core.md`
 
 ## 运行边界
 

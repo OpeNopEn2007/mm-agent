@@ -7,7 +7,7 @@
 | 目录 | 职责 |
 |------|------|
 | `context/` | 项目级协作、Handoff、artifact 和反馈协议。设计或实现 Harness 行为前应先读这里。 |
-| `architecture/` | Pi Extension Harness 和论文对齐的工程设计。 |
+| `architecture/` | Canonical Core、Adapter 实现接口、论文对齐和参考工程取舍。 |
 | `roadmap/` | 简短里程碑文档。 |
 
 ## 证据与参考
