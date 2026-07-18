@@ -2,7 +2,7 @@
 
 ## 当前阶段
 
-`v1.0.0` 采用 Canonical Core + OpenCode Adapter。架构决策、协议设计和第 1 步 OpenCode Plugin Spike 已完成；下一步按下面的切口实现 CaseContextStore，并继续推进第一个输入到 PDF 闭环。
+`v1.0.0` 采用 Canonical Core + OpenCode Adapter。架构决策、协议设计、第 1 步 OpenCode Plugin Spike 和第 2 步 CaseContextStore 已完成；下一步从第 3 步 Preflight 与输入整理继续推进第一个输入到 PDF 闭环。
 
 唯一公开入口是 `/mm-agent`。首个目标 Case 是 MM-Bench `2024_C` Wimbledon Momentum，但先用本地最小 fixture 验证每个确定性模块。
 
@@ -23,7 +23,7 @@
 
 ## 目标文件布局
 
-以下是实现完成后的活跃文件面。Step 1 已创建 package、`src/index.ts`、`src/agents.ts`、`src/install.ts`、最小 `skills/mm-agent/` 和 Spike 测试；其余 `src/`、Skills、`runtime/`、`problems/` 和测试文件必须在对应任务中创建。
+以下是实现完成后的活跃文件面。Step 1 已创建 package、`src/index.ts`、`src/agents.ts`、`src/install.ts`、最小 `skills/mm-agent/` 和 Spike 测试；Step 2 已创建 `src/core/`、Case fixtures 和 contract tests；其余 Tools、Skills、`runtime/`、`problems/` 和测试文件必须在对应任务中创建。
 
 ```text
 package.json                         npm package、Plugin 与管理 CLI
@@ -32,6 +32,7 @@ src/index.ts                         OpenCode Plugin 导出和 hooks
 src/core/case-context-store.ts       open/dispatch/gate/inspect 深模块
 src/core/schema.ts                   Case、state、context、review schema
 src/core/paths.ts                    Case 内相对路径、hash、原子写入
+src/core/migrations.ts               显式版本 migration seam
 src/core/context-recipes.ts          五个角色的 context 选择规则
 src/core/case-policy.ts              固化 Rubric 与 revision budget 的 Case Policy
 src/core/migrations.ts               显式、版本化的 Case schema migration
@@ -94,7 +95,9 @@ problems/.gitkeep                    默认用户输入目录
 
 **目标**：建立唯一的 Case 状态和 context 机制，之后的所有 Tool 都调用它。
 
-**创建**：`src/core/schema.ts`、`src/core/paths.ts`、`src/core/context-recipes.ts`、`src/core/case-context-store.ts`、`tests/core/case-context-store.test.ts`、`tests/fixtures/cases/`。
+**状态**：已实现并通过 contract、并发、stale lock/Gate transaction 恢复、构建和 package gate；5 个真实 OpenCode Adapter runtime regression gate 保持全绿，但不作为 Core 直接调用证据。Step 3 尚未开始。
+
+**创建**：`src/core/schema.ts`、`src/core/paths.ts`、`src/core/migrations.ts`、`src/core/context-recipes.ts`、`src/core/case-context-store.ts`、`tests/core/case-context-store.test.ts`、`tests/fixtures/cases/`。
 
 **实现**：
 
@@ -267,4 +270,4 @@ problems/.gitkeep                    默认用户输入目录
 
 ## 当前下一步
 
-第 1 步 OpenCode Plugin Spike 已由 `315c319` 接受。下一步只执行第 2 步 CaseContextStore 与文件契约；在该 gate 通过前不进入 Preflight、HMML、Compute/Compile 或 Golden Case。
+第 1 步 OpenCode Plugin Spike 已由 `315c319` 接受，包含本计划的里程碑提交接受第 2 步 CaseContextStore 与文件契约。下一步只执行第 3 步 Preflight 与输入整理；在该 gate 通过前不进入 HMML、Compute/Compile 或 Golden Case。

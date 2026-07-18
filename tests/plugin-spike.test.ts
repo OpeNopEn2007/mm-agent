@@ -31,6 +31,7 @@ function runtimeEnvironment(root: string): NodeJS.ProcessEnv {
     XDG_DATA_HOME: path.join(root, "data-home"),
     XDG_CACHE_HOME: path.join(root, "cache-home"),
     XDG_STATE_HOME: path.join(root, "state-home"),
+    OPENCODE_DISABLE_MODELS_FETCH: "1",
   }
 }
 
@@ -201,6 +202,7 @@ test("runtime environment strips OpenCode config overrides but preserves provide
     assert.equal(env.OPENCODE_CONFIG_DIR, undefined)
     assert.equal(env.OPENCODE_CONFIG_CONTENT, undefined)
     assert.equal(env.MM_AGENT_TEST_PROVIDER_API_KEY, "provider-credential-sentinel")
+    assert.equal(env.OPENCODE_DISABLE_MODELS_FETCH, "1")
     assert.equal(env.XDG_CONFIG_HOME, path.join(root, "config-home"))
   } finally {
     for (const [key, value] of previous) {
@@ -997,7 +999,17 @@ test("runtime: isolated install loads the Plugin and discovers its Agent and Ski
   const env = runtimeEnvironment(root)
   const version = runRuntimeProcess(opencode, ["--version"], projectRoot, env)
   assertRuntimeSuccess(version, "opencode --version")
-  assert.match(version.stdout, /^1\.18\.2\s*$/u)
+  const packageJson = JSON.parse(await readFile(packageUrl, "utf8")) as {
+    dependencies?: Record<string, string>
+  }
+  const pluginApiVersion = packageJson.dependencies?.["@opencode-ai/plugin"]
+  assert.match(pluginApiVersion ?? "", /^\d+\.\d+\.\d+$/u)
+  const hostVersion = version.stdout.trim()
+  assert.match(hostVersion, /^\d+\.\d+\.\d+$/u)
+  const [hostMajor, hostMinor, hostPatch] = hostVersion.split(".").map(Number)
+  const [apiMajor, apiMinor, apiPatch] = (pluginApiVersion ?? "").split(".").map(Number)
+  assert.deepEqual([hostMajor, hostMinor], [apiMajor, apiMinor])
+  assert.ok(hostPatch >= apiPatch, `OpenCode ${hostVersion} is older than Plugin API ${pluginApiVersion}`)
 
   const agentResult = runRuntimeProcess(opencode, ["debug", "agent", "mm-agent-spike"], projectRoot, env)
   assertRuntimeSuccess(agentResult, "opencode debug agent mm-agent-spike")

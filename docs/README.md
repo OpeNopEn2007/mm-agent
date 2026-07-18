@@ -9,6 +9,7 @@
 | `context/` | 项目级协作、Handoff、artifact 和反馈协议。设计或实现 Harness 行为前应先读这里。 |
 | `architecture/` | Canonical Core、Adapter 实现接口、论文对齐和参考工程取舍。 |
 | `roadmap/` | 简短里程碑文档。 |
+| `superpowers/plans/` | 阶段实施计划的保留路径；计划服从根 `PLAN.md` 与 canonical 文档，不代表或要求调用 Superpowers。 |
 
 ## 证据与参考
 

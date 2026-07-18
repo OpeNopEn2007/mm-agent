@@ -1,10 +1,38 @@
+# Python bytecode and tooling caches
 __pycache__/
 *.py[cod]
 *$py.class
-.DS_Store
+.pytest_cache/
+.hypothesis/
+.mypy_cache/
+.pyre/
+.ruff_cache/
+.pytype/
+.coverage
+.coverage.*
+coverage.xml
+pytest-report.xml
+htmlcov/
+.tox/
+.nox/
+
+# Python environments and package metadata
+.venv/
+venv/
+env/
+*.egg-info/
+
+# Node dependencies, build outputs, and coverage
 node_modules/
 dist/
 build/
+coverage/
+.nyc_output/
+.eslintcache
+*.tsbuildinfo
+
+# General caches and OS metadata
+.DS_Store
 .cache/
 .worktrees/
 *.log

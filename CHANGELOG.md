@@ -14,6 +14,9 @@
 - installer 使用 receipt hash、Plugin 注册所有权、路径/realpath 边界、junction escape 拒绝和带 rollback 的 staged transaction，保护用户修改和非拥有文件。
 - 真实 OpenCode `1.18.2` runtime gate 覆盖 Plugin/Agent/Skill、slash command、模型驱动 Tool、built-in `task` fresh child linkage、重启和 compaction-off 磁盘恢复。
 - 固定 npm package positive allowlist；`npm pack --dry-run` 排除旧 `templates/report-generator.py`、测试、运行产物、配置、cache 和凭据类文件。
+- 实现 CaseContextStore 的 `open / dispatch / gate / inspect` contract、`schema_version: 1` runtime schemas、显式 migration seam、Case-relative secure paths、SHA-256、原子 JSON 和跨 Store lock/CAS。
+- 实现固定 Role Recipe、三位 Attempt、Critic 复用 Manifest、Solver 直接依赖 read set、Review/promotion durable transaction、revision budget、blocker、DAG/wave、Task Memory、Runtime Evidence 和派生 completion evidence。
+- 增加 CaseContextStore contract tests；普通测试为 81 passed、0 failed，5 个真实 OpenCode Adapter runtime regression gate 在宿主 `1.18.3` 上全部通过。
 
 ### 文档
 - 接受 `4ce82cd` 提交的 Canonical Core（`docs/architecture/canonical-core.md` + `docs/context/artifact-protocol.md`）作为宿主无关机制唯一来源。
@@ -26,6 +29,7 @@
 ### 项目结构
 - 保留 `runs/.gitkeep` 以记录运行期 Case 输出目录边界。
 - 更新 `.gitignore`，忽略 `runs/**` 运行产物但保留 `runs/.gitkeep`。
+- 完善 Python/pytest、coverage、Node build 和通用 cache 忽略项；npm 包包含编译后的 `dist/core`，不包含测试、runs、cache、配置或凭据。
 
 ### 归档
 - 将旧 Claude/Codex 插件资产和 GSD 运行期规划产物移动到 `.archived/legacy-claude-codex-plugin/`。
@@ -38,7 +42,7 @@
 - 2026-05-16: 更新 `docs/research/paper-vs-implementation-gap-analysis.md` 全面差距分析（历史，已通过归档处理）。
 
 ### 开发方向
-- OpenCode Plugin Spike 已通过宿主与安装安全 gate；下一阶段按 `PLAN.md` 第 2 步实现 CaseContextStore 与文件契约。
+- OpenCode Plugin Spike 与 CaseContextStore 已通过各自 gate；下一阶段按 `PLAN.md` 第 3 步实现 Preflight 与输入整理。
 - Spike 只验证 Adapter 宿主假设，不代表四阶段、HMML、Compute/Compile 或 Golden Case 已实现。
 - 旧 Pi、Claude/Codex Plugin 方向进入历史维护/归档状态，不再作为后续架构主线。
 

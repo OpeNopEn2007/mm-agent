@@ -14,7 +14,7 @@
 
 ## 当前状态
 
-`v1.0.0` 的 Canonical Core 由 `4ce82cd` 接受，OpenCode Adapter 设计由 `1040e63` 接受。OpenCode Plugin Spike 已由 `315c319` 接受；下一实施切口是 CaseContextStore，尚未开始。
+`v1.0.0` 的 Canonical Core 由 `4ce82cd` 接受，OpenCode Adapter 设计由 `1040e63` 接受。OpenCode Plugin Spike 已由 `315c319` 接受；Step 2 CaseContextStore 已实现并通过 contract、并发、崩溃恢复、构建和 package 验证，同时保持 5 个真实 OpenCode Adapter runtime regression gate 全绿。下一实施切口是 Step 3 Preflight 与输入整理，本轮尚未开始。
 
 - Canonical Core：[`docs/architecture/canonical-core.md`](docs/architecture/canonical-core.md) 与 [`docs/context/artifact-protocol.md`](docs/context/artifact-protocol.md) 是宿主无关机制唯一来源。
 - OpenCode Adapter：[`docs/architecture/opencode-plugin-harness.md`](docs/architecture/opencode-plugin-harness.md) 定义 v1 唯一 Adapter 的实现接口。
@@ -716,7 +716,7 @@ mm-agent/
 └── .archived/             # 非活跃历史资产
 ```
 
-Step 1 已创建 npm package、最小 Plugin/Agent/installer、`mm-agent` Spike Skill 与宿主验证测试。`src/core/`、其余 Skills、`runtime/`、完整 Tools 和 Golden Case 仍按 [PLAN.md](PLAN.md) 后续步骤创建；README 不把它们描述为可用功能。
+Step 1 已创建 npm package、最小 Plugin/Agent/installer、`mm-agent` Spike Skill 与宿主验证测试；Step 2 已创建 `src/core/` 的 CaseContextStore、持久 schema、安全路径、迁移、Context Recipe、Gate transaction 和 contract tests。其余 Skills、`runtime/`、完整 Tools 和 Golden Case 仍按 [PLAN.md](PLAN.md) 后续步骤创建；README 不把它们描述为可用功能。
 
 ## 文档入口
 
