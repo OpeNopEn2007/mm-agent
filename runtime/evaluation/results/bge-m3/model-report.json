@@ -1,0 +1,133 @@
+{
+  "schema_version": 1,
+  "model": {
+    "id": "BAAI/bge-m3",
+    "revision": "6892b95fed65c899a30896eb40d619ae284d0455",
+    "embedding_dimension": 1024,
+    "snapshot_file_count": 10,
+    "snapshot_size_bytes": 2293234427,
+    "snapshot_files_sha256": "d4e8e27e4b653e349c246a459a0dd45b83de7a0bd2a8121d725ffd9e16b5024e",
+    "snapshot_files": [
+      {
+        "path": "1_Pooling/config.json",
+        "size_bytes": 191,
+        "sha256": "e54c164a07274f2eb45bb724f54a79d1efcc90c41573887cd9a29aeee0597352"
+      },
+      {
+        "path": "config.json",
+        "size_bytes": 687,
+        "sha256": "26159e7ad065073448460117eb24b7a4572f6f4e78eadff65dc0a11c052449fa"
+      },
+      {
+        "path": "config_sentence_transformers.json",
+        "size_bytes": 123,
+        "sha256": "1eef72430e7194a1e59680e635aed81ffa083f05668dbc5bb1c56c04c0999c38"
+      },
+      {
+        "path": "model.safetensors",
+        "size_bytes": 2271064456,
+        "sha256": "993b2248881724788dcab8c644a91dfd63584b6e5604ff2037cb5541e1e38e7e"
+      },
+      {
+        "path": "modules.json",
+        "size_bytes": 349,
+        "sha256": "84e40c8e006c9b1d6c122e02cba9b02458120b5fb0c87b746c41e0207cf642cf"
+      },
+      {
+        "path": "sentence_bert_config.json",
+        "size_bytes": 54,
+        "sha256": "eb9b44b13c0f52a3b3685c3b1cbdea1ba8b04bea123b98f61610048940776eb1"
+      },
+      {
+        "path": "sentencepiece.bpe.model",
+        "size_bytes": 5069051,
+        "sha256": "cfc8146abe2a0488e9e2a0c56de7952f7c11ab059eca145a0a727afce0db2865"
+      },
+      {
+        "path": "special_tokens_map.json",
+        "size_bytes": 964,
+        "sha256": "8c785abebea9ae3257b61681b4e6fd8365ceafde980c21970d001e834cf10835"
+      },
+      {
+        "path": "tokenizer.json",
+        "size_bytes": 17098108,
+        "sha256": "21106b6d7dab2952c1d496fb21d5dc9db75c28ed361a05f5020bbba27810dd08"
+      },
+      {
+        "path": "tokenizer_config.json",
+        "size_bytes": 444,
+        "sha256": "a62b2b6784f990259fddef5f16388693a8043be4f69179e6a5257eeb3f9abac4"
+      }
+    ],
+    "disk_size_bytes": 2293234427
+  },
+  "knowledge_source": {
+    "path": "knowledge/hmml/hmml.json",
+    "sha256": "013f90cd8e50c3aac5cc4ce497a9530852d9c18e655a9b7f545d47d3c9b86080",
+    "method_count": 97,
+    "concept_count": 95,
+    "hierarchy_node_count": 35,
+    "equivalence_sha256": "535882a344723f4be28ce28451470bfe966c309a9a3fa932c13debc7a5f0f996",
+    "extraction": "recursive-depth-first"
+  },
+  "evaluation": {
+    "dataset_id": "hmml-model-selection-v2",
+    "dataset_sha256": "7d391cbfc0f63c5bee1dfba9178d7a6963ab148b6c3e0b34bfe5363a7ac40c47",
+    "content_sha256": "9d25ae6d71547473bb9cf1ef3726d9154293672cbe93401318a68fbf6a52a02f",
+    "adjudication_sha256": "6620299aeeeabb920b8eed8944e61a489141553a97dee8e93123bdaa5ddf8b9b",
+    "adjudication_review_count": 2,
+    "query_count": 80,
+    "pair_count": 40,
+    "covered_concept_count": 56,
+    "label_status": "ai-adjudicated",
+    "recall_at_5": 0.6875,
+    "mrr": 0.6984717588618475,
+    "primary_hit_at_5": 0.7875,
+    "hard_negative_hit_at_5_rate": 0.45,
+    "metric_unit": "equivalence-aware method concept"
+  },
+  "performance": {
+    "cold_start_ms": 13315.7686,
+    "query_latency_ms": {
+      "mean": 158.24203125,
+      "median": 153.4317,
+      "p95": 201.44367999999994,
+      "minimum": 122.206,
+      "maximum": 263.3498
+    }
+  },
+  "index": {
+    "embedding_dimension": 1024,
+    "method_count": 97,
+    "concept_count": 95,
+    "hierarchy_node_count": 35,
+    "embedding_row_count": 132,
+    "files": {
+      "hmml-embeddings.npy": {
+        "path": "candidate-index/hmml-embeddings.npy",
+        "size_bytes": 540800,
+        "sha256": "34f7d06f64af1cab3520adf164b422884bc1655ce42831e26c623bcc18786990"
+      },
+      "embedding-meta.json": {
+        "path": "candidate-index/embedding-meta.json",
+        "size_bytes": 949,
+        "sha256": "d47aabe2eafc4c51d7a1e78ed2c8c1ed07f541744bbd322319e1a7d603e23a4f"
+      },
+      "method-index.json": {
+        "path": "candidate-index/method-index.json",
+        "size_bytes": 270168,
+        "sha256": "14c5400464a584d8f2e20a3cfb4f9a34920fe036322d0b35870d3d2c89f70960"
+      }
+    },
+    "index_sha256": "1ed388c6c825e14dcb981fc6436fbd5c714c2468e4faab9397d28412a8432864"
+  },
+  "raw_query_results": "query-results.json",
+  "environment": {
+    "python": "3.12.12 (main, Feb 12 2026, 00:40:26) [MSC v.1944 64 bit (AMD64)]",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.5.1",
+    "torch": "2.13.0+cpu",
+    "transformers": "4.57.6",
+    "device": "cpu"
+  }
+}

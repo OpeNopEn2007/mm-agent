@@ -1,0 +1,272 @@
+{
+  "schema_version": 1,
+  "dataset_id": "hmml-smoke-v1",
+  "purpose": "retrieval-regression-smoke",
+  "knowledge_source": {
+    "path": "knowledge/hmml/hmml.json",
+    "sha256": "013f90cd8e50c3aac5cc4ce497a9530852d9c18e655a9b7f545d47d3c9b86080",
+    "extraction": "recursive-depth-first",
+    "method_count": 97
+  },
+  "label_status": "proposed",
+  "label_provenance": {
+    "created_by": "ai-proposal",
+    "human_reviewed_at": "2026-07-19",
+    "reviewed_by": "user-review",
+    "method": "Query-by-query review against the pinned HMML catalog, the MM-Agent paper, and the official retrieval implementation.",
+    "review_outcome": "approved for retrieval regression smoke tests only; not approved for model selection",
+    "limitations": [
+      "Each query has one intended method concept, so Recall@5 would degenerate to Hit@5.",
+      "Chinese and English queries cover different method distributions.",
+      "Most queries contain strong method fingerprints and do not represent realistic decomposed modeling subtasks."
+    ]
+  },
+  "queries": [
+    {
+      "id": "zh-01",
+      "language": "zh",
+      "query": "呼叫中心在不同时段有随机来电和有限坐席，怎样估计等待时间与拥堵概率？",
+      "relevant_methods": [{ "method_id": "22", "method": "Queuing Theory" }]
+    },
+    {
+      "id": "zh-02",
+      "language": "zh",
+      "query": "需求和补货提前期存在波动时，如何确定安全库存与再订货点以降低总成本？",
+      "relevant_methods": [{ "method_id": "23", "method": "Inventory Theory" }]
+    },
+    {
+      "id": "zh-03",
+      "language": "zh",
+      "query": "多个方案的收益具有不确定性且决策者风险偏好不同，应如何选择方案？",
+      "relevant_methods": [{ "method_id": "24", "method": "Decision Theory" }]
+    },
+    {
+      "id": "zh-04",
+      "language": "zh",
+      "query": "在原料、工时和预算均为线性约束时，怎样安排产量使利润最大？",
+      "relevant_methods": [{ "method_id": "0", "method": "Linear Programming (Linear Programming, LP)", "equivalent_method_ids": ["0", "38"] }]
+    },
+    {
+      "id": "zh-05",
+      "language": "zh",
+      "query": "含大量0-1决策的设施选址问题需要精确求解，如何通过上下界剪枝搜索？",
+      "relevant_methods": [{ "method_id": "41", "method": "Branch and Bound Method" }]
+    },
+    {
+      "id": "zh-06",
+      "language": "zh",
+      "query": "复杂排程容易陷入局部最优，如何利用短期禁忌记忆避免反复访问旧解？",
+      "relevant_methods": [{ "method_id": "29", "method": "Tabu Search (Tabu Search, TS)" }]
+    },
+    {
+      "id": "zh-07",
+      "language": "zh",
+      "query": "路径组合优化希望使用选择、交叉和变异迭代一组候选解，应采用什么方法？",
+      "relevant_methods": [{ "method_id": "30", "method": "Genetic Algorithm (Genetic Algorithm, GA)" }]
+    },
+    {
+      "id": "zh-08",
+      "language": "zh",
+      "query": "非凸优化中希望按逐渐降低的温度概率接受较差解，从而跳出局部极值。",
+      "relevant_methods": [{ "method_id": "32", "method": "Simulated Annealing (Simulated Annealing, SA)" }]
+    },
+    {
+      "id": "zh-09",
+      "language": "zh",
+      "query": "让一群候选点根据个体最优和群体最优更新位置与速度来搜索连续参数。",
+      "relevant_methods": [{ "method_id": "33", "method": "Particle Swarm Optimization (Particle Swarm Optimization, PSO)" }]
+    },
+    {
+      "id": "zh-10",
+      "language": "zh",
+      "query": "配送路径搜索中用信息素强化优良路线并随时间挥发，应使用哪种群智能算法？",
+      "relevant_methods": [{ "method_id": "34", "method": "Ant Colony Optimization (Ant Colony Optimization, ACO)" }]
+    },
+    {
+      "id": "zh-11",
+      "language": "zh",
+      "query": "求光滑非线性目标函数的无约束极小值，希望利用梯度并迭代近似Hessian矩阵。",
+      "relevant_methods": [{ "method_id": "35", "method": "Newton Method/Quasi-Newton Methods (Newton Method)" }]
+    },
+    {
+      "id": "zh-12",
+      "language": "zh",
+      "query": "大型稀疏对称正定线性方程组需要避免直接分解并迭代求解。",
+      "relevant_methods": [{ "method_id": "36", "method": "Conjugate Gradient Method (Conjugate Gradient Method, CGM)" }]
+    },
+    {
+      "id": "zh-13",
+      "language": "zh",
+      "query": "一维单峰函数不便求导，怎样按固定比例不断缩小最优点所在区间？",
+      "relevant_methods": [{ "method_id": "37", "method": "Golden-Section Search (Golden-Section Search)" }]
+    },
+    {
+      "id": "zh-14",
+      "language": "zh",
+      "query": "带等式和不等式约束的可微优化问题，如何检查最优点的一阶必要条件与互补松弛？",
+      "relevant_methods": [{ "method_id": "47", "method": "Karush-Kuhn-Tucker (KKT) Conditions" }]
+    },
+    {
+      "id": "zh-15",
+      "language": "zh",
+      "query": "多个模糊指标具有不同隶属度，需要综合得到对象的等级评价。",
+      "relevant_methods": [{ "method_id": "83", "method": "Fuzzy Comprehensive Evaluation" }]
+    },
+    {
+      "id": "zh-16",
+      "language": "zh",
+      "query": "专家对准则进行两两比较，希望检验一致性并计算层次权重。",
+      "relevant_methods": [{ "method_id": "85", "method": "Analytic Hierarchy Process (AHP)" }]
+    },
+    {
+      "id": "zh-17",
+      "language": "zh",
+      "query": "对多个方案排序时，希望同时比较其到正理想解和负理想解的距离。",
+      "relevant_methods": [{ "method_id": "88", "method": "Technique for Order Preference by Similarity to an Ideal Solution (TOPSIS)" }]
+    },
+    {
+      "id": "zh-18",
+      "language": "zh",
+      "query": "评价指标权重不依赖专家判断，而根据样本差异和信息量客观确定。",
+      "relevant_methods": [{ "method_id": "89", "method": "Entropy Weight Method", "equivalent_method_ids": ["89", "90"] }]
+    },
+    {
+      "id": "zh-19",
+      "language": "zh",
+      "query": "样本少、信息不完全的时间序列需要预测下一期发展趋势。",
+      "relevant_methods": [{ "method_id": "72", "method": "Grey Forecasting" }]
+    },
+    {
+      "id": "zh-20",
+      "language": "zh",
+      "query": "响应变量是事件发生次数，均值随多个解释变量变化且服从计数分布。",
+      "relevant_methods": [{ "method_id": "63", "method": "Poisson Regression" }]
+    },
+    {
+      "id": "en-01",
+      "language": "en",
+      "query": "Classify a new observation from the labels of the closest samples under a chosen distance metric.",
+      "relevant_methods": [{ "method_id": "49", "method": "K-Nearest Neighbors (KNN)" }]
+    },
+    {
+      "id": "en-02",
+      "language": "en",
+      "query": "Build an interpretable classifier by recursively splitting features into if-then decision rules.",
+      "relevant_methods": [{ "method_id": "50", "method": "Decision Tree" }]
+    },
+    {
+      "id": "en-03",
+      "language": "en",
+      "query": "Combine many randomized trees trained on bootstrap samples and random feature subsets.",
+      "relevant_methods": [{ "method_id": "51", "method": "Random Forest" }]
+    },
+    {
+      "id": "en-04",
+      "language": "en",
+      "query": "Find a maximum-margin separating hyperplane and use a kernel for nonlinear classification.",
+      "relevant_methods": [{ "method_id": "52", "method": "Support Vector Machine (SVM)" }]
+    },
+    {
+      "id": "en-05",
+      "language": "en",
+      "query": "Project labeled data to maximize between-class scatter relative to within-class scatter.",
+      "relevant_methods": [{ "method_id": "53", "method": "Linear Discriminant Analysis (LDA)" }]
+    },
+    {
+      "id": "en-06",
+      "language": "en",
+      "query": "Estimate the probability of a binary outcome with a linear predictor passed through a logit link.",
+      "relevant_methods": [{ "method_id": "54", "method": "Logistic Regression" }]
+    },
+    {
+      "id": "en-07",
+      "language": "en",
+      "query": "Classify documents from posterior probabilities while assuming features are conditionally independent.",
+      "relevant_methods": [{ "method_id": "55", "method": "Naive Bayes" }]
+    },
+    {
+      "id": "en-08",
+      "language": "en",
+      "query": "Partition unlabeled observations into a fixed number of groups by iteratively updating centroids.",
+      "relevant_methods": [{ "method_id": "56", "method": "K-Means Algorithm (including K-Means++ variant)" }]
+    },
+    {
+      "id": "en-09",
+      "language": "en",
+      "query": "Fit a latent mixture model by alternating expected component assignments and parameter maximization.",
+      "relevant_methods": [{ "method_id": "57", "method": "Expectation Maximization (EM)" }]
+    },
+    {
+      "id": "en-10",
+      "language": "en",
+      "query": "Create a dendrogram by repeatedly merging the nearest clusters without preselecting a flat partition.",
+      "relevant_methods": [{ "method_id": "59", "method": "Hierarchical Clustering" }]
+    },
+    {
+      "id": "en-11",
+      "language": "en",
+      "query": "Model a continuous response as a straight-line combination of predictors using least squares.",
+      "relevant_methods": [{ "method_id": "60", "method": "Linear Regression" }]
+    },
+    {
+      "id": "en-12",
+      "language": "en",
+      "query": "Stabilize a linear regression with highly correlated predictors by adding an L2 coefficient penalty.",
+      "relevant_methods": [{ "method_id": "62", "method": "Ridge Regression" }]
+    },
+    {
+      "id": "en-13",
+      "language": "en",
+      "query": "Choose actions over time from states and rewards while balancing immediate and future return.",
+      "relevant_methods": [{ "method_id": "71", "method": "Markov Decision Process (MDP)" }]
+    },
+    {
+      "id": "en-14",
+      "language": "en",
+      "query": "Represent conditional dependencies among uncertain variables with a directed acyclic probabilistic graph.",
+      "relevant_methods": [{ "method_id": "73", "method": "Bayesian Network" }]
+    },
+    {
+      "id": "en-15",
+      "language": "en",
+      "query": "Describe discrete-time population evolution through a recurrence linking the next state to earlier states.",
+      "relevant_methods": [{ "method_id": "74", "method": "Difference Equation" }]
+    },
+    {
+      "id": "en-16",
+      "language": "en",
+      "query": "Compare the relative efficiency of organizations that consume multiple inputs to produce multiple outputs.",
+      "relevant_methods": [{ "method_id": "87", "method": "Data Envelopment Analysis (DEA)" }]
+    },
+    {
+      "id": "en-17",
+      "language": "en",
+      "query": "Test whether several group means differ by decomposing variation within and between groups.",
+      "relevant_methods": [{ "method_id": "94", "method": "Analysis of Variance (ANOVA)" }]
+    },
+    {
+      "id": "en-18",
+      "language": "en",
+      "query": "Compare observed category counts against specified expected proportions for one categorical variable.",
+      "relevant_methods": [{ "method_id": "95", "method": "Chi-Square Goodness-of-Fit Test" }]
+    },
+    {
+      "id": "en-19",
+      "language": "en",
+      "query": "Compare an empirical continuous distribution with a reference distribution using the largest CDF gap.",
+      "relevant_methods": [{ "method_id": "96", "method": "Kolmogorov-Smirnov Test (KS Test)" }]
+    },
+    {
+      "id": "en-20",
+      "language": "en",
+      "query": "Train weak learners sequentially so each new learner emphasizes errors or residuals from the ensemble.",
+      "relevant_methods": [{ "method_id": "69", "method": "Boosting Algorithm" }]
+    },
+    {
+      "id": "en-21",
+      "language": "en",
+      "query": "Reduce estimator variance by fitting base learners independently on bootstrap resamples and averaging them.",
+      "relevant_methods": [{ "method_id": "70", "method": "Bagging Algorithm" }]
+    }
+  ]
+}

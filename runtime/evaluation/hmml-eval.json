@@ -1,0 +1,507 @@
+{
+  "schema_version": 2,
+  "dataset_id": "hmml-model-selection-v2",
+  "purpose": "model-selection",
+  "knowledge_source": {
+    "path": "knowledge/hmml/hmml.json",
+    "sha256": "013f90cd8e50c3aac5cc4ce497a9530852d9c18e655a9b7f545d47d3c9b86080",
+    "equivalence_path": "runtime/evaluation/hmml-equivalence.json",
+    "equivalence_sha256": "535882a344723f4be28ce28451470bfe966c309a9a3fa932c13debc7a5f0f996",
+    "method_count": 97,
+    "concept_count": 95
+  },
+  "label_status": "ai-adjudicated",
+  "label_provenance": {
+    "created_by": "gpt-5.6-sol",
+    "reasoning_effort": "high",
+    "generator_session_id": "step4-dataset-generator",
+    "adjudication_protocol": "runtime/evaluation/REVIEW.md",
+    "adjudicated_at": "2026-07-19",
+    "limitations": "AI-adjudicated by two independent strong-model review streams; not human-confirmed. Historical Important findings and conservative revisions are preserved in hmml-adjudication.json."
+  },
+  "query_design": {
+    "pair_count": 40,
+    "query_count": 80,
+    "languages": ["zh", "en"],
+    "paired_translations": true,
+    "minimum_relevant_concepts_per_query": 1,
+    "minimum_multi_relevant_pair_count": 20,
+    "hard_negative_required": true,
+    "metric_unit": "equivalence-aware method concept",
+    "notes": "Scenario-like modeling subtasks avoid direct method-name prompts. Labels distinguish one primary concept, acceptable alternatives or companion methods, equivalent aliases, and near-neighbor hard negatives."
+  },
+  "pairs": [
+    {
+      "id": "p01",
+      "queries": {
+        "zh": "工厂要在原料与工时限制下安排多种产品，但部分生产线只允许整批启停，并存在是否开线的0-1决策。",
+        "en": "A factory must choose product quantities under material and labor limits, while some lines run only in whole batches and opening a line is binary."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-2", "primary_method_id": "2", "method": "Mixed Integer Programming (Mixed Integer Programming, MIP)", "equivalent_method_ids": ["2"], "relevance": "primary", "rationale": "Continuous quantities and binary setup choices occur together."}
+      ],
+      "hard_negatives": [{"concept_id": "method-4", "primary_method_id": "4", "rationale": "No quadratic objective or constraint is stated."}]
+    },
+    {
+      "id": "p02",
+      "queries": {
+        "zh": "从若干候选点选择最少的应急站，使每个居民区都在服务半径内；站点只能选或不选。",
+        "en": "Choose the fewest emergency stations from candidate sites so every neighborhood lies within a service radius; each site is either opened or not."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-20", "primary_method_id": "20", "method": "Covering Models", "equivalent_method_ids": ["20"], "relevance": "primary", "rationale": "The objective is set covering over demand areas."},
+        {"concept_id": "method-1", "primary_method_id": "1", "method": "Integer Programming (Integer Programming, IP)", "equivalent_method_ids": ["1"], "relevance": "acceptable", "rationale": "Binary site decisions give a direct integer formulation."}
+      ],
+      "hard_negatives": [{"concept_id": "method-14", "primary_method_id": "14", "rationale": "Connecting all sites cheaply is not the stated coverage objective."}]
+    },
+    {
+      "id": "p03",
+      "queries": {
+        "zh": "巡检车从仓库出发，每个站点恰好访问一次后返回，并希望总路程最短。",
+        "en": "An inspection vehicle leaves a depot, visits every site exactly once, returns to the depot, and should minimize total travel distance."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-13", "primary_method_id": "13", "method": "Traveling Salesman Problem (TSP)", "equivalent_method_ids": ["13"], "relevance": "primary", "rationale": "A minimum-cost tour through all vertices is required."},
+        {"concept_id": "method-12", "primary_method_id": "12", "method": "Hamiltonian Cycle", "equivalent_method_ids": ["12"], "relevance": "acceptable", "rationale": "The feasible tour structure is a Hamiltonian cycle."}
+      ],
+      "hard_negatives": [{"concept_id": "method-10", "primary_method_id": "10", "rationale": "A single shortest path does not visit every vertex exactly once."}]
+    },
+    {
+      "id": "p04",
+      "queries": {
+        "zh": "若干指定传感器必须用最短总线缆连通，允许在候选位置增设不属于终端集合的中继点。",
+        "en": "Specified sensors must be connected with minimum total cable, and relay junctions not belonging to the terminal set may be added."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-16", "primary_method_id": "16", "method": "Steiner Tree (Steiner Tree)", "equivalent_method_ids": ["16"], "relevance": "primary", "rationale": "Optional nonterminal junctions define a Steiner tree problem."}
+      ],
+      "hard_negatives": [{"concept_id": "method-18", "primary_method_id": "18", "rationale": "Pairing vertices does not construct a connected terminal network."}]
+    },
+    {
+      "id": "p05",
+      "queries": {
+        "zh": "多仓库向多门店调货，运输弧有容量和单位费用，需要满足供需并使总费用最低。",
+        "en": "Multiple warehouses ship to stores over arcs with capacities and unit costs; supply and demand must balance while total cost is minimized."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-17", "primary_method_id": "17", "method": "Network Flow Models (Max-Flow/Min-Cost Max-Flow)", "equivalent_method_ids": ["17"], "relevance": "primary", "rationale": "The structure is a capacitated minimum-cost flow network."},
+        {"concept_id": "linear-programming", "primary_method_id": "0", "method": "Linear Programming (Linear Programming, LP)", "equivalent_method_ids": ["0", "38"], "relevance": "acceptable", "rationale": "The flow conservation model also has a linear-programming formulation."}
+      ],
+      "hard_negatives": [{"concept_id": "method-18", "primary_method_id": "18", "rationale": "The task transports quantities rather than selecting disjoint pairs."}]
+    },
+    {
+      "id": "p06",
+      "queries": {
+        "zh": "呼叫中心来电和服务时间随机变化，需要估计等待与拥堵，并在服务水平和坐席成本之间选择班次。",
+        "en": "A call center has random arrivals and service times; estimate waiting and congestion, then choose staffing that trades service level against cost."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-22", "primary_method_id": "22", "method": "Queuing Theory", "equivalent_method_ids": ["22"], "relevance": "primary", "rationale": "Waiting and congestion arise from a stochastic service system."}
+      ],
+      "hard_negatives": [{"concept_id": "method-23", "primary_method_id": "23", "rationale": "No stock replenishment process is present."}]
+    },
+    {
+      "id": "p07",
+      "queries": {
+        "zh": "备件需求和到货提前期不确定，计划跨多个时期决定订货量，并考虑缺货、持有与期末库存成本。",
+        "en": "Spare-part demand and lead time are uncertain; choose order quantities over several periods with shortage, holding, and terminal inventory costs."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-23", "primary_method_id": "23", "method": "Inventory Theory", "equivalent_method_ids": ["23"], "relevance": "primary", "rationale": "Replenishment under uncertain demand is the core task."},
+        {"concept_id": "method-9", "primary_method_id": "9", "method": "Dynamic Programming", "equivalent_method_ids": ["9"], "relevance": "acceptable", "rationale": "Inventory level and time define a natural sequential state recursion."}
+      ],
+      "hard_negatives": [{"concept_id": "method-22", "primary_method_id": "22", "rationale": "The state is stock, not customers waiting for service."}]
+    },
+    {
+      "id": "p08",
+      "queries": {
+        "zh": "设备处于有限健康状态，每期可维修、更换或继续运行；动作会改变下一期状态概率和长期收益。",
+        "en": "Equipment occupies one of finitely many health states; each period it may be repaired, replaced, or run, changing transition probabilities and long-run reward."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-71", "primary_method_id": "71", "method": "Markov Decision Process (MDP)", "equivalent_method_ids": ["71"], "relevance": "primary", "rationale": "Actions affect stochastic state transitions and cumulative reward."},
+        {"concept_id": "method-9", "primary_method_id": "9", "method": "Dynamic Programming", "equivalent_method_ids": ["9"], "relevance": "acceptable", "rationale": "Bellman recursion is the principal solution structure."}
+      ],
+      "hard_negatives": [{"concept_id": "method-74", "primary_method_id": "74", "rationale": "A deterministic recurrence alone omits action-dependent transition uncertainty."}]
+    },
+    {
+      "id": "p09",
+      "queries": {
+        "zh": "区域水资源配置要同时降低成本、缺水风险和生态损害，且各目标不能简单合并为唯一固定权重。",
+        "en": "Regional water allocation must reduce cost, shortage risk, and ecological damage, without collapsing all objectives into one fixed weighting."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-7", "primary_method_id": "7", "method": "Multi-Objective Programming", "equivalent_method_ids": ["7"], "relevance": "primary", "rationale": "Several conflicting objectives must be optimized jointly."}
+      ],
+      "hard_negatives": [{"concept_id": "method-88", "primary_method_id": "88", "rationale": "Ranking fixed alternatives does not optimize allocation variables under constraints."}]
+    },
+    {
+      "id": "p10",
+      "queries": {
+        "zh": "制造商先定批发价，零售商观察后决定订货量，双方目标不同且后者响应会反过来影响前者最优选择。",
+        "en": "A manufacturer sets a wholesale price first; a retailer observes it and chooses quantity, with different objectives and a follower response affecting the leader optimum."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-8", "primary_method_id": "8", "method": "Multi-level Programming", "equivalent_method_ids": ["8"], "relevance": "primary", "rationale": "Leader and follower decisions form a hierarchical optimization problem."}
+      ],
+      "hard_negatives": [{"concept_id": "method-85", "primary_method_id": "85", "rationale": "A criteria hierarchy does not model sequential strategic response."}]
+    },
+    {
+      "id": "p11",
+      "queries": {
+        "zh": "在光滑非线性目标和等式、不等式约束下，先刻画局部最优候选点必须满足的条件，而不是立即选数值算法。",
+        "en": "For a smooth nonlinear objective with equality and inequality constraints, first characterize necessary conditions for local candidates rather than choosing a numerical algorithm."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-47", "primary_method_id": "47", "method": "Karush-Kuhn-Tucker (KKT) Conditions", "equivalent_method_ids": ["47"], "relevance": "primary", "rationale": "KKT conditions cover smooth equality and inequality constraints."}
+      ],
+      "hard_negatives": [{"concept_id": "method-35", "primary_method_id": "35", "rationale": "Newton-type iteration is a solver, not the requested optimality characterization."}]
+    },
+    {
+      "id": "p12",
+      "queries": {
+        "zh": "仓库布局含大量0-1变量，要求给出可证明的全局最优解；算法需要用松弛下界和可行上界剪枝。",
+        "en": "A warehouse-layout model has many binary variables and requires a provably global optimum using relaxation lower bounds and feasible upper bounds for pruning."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-41", "primary_method_id": "41", "method": "Branch and Bound Method", "equivalent_method_ids": ["41"], "relevance": "primary", "rationale": "Bound-based pruning is the defining exact search mechanism."},
+        {"concept_id": "method-42", "primary_method_id": "42", "method": "Relaxation", "equivalent_method_ids": ["42"], "relevance": "acceptable", "rationale": "Relaxed subproblems supply the required bounds."}
+      ],
+      "hard_negatives": [{"concept_id": "method-30", "primary_method_id": "30", "rationale": "A population heuristic does not provide the requested optimality proof."}]
+    },
+    {
+      "id": "p13",
+      "queries": {
+        "zh": "作业车间排程的邻域搜索反复回到旧解，需要记忆近期动作，并允许偶尔越过局部最优。",
+        "en": "A job-shop neighborhood search repeatedly returns to old schedules; it needs memory of recent moves and a way to escape local optima."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-29", "primary_method_id": "29", "method": "Tabu Search (Tabu Search, TS)", "equivalent_method_ids": ["29"], "relevance": "primary", "rationale": "Short-term move memory directly addresses cycling."},
+        {"concept_id": "method-32", "primary_method_id": "32", "method": "Simulated Annealing (Simulated Annealing, SA)", "equivalent_method_ids": ["32"], "relevance": "acceptable", "rationale": "Probabilistic uphill moves are an alternative escape mechanism."}
+      ],
+      "hard_negatives": [{"concept_id": "method-26", "primary_method_id": "26", "rationale": "Irrevocable local choices provide neither memory nor escape."}]
+    },
+    {
+      "id": "p14",
+      "queries": {
+        "zh": "校准昂贵黑箱仿真的连续参数，没有可靠梯度，可并行评估一群候选并共享历史最优位置。",
+        "en": "Calibrate continuous parameters of an expensive black-box simulation with no reliable gradients, evaluating a population in parallel and sharing historical best locations."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-33", "primary_method_id": "33", "method": "Particle Swarm Optimization (Particle Swarm Optimization, PSO)", "equivalent_method_ids": ["33"], "relevance": "primary", "rationale": "Particles share personal and global best positions in continuous search."},
+        {"concept_id": "method-30", "primary_method_id": "30", "method": "Genetic Algorithm (Genetic Algorithm, GA)", "equivalent_method_ids": ["30"], "relevance": "acceptable", "rationale": "A population evolutionary search is also derivative-free and parallelizable."}
+      ],
+      "hard_negatives": [{"concept_id": "method-36", "primary_method_id": "36", "rationale": "Conjugate gradients require a structured differentiable linear or quadratic problem."}]
+    },
+    {
+      "id": "p15",
+      "queries": {
+        "zh": "对含缺失、噪声和非线性交互的表格数据做分类，希望模型对缩放不敏感，并通过多个弱模型提高稳健性。",
+        "en": "Classify tabular data with noise, missingness, and nonlinear interactions; prefer scale-insensitive models and improve robustness by combining many weak learners."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-51", "primary_method_id": "51", "method": "Random Forest", "equivalent_method_ids": ["51"], "relevance": "primary", "rationale": "Randomized tree ensembles fit nonlinear tabular interactions robustly."},
+        {"concept_id": "method-69", "primary_method_id": "69", "method": "Boosting Algorithm", "equivalent_method_ids": ["69"], "relevance": "acceptable", "rationale": "Sequentially combined weak learners are a competitive ensemble alternative."}
+      ],
+      "hard_negatives": [{"concept_id": "method-55", "primary_method_id": "55", "rationale": "Strong interacting features conflict with the conditional-independence assumption."}]
+    },
+    {
+      "id": "p16",
+      "queries": {
+        "zh": "标注样本少而特征维度高，希望学习一个由少量关键样本决定、对两类留出尽可能宽分隔带的边界；两类可近似看作高斯分布，且共享协方差能被稳定估计。",
+        "en": "Labels are scarce and features are high-dimensional; learn a boundary determined by a small set of critical samples that leaves the widest possible separation, while both classes are approximately Gaussian with a shared covariance that can be estimated reliably."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-52", "primary_method_id": "52", "method": "Support Vector Machine (SVM)", "equivalent_method_ids": ["52"], "relevance": "primary", "rationale": "Maximum-margin regularization is suitable for small high-dimensional samples."},
+        {"concept_id": "method-53", "primary_method_id": "53", "method": "Linear Discriminant Analysis (LDA)", "equivalent_method_ids": ["53"], "relevance": "acceptable", "rationale": "The covariance assumption supports a linear discriminant comparison."}
+      ],
+      "hard_negatives": [{"concept_id": "method-55", "primary_method_id": "55", "rationale": "The scenario does not support feature conditional independence."}]
+    },
+    {
+      "id": "p17",
+      "queries": {
+        "zh": "数百万未标注样本预计形成已知数量的紧凑近球形簇，需要可扩展的中心表示，同时允许比较软分配。",
+        "en": "Millions of unlabeled samples are expected to form a known number of compact roughly spherical groups; need scalable centroids while comparing a soft-assignment alternative."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-56", "primary_method_id": "56", "method": "K-Means Algorithm (including K-Means++ variant)", "equivalent_method_ids": ["56"], "relevance": "primary", "rationale": "Known-k compact spherical clusters favor centroid partitioning."},
+        {"concept_id": "method-57", "primary_method_id": "57", "method": "Expectation Maximization (EM)", "equivalent_method_ids": ["57"], "relevance": "acceptable", "rationale": "A mixture model supplies probabilistic soft membership."}
+      ],
+      "hard_negatives": [{"concept_id": "method-59", "primary_method_id": "59", "rationale": "A full dendrogram is unnecessary and costly at this scale with known k."}]
+    },
+    {
+      "id": "p18",
+      "queries": {
+        "zh": "希望把高维客户画像映射到二维网格并保留邻域拓扑，同时观察群体从粗到细的嵌套结构。",
+        "en": "Map high-dimensional customer profiles onto a two-dimensional grid while preserving neighborhood topology and inspect nested groups from coarse to fine."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-58", "primary_method_id": "58", "method": "Self-Organizing Maps (SOM)", "equivalent_method_ids": ["58"], "relevance": "primary", "rationale": "A topology-preserving two-dimensional map is explicitly desired."},
+        {"concept_id": "method-59", "primary_method_id": "59", "method": "Hierarchical Clustering", "equivalent_method_ids": ["59"], "relevance": "acceptable", "rationale": "A dendrogram exposes the requested nested grouping."}
+      ],
+      "hard_negatives": [{"concept_id": "method-56", "primary_method_id": "56", "rationale": "Flat centroid partitions do not preserve grid topology or nested structure."}]
+    },
+    {
+      "id": "p19",
+      "queries": {
+        "zh": "预测连续响应时，各解释变量高度共线，但关系总体近似线性，需要稳定系数并保留普通线性模型作基线。",
+        "en": "Predict a continuous response with highly collinear predictors and an approximately global linear relation; stabilize coefficients while retaining an ordinary linear baseline."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-62", "primary_method_id": "62", "method": "Ridge Regression", "equivalent_method_ids": ["62"], "relevance": "primary", "rationale": "L2 regularization stabilizes collinear coefficients."},
+        {"concept_id": "method-60", "primary_method_id": "60", "method": "Linear Regression", "equivalent_method_ids": ["60"], "relevance": "acceptable", "rationale": "The unregularized model is the natural interpretable baseline."}
+      ],
+      "hard_negatives": [{"concept_id": "method-63", "primary_method_id": "63", "rationale": "The response is continuous rather than a count."}]
+    },
+    {
+      "id": "p20",
+      "queries": {
+        "zh": "响应与单个解释变量的关系在不同位置缓慢变化，没有合适的全局函数形式，希望用附近样本拟合局部趋势。",
+        "en": "The response relation with a predictor changes smoothly across its range, with no suitable global form; fit local trends using nearby observations."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-61", "primary_method_id": "61", "method": "Locally Weighted Linear Regression (LWLR)", "equivalent_method_ids": ["61"], "relevance": "primary", "rationale": "Local distance-weighted fits capture smoothly varying relationships."}
+      ],
+      "hard_negatives": [{"concept_id": "method-62", "primary_method_id": "62", "rationale": "Global coefficient shrinkage does not create local nonlinear adaptation."}]
+    },
+    {
+      "id": "p21",
+      "queries": {
+        "zh": "同一批对象有两组不同来源的高维指标，希望找出两组线性组合之间最强的共同变化，并压缩各自维度。",
+        "en": "The same objects have two high-dimensional views; find linear combinations with strongest shared variation and reduce each view's dimension."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-64", "primary_method_id": "64", "method": "Canonical Correlation Analysis (CCA)", "equivalent_method_ids": ["64"], "relevance": "primary", "rationale": "CCA directly maximizes association between two variable sets."}
+      ],
+      "hard_negatives": [
+        {"concept_id": "method-65", "primary_method_id": "65", "rationale": "Separate variance maximization within each view does not identify shared cross-view variation."},
+        {"concept_id": "method-66", "primary_method_id": "66", "rationale": "No nonlinear manifold assumption is given."}
+      ]
+    },
+    {
+      "id": "p22",
+      "queries": {
+        "zh": "高维观测落在弯曲低维流形上，需要尽量保持局部邻域重构关系，并比较基于邻接图谱结构的映射。",
+        "en": "High-dimensional observations lie on a curved low-dimensional manifold; preserve local reconstruction neighborhoods and compare a graph-spectrum mapping."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-66", "primary_method_id": "66", "method": "Local Linear Embedding (LLE)", "equivalent_method_ids": ["66"], "relevance": "primary", "rationale": "LLE preserves local reconstruction weights on a nonlinear manifold."},
+        {"concept_id": "method-67", "primary_method_id": "67", "method": "Laplacian Eigenmaps", "equivalent_method_ids": ["67"], "relevance": "acceptable", "rationale": "Graph Laplacian geometry is a close manifold-learning alternative."}
+      ],
+      "hard_negatives": [{"concept_id": "method-65", "primary_method_id": "65", "rationale": "A single linear subspace may unfold neither curvature nor local topology."}]
+    },
+    {
+      "id": "p23",
+      "queries": {
+        "zh": "单棵深树方差很大，希望对自助样本并行训练多个模型后平均，并考虑随机选择特征进一步去相关。",
+        "en": "A single deep tree has high variance; train models in parallel on bootstrap samples and average them, optionally randomizing feature selection to decorrelate trees."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-70", "primary_method_id": "70", "method": "Bagging Algorithm", "equivalent_method_ids": ["70"], "relevance": "primary", "rationale": "Parallel bootstrap aggregation directly reduces variance."},
+        {"concept_id": "method-51", "primary_method_id": "51", "method": "Random Forest", "equivalent_method_ids": ["51"], "relevance": "acceptable", "rationale": "Feature-randomized bagged trees instantiate the proposed refinement."}
+      ],
+      "hard_negatives": [{"concept_id": "method-69", "primary_method_id": "69", "rationale": "Sequential residual correction is not the requested parallel variance-reduction scheme."}]
+    },
+    {
+      "id": "p24",
+      "queries": {
+        "zh": "多年需求序列数据充足，含非平稳趋势和自相关，需要通过差分后预测未来数期，并用离散递推表达动态。",
+        "en": "A long demand series shows a nonstationary trend and autocorrelation; forecast several future periods after differencing and express the dynamics through a discrete recurrence."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-75", "primary_method_id": "75", "method": "ARIMA Model (Autoregressive Integrated Moving Average model)", "equivalent_method_ids": ["75"], "relevance": "primary", "rationale": "Differencing and autoregression address trend and serial dependence."},
+        {"concept_id": "method-74", "primary_method_id": "74", "method": "Difference Equation", "equivalent_method_ids": ["74"], "relevance": "acceptable", "rationale": "A recurrence is a useful structural representation of discrete dynamics."}
+      ],
+      "hard_negatives": [{"concept_id": "method-72", "primary_method_id": "72", "rationale": "Grey forecasting is aimed at sparse incomplete series, unlike this abundant dataset."}]
+    },
+    {
+      "id": "p25",
+      "queries": {
+        "zh": "金融收益率均值接近稳定，但大波动成簇出现，需要分别建模条件均值和随时间变化的条件方差。",
+        "en": "Financial returns have a roughly stable mean but large movements cluster; model both conditional mean and time-varying conditional variance."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-76", "primary_method_id": "76", "method": "GARCH Model (including EGARCH variant) (Autoregressive Conditional Heteroskedasticity model)", "equivalent_method_ids": ["76"], "relevance": "primary", "rationale": "Volatility clustering is the defining conditional-variance pattern."}
+      ],
+      "hard_negatives": [{"concept_id": "method-72", "primary_method_id": "72", "rationale": "Small-sample grey trend extrapolation does not represent volatility clustering."}]
+    },
+    {
+      "id": "p26",
+      "queries": {
+        "zh": "传染病在人群分舱间传播，需要估计传播参数并比较分阶段干预策略对病例和成本的长期影响。",
+        "en": "An infectious disease spreads among population compartments; estimate transmission parameters and compare staged interventions by long-run cases and cost."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-77", "primary_method_id": "77", "method": "Infectious Disease Model", "equivalent_method_ids": ["77"], "relevance": "primary", "rationale": "Compartmental transmission dynamics are central."}
+      ],
+      "hard_negatives": [{"concept_id": "method-78", "primary_method_id": "78", "rationale": "Aggregate demographic projection does not model infection transmission."}]
+    },
+    {
+      "id": "p27",
+      "queries": {
+        "zh": "污染物沿河流输运并扩散，存在上游排放源和衰减，需要预测下游浓度随位置与时间的变化并离散求解。",
+        "en": "A pollutant is advected and diffused along a river with upstream sources and decay; predict downstream concentration over space and time using a discrete solver."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-80", "primary_method_id": "80", "method": "River Pollutant Diffusion Model", "equivalent_method_ids": ["80"], "relevance": "primary", "rationale": "Advection, diffusion, sources, and decay describe river pollution transport."},
+        {"concept_id": "method-74", "primary_method_id": "74", "method": "Difference Equation", "equivalent_method_ids": ["74"], "relevance": "acceptable", "rationale": "Finite-difference recurrences can implement the space-time solver."}
+      ],
+      "hard_negatives": [{"concept_id": "method-82", "primary_method_id": "82", "rationale": "Pure heat conduction omits the stated flow advection and pollutant source terms."}]
+    },
+    {
+      "id": "p28",
+      "queries": {
+        "zh": "专家能对评价准则两两比较并检查一致性，得到权重后还需按正负理想方案对备选项排序。",
+        "en": "Experts can compare criteria pairwise with a consistency check; after deriving weights, alternatives must be ranked against positive and negative ideals."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-85", "primary_method_id": "85", "method": "Analytic Hierarchy Process (AHP)", "equivalent_method_ids": ["85"], "relevance": "primary", "rationale": "Pairwise expert judgments and consistency are characteristic of AHP."},
+        {"concept_id": "method-88", "primary_method_id": "88", "method": "Technique for Order Preference by Similarity to an Ideal Solution (TOPSIS)", "equivalent_method_ids": ["88"], "relevance": "acceptable", "rationale": "Ideal-solution distances implement the requested final ranking."}
+      ],
+      "hard_negatives": [{"concept_id": "entropy-weighting", "primary_method_id": "89", "rationale": "Objective dispersion weights do not represent the stated expert judgments."}]
+    },
+    {
+      "id": "p29",
+      "queries": {
+        "zh": "不采用专家赋权，而由指标样本的离散程度确定客观权重，再依据与理想方案的距离排列候选方案。",
+        "en": "Avoid expert weighting; derive objective weights from indicator dispersion, then order alternatives by distance to ideal solutions."
+      },
+      "relevant_concepts": [
+        {"concept_id": "entropy-weighting", "primary_method_id": "89", "method": "Entropy Weight Method", "equivalent_method_ids": ["89", "90"], "relevance": "primary", "rationale": "Information dispersion supplies objective indicator weights."},
+        {"concept_id": "method-88", "primary_method_id": "88", "method": "Technique for Order Preference by Similarity to an Ideal Solution (TOPSIS)", "equivalent_method_ids": ["88"], "relevance": "acceptable", "rationale": "TOPSIS consumes the weights for ideal-distance ranking."}
+      ],
+      "hard_negatives": [{"concept_id": "method-85", "primary_method_id": "85", "rationale": "Pairwise subjective judgments contradict the no-expert-weighting requirement."}]
+    },
+    {
+      "id": "p30",
+      "queries": {
+        "zh": "安全风险指标含高、中、低等模糊语言评价，需要用隶属度综合多个因素，并允许专家层次权重作为输入。",
+        "en": "Safety-risk indicators include fuzzy linguistic ratings such as high, medium, and low; aggregate membership across factors, optionally using expert hierarchical weights."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-83", "primary_method_id": "83", "method": "Fuzzy Comprehensive Evaluation", "equivalent_method_ids": ["83"], "relevance": "primary", "rationale": "Membership functions aggregate qualitative fuzzy ratings."},
+        {"concept_id": "method-85", "primary_method_id": "85", "method": "Analytic Hierarchy Process (AHP)", "equivalent_method_ids": ["85"], "relevance": "acceptable", "rationale": "AHP can provide the stated expert criterion weights."}
+      ],
+      "hard_negatives": [{"concept_id": "method-87", "primary_method_id": "87", "rationale": "Input-output efficiency frontiers do not model fuzzy linguistic membership."}]
+    },
+    {
+      "id": "p31",
+      "queries": {
+        "zh": "评价准则之间相互依赖并存在反馈，专家仍能做成对比较；需在网络结构中计算优先权，并与层次独立假设作比较。",
+        "en": "Evaluation criteria depend on one another and contain feedback, while experts can still make pairwise comparisons; compute priorities on a network and compare with an independence hierarchy."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-86", "primary_method_id": "86", "method": "Analytic Network Process (ANP)", "equivalent_method_ids": ["86"], "relevance": "primary", "rationale": "ANP explicitly represents dependence and feedback among criteria."},
+        {"concept_id": "method-85", "primary_method_id": "85", "method": "Analytic Hierarchy Process (AHP)", "equivalent_method_ids": ["85"], "relevance": "acceptable", "rationale": "AHP is the requested independence baseline."}
+      ],
+      "hard_negatives": [{"concept_id": "method-88", "primary_method_id": "88", "rationale": "Ideal-distance ranking does not infer feedback-network priorities."}]
+    },
+    {
+      "id": "p32",
+      "queries": {
+        "zh": "比较多家医院使用多种人力和设备投入产生多类服务产出的相对效率，识别效率前沿，并衡量非前沿医院的相对低效程度。",
+        "en": "Compare hospitals that use multiple labor and equipment inputs to produce several service outputs, identify the efficiency frontier, and measure the relative inefficiency of hospitals below it."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-87", "primary_method_id": "87", "method": "Data Envelopment Analysis (DEA)", "equivalent_method_ids": ["87"], "relevance": "primary", "rationale": "DEA estimates a relative efficiency frontier from multiple inputs and outputs."}
+      ],
+      "hard_negatives": [{"concept_id": "method-94", "primary_method_id": "94", "rationale": "Testing mean differences does not construct an efficiency frontier."}]
+    },
+    {
+      "id": "p33",
+      "queries": {
+        "zh": "两个连续测量变量近似正态且散点关系近似直线，需要检验线性相关，并建立可解释的预测直线。",
+        "en": "Two continuous measurements are approximately normal with an almost linear scatter pattern; test linear association and fit an interpretable predictive line."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-91", "primary_method_id": "91", "method": "Pearson Correlation Coefficient Test", "equivalent_method_ids": ["91"], "relevance": "primary", "rationale": "Pearson tests linear association under the stated conditions."},
+        {"concept_id": "method-60", "primary_method_id": "60", "method": "Linear Regression", "equivalent_method_ids": ["60"], "relevance": "acceptable", "rationale": "Regression supplies the requested predictive relationship."}
+      ],
+      "hard_negatives": [{"concept_id": "method-93", "primary_method_id": "93", "rationale": "Kendall's concordance concerns agreement among rankings, not two continuous variables."}]
+    },
+    {
+      "id": "p34",
+      "queries": {
+        "zh": "同一批受试者治疗前后测量，连续配对差值近似对称但明显非正态；先与参数预先给定的正态参考分布比较，再检验配对位置是否系统改变。",
+        "en": "The same subjects are measured before and after treatment; the continuous paired differences are approximately symmetric but clearly non-normal. First compare them with a normal reference distribution whose parameters are specified in advance, then test for a systematic paired shift."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-92", "primary_method_id": "92", "method": "Wilcoxon's Signed Rank Test", "equivalent_method_ids": ["92"], "relevance": "primary", "rationale": "Signed ranks test paired shifts without normal differences."},
+        {"concept_id": "method-96", "primary_method_id": "96", "method": "Kolmogorov-Smirnov Test (KS Test)", "equivalent_method_ids": ["96"], "relevance": "acceptable", "rationale": "A distributional comparison supports the stated non-normality assessment."}
+      ],
+      "hard_negatives": [{"concept_id": "method-94", "primary_method_id": "94", "rationale": "A between-group mean test ignores pairing and non-normal differences."}]
+    },
+    {
+      "id": "p35",
+      "queries": {
+        "zh": "比较四种工艺的平均强度是否相同，并在推断前检查模型残差与参考连续分布的吻合程度。",
+        "en": "Compare whether four processes have equal mean strength, and before inference check how closely model residuals follow a reference continuous distribution."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-94", "primary_method_id": "94", "method": "Analysis of Variance (ANOVA)", "equivalent_method_ids": ["94"], "relevance": "primary", "rationale": "The main hypothesis compares several group means."},
+        {"concept_id": "method-96", "primary_method_id": "96", "method": "Kolmogorov-Smirnov Test (KS Test)", "equivalent_method_ids": ["96"], "relevance": "acceptable", "rationale": "A CDF-based check addresses the residual distribution requirement."}
+      ],
+      "hard_negatives": [{"concept_id": "method-92", "primary_method_id": "92", "rationale": "The observations are not described as paired before-and-after measurements."}]
+    },
+    {
+      "id": "p36",
+      "queries": {
+        "zh": "质量审计同时要比较单个分类变量的观察计数与规定比例，并检查连续尺寸样本是否符合给定分布。",
+        "en": "A quality audit must compare observed counts of one categorical variable with specified proportions and check whether a continuous dimension follows a given distribution."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-95", "primary_method_id": "95", "method": "Chi-Square Goodness-of-Fit Test", "equivalent_method_ids": ["95"], "relevance": "primary", "rationale": "Categorical counts are compared against specified expected proportions."},
+        {"concept_id": "method-96", "primary_method_id": "96", "method": "Kolmogorov-Smirnov Test (KS Test)", "equivalent_method_ids": ["96"], "relevance": "acceptable", "rationale": "The continuous distribution check is a separate required component."}
+      ],
+      "hard_negatives": [{"concept_id": "method-94", "primary_method_id": "94", "rationale": "No comparison of several group means is requested."}]
+    },
+    {
+      "id": "p37",
+      "queries": {
+        "zh": "按年度和年龄组预测人口规模，出生、死亡与迁移在离散时期更新；需比较政策情景下的递推轨迹。",
+        "en": "Project population by year and age group as births, deaths, and migration update discrete periods, comparing recurrence trajectories under policy scenarios."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-78", "primary_method_id": "78", "method": "Population Prediction Model", "equivalent_method_ids": ["78"], "relevance": "primary", "rationale": "Cohort demographic projection is the substantive model."},
+        {"concept_id": "method-74", "primary_method_id": "74", "method": "Difference Equation", "equivalent_method_ids": ["74"], "relevance": "acceptable", "rationale": "Annual cohort updates form a discrete recurrence."}
+      ],
+      "hard_negatives": [{"concept_id": "method-77", "primary_method_id": "77", "rationale": "No infection transmission mechanism is present."}]
+    },
+    {
+      "id": "p38",
+      "queries": {
+        "zh": "根据资本、劳动和技术变化解释长期产出路径，并用年度状态更新比较不同储蓄率下的增长情景。",
+        "en": "Explain long-run output paths from capital, labor, and technology changes, using annual state updates to compare growth scenarios under different saving rates."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-79", "primary_method_id": "79", "method": "Economic Growth Model", "equivalent_method_ids": ["79"], "relevance": "primary", "rationale": "Capital accumulation and technology are economic-growth mechanisms."},
+        {"concept_id": "method-74", "primary_method_id": "74", "method": "Difference Equation", "equivalent_method_ids": ["74"], "relevance": "acceptable", "rationale": "Annual capital updates can be represented recursively."}
+      ],
+      "hard_negatives": [{"concept_id": "method-78", "primary_method_id": "78", "rationale": "Demographic projection alone does not model capital and output dynamics."}]
+    },
+    {
+      "id": "p39",
+      "queries": {
+        "zh": "细长材料两端温度随时间改变，需要预测内部温度场，并把空间和时间导数离散成递推计算。",
+        "en": "Boundary temperatures of a slender material change over time; predict the internal temperature field by discretizing spatial and temporal derivatives into recurrences."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-82", "primary_method_id": "82", "method": "Heat Conduction Model", "equivalent_method_ids": ["82"], "relevance": "primary", "rationale": "The physical process is transient conductive heat transfer."},
+        {"concept_id": "method-74", "primary_method_id": "74", "method": "Difference Equation", "equivalent_method_ids": ["74"], "relevance": "acceptable", "rationale": "Finite-difference time stepping supplies the requested computation."}
+      ],
+      "hard_negatives": [{"concept_id": "method-80", "primary_method_id": "80", "rationale": "No flowing river, pollutant source, or advection term is present."}]
+    },
+    {
+      "id": "p40",
+      "queries": {
+        "zh": "两方兵力随交战持续消耗，投入和战术动作可分阶段调整，并影响下一阶段状态与最终损失。",
+        "en": "Two opposing forces suffer attrition over time; deployments and tactics may be adjusted in stages, affecting the next state and final losses."
+      },
+      "relevant_concepts": [
+        {"concept_id": "method-81", "primary_method_id": "81", "method": "Battle Model", "equivalent_method_ids": ["81"], "relevance": "primary", "rationale": "Force attrition dynamics are the substantive battle model."},
+        {"concept_id": "method-9", "primary_method_id": "9", "method": "Dynamic Programming", "equivalent_method_ids": ["9"], "relevance": "acceptable", "rationale": "Deterministic staged actions and state transitions support a multi-stage dynamic-programming formulation."}
+      ],
+      "hard_negatives": [{"concept_id": "method-77", "primary_method_id": "77", "rationale": "Disease transmission compartments do not represent strategic opposing-force actions."}]
+    }
+  ]
+}

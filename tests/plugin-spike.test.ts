@@ -181,6 +181,9 @@ test("package shape declares the Step 1 ESM distribution surface", async () => {
     "agents",
     "rubrics",
     "runtime",
+    "!runtime/tests",
+    "!runtime/**/__pycache__",
+    "!runtime/.pytest_cache",
     "knowledge",
     "templates/cumcmthesis",
     "templates/mcmthesis",
@@ -244,7 +247,18 @@ test("npm pack dry run contains the intended distribution surface", () => {
     "dist/index.js",
     "dist/install.js",
     "dist/tools/check.js",
+    "dist/tools/hmml.js",
     "dist/tools/prepare.js",
+    "runtime/hmml_benchmark.py",
+    "runtime/hmml_build.py",
+    "runtime/hmml_common.py",
+    "runtime/hmml_download.py",
+    "runtime/hmml_recalculate.py",
+    "runtime/hmml_retrieve.py",
+    "runtime/hmml_review.py",
+    "runtime/hmml_select.py",
+    "runtime/pyproject.toml",
+    "runtime/uv.lock",
     "skills/mm-agent/SKILL.md",
     "rubrics/analysis.md",
     "rubrics/modeling.md",
@@ -260,6 +274,7 @@ test("npm pack dry run contains the intended distribution surface", () => {
     files.some((file) => /(^|\/)(?:node_modules|runs|\.cache|\.config|\.git|\.worktrees)(?:\/|$)|\.(?:log|env)$/u.test(file)),
     false,
   )
+  assert.equal(files.some((file) => /(^|\/)(?:__pycache__|tests)(?:\/|$)|\.pyc$/u.test(file)), false)
 })
 
 test("golden command rejects Step 1 execution", () => {
@@ -340,16 +355,18 @@ test("config hook preserves an existing same-name agent unchanged", async () => 
   assert.deepEqual(config.agent?.["mm-agent-spike"], userAgent)
 })
 
-test("Plugin registers only the implemented Step 3 deterministic Tools", async () => {
+test("Plugin registers the implemented deterministic Tools through Step 4", async () => {
   const mmAgentPlugin = await loadPlugin()
   const hooks = await mmAgentPlugin({ directory: repositoryRoot, worktree: repositoryRoot } as PluginInput)
 
   assert.deepEqual(Object.keys(hooks.tool ?? {}).sort(), [
     "mm_agent_check",
+    "mm_agent_hmml",
     "mm_agent_prepare",
   ])
   assert.match(hooks.tool?.mm_agent_check?.description ?? "", /structured evidence/i)
   assert.match(hooks.tool?.mm_agent_prepare?.description ?? "", /CaseContextStore\.open/i)
+  assert.match(hooks.tool?.mm_agent_hmml?.description ?? "", /BM25 fallback/i)
 })
 
 test("check Tool uses the real execution directory for the Case write probe", async (t) => {
@@ -1134,6 +1151,77 @@ test("runtime: model invokes Step 3 Tools, compiles the real template, and creat
   }
 })
 
+test("runtime: model invokes HMML and receives a traceable offline BM25 result", {
+  skip: process.env.MM_AGENT_RUNTIME !== "1",
+  timeout: 300_000,
+}, async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mm-agent-runtime-hmml-"))
+  t.after(() => rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }))
+  const projectRoot = path.join(root, "project")
+  const configRoot = path.join(root, "config-home", "opencode")
+  await mkdir(projectRoot, { recursive: true })
+
+  const npmCli = process.env.npm_execpath
+  assert.ok(npmCli)
+  const build = runRuntimeProcess(process.execPath, [npmCli, "run", "build"], repositoryRoot, process.env)
+  assertRuntimeSuccess(build, "npm run build")
+  const installResult = runRuntimeProcess(
+    process.execPath,
+    [path.join(repositoryRoot, "dist", "install.js"), "install", "--config-root", configRoot],
+    repositoryRoot,
+    process.env,
+  )
+  assertRuntimeSuccess(installResult, "installer CLI")
+  assertRuntimeSuccess(runRuntimeProcess("git", ["init"], projectRoot, process.env), "git init")
+
+  const outputPath = "runs/case-hmml/tasks/task-01/retrieved-methods.json"
+  const prompt = [
+    "Call mm_agent_hmml exactly once.",
+    "Use query customer waiting queue and service congestion, top_k 5,",
+    `output_path ${outputPath}, and mode auto.`,
+    "Do not use any other tool.",
+    "Then reply exactly MM_AGENT_HMML_DONE_91C7.",
+  ].join(" ")
+  const result = runRuntimeProcess(
+    findOpenCodeBinary(),
+    ["run", "--format", "json", "--auto", prompt],
+    projectRoot,
+    {
+      ...runtimeEnvironment(root),
+      MM_AGENT_CACHE_DIR: path.join(root, "isolated-mm-agent-cache"),
+    },
+    240_000,
+  )
+  assertRuntimeSuccess(result, "opencode run HMML Tool prompt")
+  const events = result.stdout.split(/\r?\n/u).filter(Boolean).map((line) => JSON.parse(line) as {
+    type?: string
+    part?: { type?: string; tool?: string; text?: string; state?: { status?: string; output?: string } }
+  })
+  const toolEvent = events.find((event) => event.type === "tool_use" && event.part?.tool === "mm_agent_hmml")
+  assert.ok(toolEvent)
+  assert.equal(toolEvent.part?.state?.status, "completed")
+  const output = JSON.parse(toolEvent.part?.state?.output ?? "") as {
+    retrieval_mode?: string
+    degraded_reason?: string | null
+    knowledge_source?: { sha256?: string }
+    model?: { available?: boolean; revision?: string }
+    index?: { hash?: string; embedding_dimension?: number }
+    candidates?: Array<{ method?: string; score?: number }>
+  }
+  assert.equal(output.retrieval_mode, "bm25")
+  assert.equal(output.model?.available, false)
+  assert.match(output.degraded_reason ?? "", /model cache|Python runtime/u)
+  assert.match(output.knowledge_source?.sha256 ?? "", /^[a-f0-9]{64}$/u)
+  assert.match(output.model?.revision ?? "", /^[a-f0-9]{40}$/u)
+  assert.match(output.index?.hash ?? "", /^[a-f0-9]{64}$/u)
+  assert.ok((output.index?.embedding_dimension ?? 0) > 0)
+  assert.equal(output.candidates?.length, 5)
+  assert.equal(output.candidates?.[0]?.method, "Queuing Theory")
+  assert.ok((output.candidates?.[0]?.score ?? 0) > 0)
+  assert.deepEqual(JSON.parse(await readFile(path.join(projectRoot, ...outputPath.split("/")), "utf8")), output)
+  assert.ok(events.some((event) => event.part?.type === "text" && event.part.text === "MM_AGENT_HMML_DONE_91C7"))
+})
+
 test("runtime: built-in task creates a linked fresh child that reads disk context", {
   skip: process.env.MM_AGENT_RUNTIME !== "1",
   timeout: 300_000,
@@ -1302,9 +1390,16 @@ test("runtime: Skill slash command executes and restart rediscovers Plugin and S
   )
   assert.ok(checkEvent)
   assert.equal(checkEvent.part?.state?.status, "completed")
-  const prepareEvent = commandEvents.find(
+  const prepareEvents = commandEvents.filter(
     (event) => event.type === "tool_use" && event.part?.tool === "mm_agent_prepare",
   )
+  const prepareEvent = prepareEvents.find((event) => {
+    try {
+      return JSON.parse(event.part?.state?.output ?? "{}").ok === true
+    } catch {
+      return false
+    }
+  })
   const check = JSON.parse(checkEvent.part?.state?.output ?? "") as {
     ok?: boolean
     checks?: Array<{ id?: string; status?: string; repair?: string; evidence?: string }>
@@ -1331,7 +1426,7 @@ test("runtime: Skill slash command executes and restart rediscovers Plugin and S
     assert.equal(prepared.ok, true)
     assert.equal(prepared.result?.mode, "created")
   } else {
-    assert.equal(prepareEvent, undefined)
+    assert.equal(prepareEvents.length, 0)
   }
   assert.ok(commandTexts.join(" ").length > 0)
   assert.match(commandEvents.find((event) => event.sessionID)?.sessionID ?? "", /^ses_/u)

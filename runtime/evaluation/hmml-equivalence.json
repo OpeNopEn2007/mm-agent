@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "knowledge_source": {
+    "path": "knowledge/hmml/hmml.json",
+    "sha256": "013f90cd8e50c3aac5cc4ce497a9530852d9c18e655a9b7f545d47d3c9b86080",
+    "method_count": 97
+  },
+  "review_status": "proposed",
+  "review_provenance": {
+    "proposed_at": "2026-07-19",
+    "proposed_by": "independent AI review relayed by project owner",
+    "method": "Catalog duplicate analysis; included in the same independent adjudication scope as the formal evaluation labels.",
+    "outcome": "Proposed equivalent catalog entries count as one retrieval concept and do not increase the Recall denominator."
+  },
+  "groups": [
+    {
+      "concept_id": "linear-programming",
+      "primary_method_id": "0",
+      "equivalent_method_ids": ["0", "38"],
+      "rationale": "Both entries describe linear-objective optimization under linear constraints."
+    },
+    {
+      "concept_id": "entropy-weighting",
+      "primary_method_id": "89",
+      "equivalent_method_ids": ["89", "90"],
+      "rationale": "Both entries describe objective indicator weighting from information entropy."
+    }
+  ]
+}

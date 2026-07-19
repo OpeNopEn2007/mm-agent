@@ -4,6 +4,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { SPIKE_AGENT_NAME, spikeAgentConfig } from "./agents.js"
 import { runPreflight } from "./tools/check.js"
+import { retrieveHmml } from "./tools/hmml.js"
 import { prepareCase } from "./tools/prepare.js"
 
 const packageRoot = fileURLToPath(new URL("..", import.meta.url))
@@ -87,6 +88,25 @@ const mmAgentPlugin = (async ({ directory }) => ({
               reporting: budget.reporting,
             },
           } : {}),
+        }))
+      },
+    }),
+    mm_agent_hmml: tool({
+      description: "Retrieve traceable HMML method candidates with the pinned dense index or an explicit BM25 fallback when the model cache is unavailable.",
+      args: {
+        query: tool.schema.string(),
+        top_k: tool.schema.number(),
+        output_path: tool.schema.string(),
+        mode: tool.schema.enum(["auto", "bm25"]).optional(),
+      },
+      execute: async (input, context) => {
+        return JSON.stringify(await retrieveHmml({
+          projectRoot: context.directory,
+          packageRoot,
+          query: input.query,
+          topK: input.top_k,
+          outputPath: input.output_path,
+          ...(input.mode ? { mode: input.mode } : {}),
         }))
       },
     }),

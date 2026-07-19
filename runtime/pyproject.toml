@@ -1,0 +1,20 @@
+[project]
+name = "mm-agent-runtime"
+version = "1.0.0"
+requires-python = "==3.12.*"
+dependencies = [
+  "huggingface-hub>=0.34,<2",
+  "numpy>=2,<3",
+  "torch>=2,<3",
+  "transformers>=4.43,<5",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8,<10",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+pythonpath = ["."]

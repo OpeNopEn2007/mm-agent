@@ -18,7 +18,7 @@
 
 - phase: `v1.0.0` 正式开发。
 - accepted through: `PLAN.md` Step 3 Preflight 与输入整理。
-- current boundary: Step 3 已收口，本次立即停止；Step 4 HMML 检索评测与运行时尚未开始。
+- current boundary: Step 4 HMML 检索评测与运行时已收口；立即停止，不进入 Step 5 Compute/Compile。
 - process rule: 根 `PLAN.md` 是结果契约；项目不使用 Superpowers，不调用 `tdd` Skill，也不强制 TDD/RED-GREEN 顺序。
 - review state: commander 对最终 Step 3 diff 完成协议、安全、失败语义、package 和 runtime 审查，Critical/Important 均已关闭；本轮未使用 subagent。
 
@@ -56,13 +56,19 @@
 - hidden `mm-agent-spike` Agent 继续承担已接受的 Step 1 fresh-child regression；完整五角色 Agent 面属于 Step 6。
 - transitive `ini@7.0.0` 的 Node engine 声明不包含本机 `24.8.0`；当前 install/build/runtime 全部通过，但 `engine-strict` 环境可能拒绝安装。
 - Windows `spawnSync` timeout 不能可靠终止复杂子进程树；runtime gate 使用隔离目录和已知 OpenCode binary，若未来超时必须先确认 PID 归属。
+- Step 4 的 41 条典型方法查询保留为 `label_status: proposed` 的 `hmml-smoke.json`；它只用于回归烟雾测试，不能用于 GTE/BGE-M3 模型选型。
+- 方法目录中的 Linear Programming `0/38` 与 Entropy Weight `89/90` 已作为两个 `proposed` 等价概念组记录，并纳入正式独立模型复核范围，没有冒充人工确认。
+- 正式模型选型提案 `hmml-eval.json` 已落盘：40 组配对中英场景、80 条 query、29 组多相关场景和 11 组单一严格 relevant 场景，覆盖 56/95 个等价方法概念；修订后固定内容 hash 为 `9d25ae6d71547473bb9cf1ef3726d9154293672cbe93401318a68fbf6a52a02f`。
+- DeepSeek V4 Pro 初审全部批准，GPT-5.6-Sol high 提出 15 项 Important；全部保守落实后，两者对新 hash 的 80 条 query 和两个等价组均最终批准，状态为 `ai-adjudicated`。
+- GTE Recall@5 `0.8125`、MRR `0.7660268`；BGE-M3 Recall@5 `0.6875`、MRR `0.6984718`。最终选择 GTE；固定 revision `f48be033386d222715f74de68ba1d31b51f19f3a`、768 维、132 embedding rows、index hash `e2aa5a2b1883a1cdef6a0518fd3d1fd574d3315c2f278cd25648fd0b10896d16`，独立重建一致。
+- `mm_agent_hmml` 已在真实固定 cache 上通过 dense 检索，并在隔离空 cache 的真实 OpenCode gate 中通过明确标记的 BM25 降级；最终 package 只发布 GTE 三件套，不包含权重或 BGE 候选索引。
 
 ### Next Commander Action
 
-1. 不自动执行任何下一步骤；Step 3 已收口。
-2. 只有用户明确启动 Step 4 后，才按 `PLAN.md` 的 Step 4 结果契约开展 HMML 离线评测与唯一模型选择。
+1. 不自动进入 Step 5；等待用户明确启动 Compute/Compile。
+2. 后续使用 `runtime/hmml-manifest.json` 与 `runtime/evaluation/summary.json` 恢复 Step 4 的固定模型、索引和评测事实。
 3. 不重写 accepted Canonical Core，不读取用户项目 `.venv`，不 push 未经授权的分支。
 
 ## Commit 判断
 
-Step 3 已达到单一里程碑 acceptance commit 条件。该提交后工作区应 clean；若发现额外 dirty 文件，先分类并保留用户无关改动，不得 reset 或 stash。
+Step 4 已达到单一里程碑 acceptance commit 条件；全部最终 gate 通过后只创建一个 acceptance commit，不 push。

@@ -14,7 +14,7 @@
 
 ## 当前状态
 
-`v1.0.0` 的 Canonical Core 由 `4ce82cd` 接受，OpenCode Adapter 设计由 `1040e63` 接受。OpenCode Plugin Spike 已由 `315c319` 接受；Step 2 CaseContextStore 已由 `cfda6ea` 接受；Step 3 Preflight 与输入整理已在当前 acceptance HEAD 完成并通过 focused、完整回归、Build、package/diff 和 5 个无跳过的真实 OpenCode runtime gate。Step 4 尚未开始。
+`v1.0.0` 的 Canonical Core 由 `4ce82cd` 接受，OpenCode Adapter 设计由 `1040e63` 接受。OpenCode Plugin Spike 已由 `315c319` 接受；Step 2 CaseContextStore 已由 `cfda6ea` 接受；Step 3 Preflight 与输入整理已在 `5367dd0` 接受；Step 4 已完成 HMML 独立标签复核、真实双模型评测、唯一 GTE 层级索引、dense 检索和无模型 BM25 降级，不进入 Step 5 Compute/Compile。
 
 - Canonical Core：[`docs/architecture/canonical-core.md`](docs/architecture/canonical-core.md) 与 [`docs/context/artifact-protocol.md`](docs/context/artifact-protocol.md) 是宿主无关机制唯一来源。
 - OpenCode Adapter：[`docs/architecture/opencode-plugin-harness.md`](docs/architecture/opencode-plugin-harness.md) 定义 v1 唯一 Adapter 的实现接口。
@@ -578,13 +578,12 @@ Wave 3: task-04              reads accepted memory from task-02/task-03
 - `hmml-embeddings.npy`
 - `embedding-meta.json`
 
-当前索引使用 BGE-M3，但 v1 不直接继承该选择。实现前运行小型离线评测：
+最终索引由 80 条 `ai-adjudicated` 中英文查询的真实离线评测选出：
 
-- 至少 30 个中英文数学方法查询。
-- 人工标注相关方法。
-- 比较 `Alibaba-NLP/gte-multilingual-base` 与 `BAAI/bge-m3`。
-- 主指标为 `Recall@5` 和 MRR，同时记录模型体积、冷启动和查询延迟。
-- 如果 GTE 的 `Recall@5` 与最佳结果相差不超过 3 个百分点，选择更小且与官方实现一致的 GTE；否则选择 BGE-M3。
+- GTE：Recall@5 `0.8125`、MRR `0.7660`；BGE-M3：Recall@5 `0.6875`、MRR `0.6985`。
+- GTE 同时是最佳结果，按固定规则选择 `Alibaba-NLP/gte-multilingual-base@f48be033386d222715f74de68ba1d31b51f19f3a`。
+- 索引使用 97 个叶方法、35 个层级节点和 95 个等价方法概念；父级均值与叶方法各占 `0.5`。
+- 逐查询结果、冷启动、模型体积、延迟、下载文件 hash 与复算报告位于 `runtime/evaluation/`。
 
 最终发布只携带一个模型对应的预计算 HMML 索引，不携带模型权重。评测四元组 `(model, hmml-embeddings.npy, embedding-meta.json, method-index.json)` 原子更新。首次完善环境时，用户确认后将固定 revision 的模型下载到 MM-Agent 专用 cache。
 
@@ -716,7 +715,7 @@ mm-agent/
 └── .archived/             # 非活跃历史资产
 ```
 
-Step 1 已创建 npm package、最小 Plugin/Agent/installer 与宿主验证测试；Step 2 已创建 `src/core/` 的 CaseContextStore、持久 schema、安全路径、迁移、Context Recipe、Gate transaction 和 contract tests；Step 3 已交付 `mm_agent_check`、`mm_agent_prepare`、`/mm-agent` 的 preflight/intake 流程、四份 Rubric 快照源与 `problems/` 默认入口。Step 4 及其后的 HMML runtime、Compute/Compile、完整四阶段 Agents/Skills 和 Golden Case 仍以 [PLAN.md](PLAN.md) 的里程碑结果为准。
+Step 1 已创建 npm package、最小 Plugin/Agent/installer 与宿主验证测试；Step 2 已创建 `src/core/` 的 CaseContextStore、持久 schema、安全路径、迁移、Context Recipe、Gate transaction 和 contract tests；Step 3 已交付 preflight/intake；Step 4 已交付可复算 HMML 评测、唯一 GTE 层级索引、可追溯 dense 检索与 BM25 降级。后续 Compute/Compile、完整四阶段 Agents/Skills 和 Golden Case 仍以 [PLAN.md](PLAN.md) 的里程碑结果为准。
 
 ## 文档入口
 

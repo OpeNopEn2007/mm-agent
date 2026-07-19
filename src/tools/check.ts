@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import {
   access,
@@ -113,6 +113,15 @@ function sanitizedEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 async function isRegularFile(filePath: string): Promise<boolean> {
   try {
     return (await lstat(filePath)).isFile();
+  } catch {
+    return false;
+  }
+}
+
+async function isDirectDirectory(directoryPath: string): Promise<boolean> {
+  try {
+    const info = await lstat(directoryPath);
+    return info.isDirectory() && !info.isSymbolicLink();
   } catch {
     return false;
   }
@@ -434,6 +443,7 @@ async function hmmlChecks(
   cacheRoot: string,
 ): Promise<CheckItem[]> {
   const indexRoot = path.join(packageRoot, "knowledge", "hmml");
+  const manifestPath = path.join(packageRoot, "runtime", "hmml-manifest.json");
   const present: Array<{ name: string; size: number; sha256: string }> = [];
   const missing: string[] = [];
   for (const name of HMML_FILES) {
@@ -447,27 +457,146 @@ async function hmmlChecks(
       missing.push(name);
     }
   }
-  const index: CheckItem = {
-    id: "hmml-index",
-    status: "warn",
-    evidence:
-      missing.length === 0
-        ? `candidate index files are readable (${present.map((item) => `${item.name}:${item.size}:${item.sha256.slice(0, 12)}`).join(", ")}); final model/index selection is intentionally pending Step 4`
-        : `candidate index is incomplete or invalid; missing=${missing.join(", ")}; final model/index selection is intentionally pending Step 4`,
-    repair: missing.length === 0 ? "none" : "automatic",
-  };
+  let selectedCacheSubdir: string | undefined;
+  let selectedCodeCacheSubdir: string | undefined;
+  let index: CheckItem;
+  try {
+    if (missing.length > 0) throw new Error(`missing or invalid files: ${missing.join(", ")}`);
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+      schema_version?: unknown;
+      knowledge_source?: {
+        sha256?: unknown;
+        method_count?: unknown;
+        concept_count?: unknown;
+        hierarchy_node_count?: unknown;
+        equivalence_sha256?: unknown;
+      };
+      selected_model?: {
+        id?: unknown;
+        revision?: unknown;
+        embedding_dimension?: unknown;
+        cache_subdir?: unknown;
+        code?: { id?: unknown; revision?: unknown; files_sha256?: unknown; cache_subdir?: unknown };
+      };
+      index?: {
+        index_sha256?: unknown;
+        method_count?: unknown;
+        concept_count?: unknown;
+        embedding_row_count?: unknown;
+        files?: Record<string, { sha256?: unknown; size_bytes?: unknown }>;
+      };
+    };
+    if (manifest.schema_version !== 1 || typeof manifest.index?.index_sha256 !== "string")
+      throw new Error("invalid runtime manifest schema");
+    if (typeof manifest.selected_model?.cache_subdir !== "string")
+      throw new Error("runtime manifest has no selected model cache path");
+    selectedCacheSubdir = manifest.selected_model.cache_subdir;
+    if (manifest.selected_model.code) {
+      if (typeof manifest.selected_model.code.cache_subdir !== "string")
+        throw new Error("runtime manifest has no selected model code cache path");
+      selectedCodeCacheSubdir = manifest.selected_model.code.cache_subdir;
+    }
+    const knowledgeHash = await hashPath(path.join(indexRoot, "hmml.json"));
+    if (knowledgeHash !== manifest.knowledge_source?.sha256)
+      throw new Error("knowledge source hash mismatch");
+    const digest = createHash("sha256");
+    for (const name of ["embedding-meta.json", "hmml-embeddings.npy", "method-index.json"].sort()) {
+      const actual = present.find((item) => item.name === name);
+      const expected = manifest.index.files?.[name];
+      if (!actual || actual.sha256 !== expected?.sha256 || actual.size !== expected.size_bytes)
+        throw new Error(`${name} does not match runtime manifest`);
+      digest.update(name).update("\0").update(actual.sha256).update("\n");
+    }
+    if (digest.digest("hex") !== manifest.index.index_sha256)
+      throw new Error("combined index hash mismatch");
+    const meta = JSON.parse(await readFile(path.join(indexRoot, "embedding-meta.json"), "utf8")) as {
+      model?: { id?: unknown; revision?: unknown; code?: { id?: unknown; revision?: unknown; files_sha256?: unknown } };
+      embedding_dimension?: unknown;
+      method_count?: unknown;
+      concept_count?: unknown;
+      hierarchy_node_count?: unknown;
+      embedding_row_count?: unknown;
+      knowledge_source?: { equivalence_sha256?: unknown };
+      scoring?: { strategy?: unknown; parent_weight?: unknown; child_weight?: unknown };
+    };
+    if (
+      meta.model?.id !== manifest.selected_model.id ||
+      meta.model?.revision !== manifest.selected_model.revision ||
+      meta.embedding_dimension !== manifest.selected_model.embedding_dimension ||
+      meta.method_count !== manifest.index.method_count ||
+      meta.concept_count !== manifest.index.concept_count ||
+      meta.hierarchy_node_count !== manifest.knowledge_source?.hierarchy_node_count ||
+      meta.embedding_row_count !== manifest.index.embedding_row_count ||
+      meta.embedding_row_count !== Number(meta.method_count) + Number(meta.hierarchy_node_count) ||
+      manifest.index.method_count !== manifest.knowledge_source?.method_count ||
+      manifest.index.concept_count !== manifest.knowledge_source?.concept_count ||
+      meta.knowledge_source?.equivalence_sha256 !== manifest.knowledge_source?.equivalence_sha256 ||
+      meta.scoring?.strategy !== "hierarchical-parent-mean" ||
+      meta.scoring.parent_weight !== 0.5 || meta.scoring.child_weight !== 0.5
+    )
+      throw new Error("embedding metadata does not match selected model or method count");
+    const methodIndex = JSON.parse(await readFile(path.join(indexRoot, "method-index.json"), "utf8")) as {
+      schema_version?: unknown;
+      scoring?: { strategy?: unknown };
+      methods?: unknown[];
+      hierarchy_nodes?: unknown[];
+      equivalence?: { sha256?: unknown };
+    };
+    if (
+      methodIndex.schema_version !== 2 || methodIndex.scoring?.strategy !== "hierarchical-parent-mean" ||
+      methodIndex.methods?.length !== manifest.index.method_count ||
+      methodIndex.hierarchy_nodes?.length !== manifest.knowledge_source?.hierarchy_node_count ||
+      methodIndex.equivalence?.sha256 !== manifest.knowledge_source?.equivalence_sha256
+    )
+      throw new Error("method index hierarchy does not match runtime manifest");
+    if (JSON.stringify(meta.model?.code ?? null) !== JSON.stringify(manifest.selected_model.code
+      ? {
+          id: manifest.selected_model.code.id,
+          revision: manifest.selected_model.code.revision,
+          files_sha256: manifest.selected_model.code.files_sha256,
+        }
+      : null))
+      throw new Error("embedding metadata does not match selected model code");
+    index = {
+      id: "hmml-index",
+      status: "pass",
+      evidence: `selected HMML runtime is consistent: model=${String(manifest.selected_model.id)}@${String(manifest.selected_model.revision)}; methods=${String(manifest.index.method_count)}; dim=${String(manifest.selected_model.embedding_dimension)}; index_sha256=${manifest.index.index_sha256}`,
+      repair: "none",
+    };
+  } catch (error) {
+    index = {
+      id: "hmml-index",
+      status: "warn",
+      evidence: `HMML runtime is not finalized or inconsistent: ${(error as Error).message}; readable candidates=${present.map((item) => `${item.name}:${item.size}:${item.sha256.slice(0, 12)}`).join(", ") || "none"}`,
+      repair: "automatic",
+    };
+  }
   let cache: CheckItem;
   try {
     const info = await lstat(cacheRoot);
     if (!info.isDirectory() || info.isSymbolicLink())
       throw new Error("cache path is not a direct directory");
     await access(cacheRoot, constants.R_OK | constants.W_OK);
-    cache = {
-      id: "hmml-cache",
-      status: "pass",
-      evidence: `dedicated cache directory is readable and writable: ${cacheRoot}`,
-      repair: "none",
-    };
+    const snapshot = selectedCacheSubdir
+      ? path.join(cacheRoot, ...selectedCacheSubdir.split("/"))
+      : undefined;
+    const codeSnapshot = selectedCodeCacheSubdir
+      ? path.join(cacheRoot, ...selectedCodeCacheSubdir.split("/"))
+      : undefined;
+    if ((snapshot && !(await isDirectDirectory(snapshot))) || (codeSnapshot && !(await isDirectDirectory(codeSnapshot))))
+      cache = {
+        id: "hmml-cache",
+        status: "warn",
+        evidence: `dedicated cache is readable and writable but a selected model snapshot is unavailable: model=${snapshot ?? "none"}; code=${codeSnapshot ?? "none"}; BM25 fallback remains usable`,
+        repair: "automatic",
+      };
+    else
+      cache = {
+        id: "hmml-cache",
+        status: "pass",
+        evidence: `dedicated cache directory is readable and writable: ${cacheRoot}${snapshot ? `; selected model snapshot=${snapshot}` : ""}${codeSnapshot ? `; selected model code snapshot=${codeSnapshot}` : ""}`,
+        repair: "none",
+      };
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     cache = {
@@ -550,6 +679,9 @@ export async function runPreflight(
 ): Promise<CheckResult> {
   const scope = options.scope ?? "all";
   const env = sanitizedEnvironment(options.env ?? process.env);
+  const cacheRoot = options.cacheRoot ?? env.MM_AGENT_CACHE_DIR ?? defaultCacheRoot(env);
+  env.UV_PYTHON_INSTALL_DIR = path.join(cacheRoot, "python-installations");
+  env.UV_CACHE_DIR = path.join(cacheRoot, "uv");
   const timeoutMs = options.commandTimeoutMs ?? 30_000;
   const resolve = options.executableResolver ?? resolveExecutable;
   const runner = options.commandRunner ?? runCommand;
@@ -581,7 +713,7 @@ export async function runPreflight(
     checks.push(
       ...(await hmmlChecks(
         options.packageRoot,
-        options.cacheRoot ?? env.MM_AGENT_CACHE_DIR ?? defaultCacheRoot(env),
+        cacheRoot,
       )),
     );
   if (scope === "all" || scope === "tex")

@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "model": {
+    "id": "Alibaba-NLP/gte-multilingual-base",
+    "revision": "f48be033386d222715f74de68ba1d31b51f19f3a",
+    "embedding_dimension": 768,
+    "snapshot_file_count": 9,
+    "snapshot_size_bytes": 627846556,
+    "snapshot_files_sha256": "eec4448253a9ca96d10d9d30f81c2c7a4a49e007dfd0a554ad3e8478baa9e3f6",
+    "snapshot_files": [
+      {
+        "path": "1_Pooling/config.json",
+        "size_bytes": 190,
+        "sha256": "c9bef85e8bbf4b2eab4941b3fb62bd33f88686748b478f2e264d256472d9643b"
+      },
+      {
+        "path": "config.json",
+        "size_bytes": 1429,
+        "sha256": "711bdc81365fc25d30533cf05b9fdf588e5ba01f18540fbbb1307d787597a313"
+      },
+      {
+        "path": "model.safetensors",
+        "size_bytes": 610753338,
+        "sha256": "f5a35a10faa54da7717870af1517c9b41e9bd8e3880bc5a8e9363d4c3c63e9b0"
+      },
+      {
+        "path": "modules.json",
+        "size_bytes": 349,
+        "sha256": "84e40c8e006c9b1d6c122e02cba9b02458120b5fb0c87b746c41e0207cf642cf"
+      },
+      {
+        "path": "scripts/gte_embedding.py",
+        "size_bytes": 6326,
+        "sha256": "2fd5e5db15d7831c99bbc419e2ea2fd9c329a0c642472b03dd62275a85cbcff7"
+      },
+      {
+        "path": "sentence_bert_config.json",
+        "size_bytes": 55,
+        "sha256": "23aa234ef6021d513cdf56947c07aaa6977000d85dcd1fd423f650b3382a39ca"
+      },
+      {
+        "path": "special_tokens_map.json",
+        "size_bytes": 964,
+        "sha256": "8c785abebea9ae3257b61681b4e6fd8365ceafde980c21970d001e834cf10835"
+      },
+      {
+        "path": "tokenizer.json",
+        "size_bytes": 17082756,
+        "sha256": "f59925fcb90c92b894cb93e51bb9b4a6105c5c249fe54ce1c704420ac39b81af"
+      },
+      {
+        "path": "tokenizer_config.json",
+        "size_bytes": 1149,
+        "sha256": "24cebbf2ef20fc317256e03e52ac7b2ca326586f946a8427ecac036332bf0933"
+      }
+    ],
+    "disk_size_bytes": 627912706,
+    "code": {
+      "id": "Alibaba-NLP/new-impl",
+      "revision": "40ced75c3017eb27626c9d4ea981bde21a2662f4",
+      "snapshot_file_count": 2,
+      "snapshot_size_bytes": 66150,
+      "snapshot_files_sha256": "2d90deef0459657f6e9f5b6e91631d7727e3a20f61f79bf72633d27215df8e53",
+      "snapshot_files": [
+        {
+          "path": "configuration.py",
+          "size_bytes": 7127,
+          "sha256": "3411088045ffb8a9a0aa9936eae275896b39983a2ee5b08f091b44e6289e4fe4"
+        },
+        {
+          "path": "modeling.py",
+          "size_bytes": 59023,
+          "sha256": "374670b416fcc82f081c9cd28b5fd61c2bd91bbe18eb4798fcc48a81f9c250a0"
+        }
+      ]
+    }
+  },
+  "knowledge_source": {
+    "path": "knowledge/hmml/hmml.json",
+    "sha256": "013f90cd8e50c3aac5cc4ce497a9530852d9c18e655a9b7f545d47d3c9b86080",
+    "method_count": 97,
+    "concept_count": 95,
+    "hierarchy_node_count": 35,
+    "equivalence_sha256": "535882a344723f4be28ce28451470bfe966c309a9a3fa932c13debc7a5f0f996",
+    "extraction": "recursive-depth-first"
+  },
+  "evaluation": {
+    "dataset_id": "hmml-model-selection-v2",
+    "dataset_sha256": "7d391cbfc0f63c5bee1dfba9178d7a6963ab148b6c3e0b34bfe5363a7ac40c47",
+    "content_sha256": "9d25ae6d71547473bb9cf1ef3726d9154293672cbe93401318a68fbf6a52a02f",
+    "adjudication_sha256": "6620299aeeeabb920b8eed8944e61a489141553a97dee8e93123bdaa5ddf8b9b",
+    "adjudication_review_count": 2,
+    "query_count": 80,
+    "pair_count": 40,
+    "covered_concept_count": 56,
+    "label_status": "ai-adjudicated",
+    "recall_at_5": 0.8125,
+    "mrr": 0.7660267857142857,
+    "primary_hit_at_5": 0.8375,
+    "hard_negative_hit_at_5_rate": 0.4625,
+    "metric_unit": "equivalence-aware method concept"
+  },
+  "performance": {
+    "cold_start_ms": 7799.6515,
+    "query_latency_ms": {
+      "mean": 74.64614875,
+      "median": 71.87434999999999,
+      "p95": 107.82455499999999,
+      "minimum": 54.7034,
+      "maximum": 134.5764
+    }
+  },
+  "index": {
+    "embedding_dimension": 768,
+    "method_count": 97,
+    "concept_count": 95,
+    "hierarchy_node_count": 35,
+    "embedding_row_count": 132,
+    "files": {
+      "hmml-embeddings.npy": {
+        "path": "candidate-index/hmml-embeddings.npy",
+        "size_bytes": 405632,
+        "sha256": "7eea3e5b432afc50095d05212d6bfa4729a6636683d12a0ec231a8322f5521b3"
+      },
+      "embedding-meta.json": {
+        "path": "candidate-index/embedding-meta.json",
+        "size_bytes": 1183,
+        "sha256": "184c9565f898b885f70221d6330a1f7d14a73e6bb7f33a8bbb926bdfb8663a68"
+      },
+      "method-index.json": {
+        "path": "candidate-index/method-index.json",
+        "size_bytes": 270168,
+        "sha256": "14c5400464a584d8f2e20a3cfb4f9a34920fe036322d0b35870d3d2c89f70960"
+      }
+    },
+    "index_sha256": "e2aa5a2b1883a1cdef6a0518fd3d1fd574d3315c2f278cd25648fd0b10896d16"
+  },
+  "raw_query_results": "query-results.json",
+  "environment": {
+    "python": "3.12.12 (main, Feb 12 2026, 00:40:26) [MSC v.1944 64 bit (AMD64)]",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.5.1",
+    "torch": "2.13.0+cpu",
+    "transformers": "4.57.6",
+    "device": "cpu"
+  }
+}

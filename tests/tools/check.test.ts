@@ -109,8 +109,8 @@ test("check returns direct structured evidence for every Step 3 category", async
   }
   const hmml = result.checks.find((check) => check.id === "hmml-index");
   assert.equal(hmml?.status, "warn");
-  assert.equal(hmml?.repair, "none");
-  assert.match(hmml?.evidence ?? "", /pending Step 4/u);
+  assert.equal(hmml?.repair, "automatic");
+  assert.match(hmml?.evidence ?? "", /not finalized or inconsistent/u);
   const tex = result.checks.find((check) => check.id === "tex-template");
   assert.equal(tex?.status, "pass");
   assert.match(tex?.evidence ?? "", /pdf_bytes=[1-9]\d*/u);
@@ -196,5 +196,7 @@ test("check strips project virtual-environment state before probing uv", async (
     assert.equal((env.PATH ?? "").includes(".venv"), false);
     assert.equal(env.PYTHONNOUSERSITE, "1");
     assert.equal(env.UV_PYTHON_DOWNLOADS, "never");
+    assert.equal(env.UV_PYTHON_INSTALL_DIR, path.join(roots.cacheRoot, "python-installations"));
+    assert.equal(env.UV_CACHE_DIR, path.join(roots.cacheRoot, "uv"));
   }
 });

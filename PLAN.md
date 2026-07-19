@@ -2,7 +2,7 @@
 
 ## 当前结论
 
-`v1.0.0` 采用 Canonical Core + OpenCode Adapter。架构决策与协议设计已经接受；Step 1 OpenCode Plugin Spike、Step 2 CaseContextStore 和 Step 3 Preflight 与输入整理均已完成。Step 4 尚未开始。
+`v1.0.0` 采用 Canonical Core + OpenCode Adapter。架构决策与协议设计已经接受；Step 1 至 Step 4 均已完成。当前边界停止在 HMML 检索评测与运行时，不进入 Step 5 Compute/Compile。
 
 唯一公开入口是 `/mm-agent`。首个真实目标 Case 是 MM-Bench `2024_C` Wimbledon Momentum；在此之前，各确定性模块必须先在本地最小 fixture 上留下可重复验证的证据。
 
@@ -70,7 +70,7 @@ problems/.gitkeep                    默认用户输入目录
 | 1 | OpenCode 能真实加载、发现、派发和恢复最小 Plugin。 | 已接受：`315c319`、`ab56d42` |
 | 2 | CaseContextStore 成为唯一 Case 状态、Context 和 Gate 协议实现。 | 已接受：`cfda6ea` |
 | 3 | `/mm-agent` 能可靠判断环境是否可用，并从用户输入创建或恢复不可变 Case。 | 已接受：当前 acceptance HEAD |
-| 4 | HMML 模型选择有数据依据，检索结果可追溯且有离线降级路径。 | 待开始 |
+| 4 | HMML 模型选择有数据依据，检索结果可追溯且有离线降级路径。 | 已完成：当前 acceptance commit |
 | 5 | 计算与 LaTeX/PDF 编译产生可重放的 Runtime Evidence。 | 待开始 |
 | 6 | 四阶段 Agents、Skills 和 Tools 通过 Canonical Core 跑成真实工作流。 | 待开始 |
 | 7 | 最小 Case 与 MM-Bench 真实 Case 均能从输入闭环到非空 PDF，并可在新会话恢复。 | 待开始 |
@@ -134,7 +134,7 @@ Step 3 完成后，用户运行 `/mm-agent` 即可在进入四阶段正文前得
 
 **可观察交付**
 
-- 至少 30 个带人工相关标签的中英文查询，以及 GTE 与 BGE-M3 的 Recall@5、MRR、冷启动、体积和延迟报告。
+- 至少 30 个带可追溯相关标签的中英文查询；标签由两个独立强模型完整复核，任一 Important 问题均保守修正并由两者对新内容 hash 最终确认，诚实标记为 `ai-adjudicated` 并保留逐项复核、修改、模型/session 和内容 hash；以及 GTE 与 BGE-M3 的 Recall@5、MRR、冷启动、体积和延迟报告。
 - 根据既定阈值选择唯一模型，并固定 Hugging Face revision、下载文件 hash、embedding 维度、索引 hash 和专用 cache。
 - 唯一一致的 `(model, hmml-embeddings.npy, embedding-meta.json, method-index.json)` 四元组。
 - `retrieved-methods.json` 记录知识源、query、retrieval mode、候选和 score；无模型时使用明确标记的 BM25/关键词降级模式。
@@ -237,4 +237,4 @@ Step 3 完成后，用户运行 `/mm-agent` 即可在进入四阶段正文前得
 
 ## 当前里程碑
 
-Step 3 Preflight 与输入整理已验收收口。本次执行在此停止；不自动开始 Step 4，也不进入 HMML 检索实现、Compute/Compile、四阶段编排或 Golden Case。
+Step 4 HMML 检索评测与运行时已收口；41 条典型方法查询只保留为 `proposed` smoke regression，正式选型使用 80 条 `ai-adjudicated` 数据集。当前停止，不进入 Step 5 Compute/Compile、四阶段编排或 Golden Case。

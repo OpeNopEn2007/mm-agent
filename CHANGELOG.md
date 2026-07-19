@@ -21,6 +21,9 @@
 - 完成 Step 3 `mm_agent_prepare`：显式路径优先、`problems/` 回退，只委托 `CaseContextStore.open` 固化输入、Policy、四份 Rubric 与初始状态；冲突、输入变化、linked path、无效 ID 和不可写存储均返回结构化失败。
 - `/mm-agent` Skill 在正文前执行 preflight 与 intake；存在 `fail` 时停止，未新增 `/doctor`、`/setup` 或其他公开入口。
 - Step 3 focused、完整回归、Build、package/diff 与 5 个真实 OpenCode runtime gate 通过；runtime 直接覆盖真实模板 PDF、模型调用两项 Tool 和新进程 Case 恢复。
+- 完成 Step 4 HMML：80 条双语 `ai-adjudicated` 查询、等价方法概念、论文对齐的 0.5 父级均值 + 0.5 叶方法评分、逐查询可复算报告和固定模型/index provenance。
+- 真实比较 GTE 与 BGE-M3 后选择 GTE（Recall@5 `0.8125` vs `0.6875`；MRR `0.7660` vs `0.6985`），发布唯一 768 维 GTE 索引，不打包模型权重或 BGE 候选索引。
+- `mm_agent_hmml` 输出 knowledge/model/index/query/candidate score/degraded reason；真实 OpenCode 隔离空 cache gate 验证 BM25 降级，固定 cache 验证 dense 检索。
 
 ### 文档
 - 接受 `4ce82cd` 提交的 Canonical Core（`docs/architecture/canonical-core.md` + `docs/context/artifact-protocol.md`）作为宿主无关机制唯一来源。
@@ -50,7 +53,7 @@
 - 2026-05-16: 更新 `docs/research/paper-vs-implementation-gap-analysis.md` 全面差距分析（历史，已通过归档处理）。
 
 ### 开发方向
-- OpenCode Plugin Spike、CaseContextStore 与 Step 3 Preflight/输入整理已通过各自 gate；Step 4 HMML 检索评测尚未开始，本次不自动进入。
+- OpenCode Plugin Spike、CaseContextStore、Step 3 Preflight/输入整理与 Step 4 HMML 检索评测/运行时均已通过各自 gate；当前停止在 Step 4，不自动进入 Compute/Compile。
 - Spike 只验证 Adapter 宿主假设，不代表四阶段、HMML、Compute/Compile 或 Golden Case 已实现。
 - 旧 Pi、Claude/Codex Plugin 方向进入历史维护/归档状态，不再作为后续架构主线。
 

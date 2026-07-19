@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "dataset": {
+    "path": "runtime/evaluation/hmml-eval.json",
+    "sha256": "7d391cbfc0f63c5bee1dfba9178d7a6963ab148b6c3e0b34bfe5363a7ac40c47",
+    "label_status": "ai-adjudicated",
+    "content_sha256": "9d25ae6d71547473bb9cf1ef3726d9154293672cbe93401318a68fbf6a52a02f",
+    "adjudication_sha256": "6620299aeeeabb920b8eed8944e61a489141553a97dee8e93123bdaa5ddf8b9b",
+    "query_count": 80,
+    "pair_count": 40
+  },
+  "selection_policy": {
+    "primary_metric": "recall_at_5",
+    "gte_max_gap": 0.03,
+    "rule": "choose GTE when its Recall@5 is within 3 percentage points of the best result; otherwise choose BGE-M3"
+  },
+  "models": [
+    {
+      "model": "Alibaba-NLP/gte-multilingual-base",
+      "revision": "f48be033386d222715f74de68ba1d31b51f19f3a",
+      "recall_at_5": 0.8125,
+      "mrr": 0.7660267857142857,
+      "cold_start_ms": 7799.6515,
+      "disk_size_bytes": 627912706,
+      "query_latency_ms": {
+        "mean": 74.64614875,
+        "median": 71.87434999999999,
+        "p95": 107.82455499999999,
+        "minimum": 54.7034,
+        "maximum": 134.5764
+      },
+      "embedding_dimension": 768,
+      "index_sha256": "e2aa5a2b1883a1cdef6a0518fd3d1fd574d3315c2f278cd25648fd0b10896d16"
+    },
+    {
+      "model": "BAAI/bge-m3",
+      "revision": "6892b95fed65c899a30896eb40d619ae284d0455",
+      "recall_at_5": 0.6875,
+      "mrr": 0.6984717588618475,
+      "cold_start_ms": 13315.7686,
+      "disk_size_bytes": 2293234427,
+      "query_latency_ms": {
+        "mean": 158.24203125,
+        "median": 153.4317,
+        "p95": 201.44367999999994,
+        "minimum": 122.206,
+        "maximum": 263.3498
+      },
+      "embedding_dimension": 1024,
+      "index_sha256": "1ed388c6c825e14dcb981fc6436fbd5c714c2468e4faab9397d28412a8432864"
+    }
+  ],
+  "selected_model": "Alibaba-NLP/gte-multilingual-base",
+  "reason": "GTE Recall@5 gap 0.000000 is within the 0.030000 threshold"
+}
