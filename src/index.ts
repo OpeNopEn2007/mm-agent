@@ -1,12 +1,12 @@
 import { tool, type Plugin } from "@opencode-ai/plugin"
 import { readFile, readdir } from "node:fs/promises"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { SPIKE_AGENT_NAME, spikeAgentConfig } from "./agents.js"
+import { runPreflight } from "./tools/check.js"
+import { prepareCase } from "./tools/prepare.js"
 
-function executionPathApi(directory: string): path.PlatformPath {
-  const isWindowsDriveOrUnc = /^(?:[A-Za-z]:[\\/]|(?:\\\\|\/\/)[^\\/]+[\\/][^\\/]+(?:[\\/]|$))/u.test(directory)
-  return isWindowsDriveOrUnc ? path.win32 : path.posix
-}
+const packageRoot = fileURLToPath(new URL("..", import.meta.url))
 
 async function findActiveCase(directory: string): Promise<string | undefined> {
   let entries
@@ -43,21 +43,51 @@ const mmAgentPlugin = (async ({ directory }) => ({
     }
   },
   tool: {
-    mm_agent_spike_context: tool({
-      description: "Return read-only path context supplied by the active OpenCode Tool execution.",
+    mm_agent_check: tool({
+      description: "Check the mm-agent environment with structured evidence and repair ownership before starting a Case.",
       args: {
-        path: tool.schema.string().min(1),
+        scope: tool.schema.enum(["all", "environment", "case", "hmml", "tex"]).optional(),
+        case_id: tool.schema.string().optional(),
       },
       execute: async (input, context) => {
-        if (path.win32.parse(input.path).root || path.posix.parse(input.path).root) {
-          throw new Error("path must be a relative path")
-        }
-        const pathApi = executionPathApi(context.directory)
-        return JSON.stringify({
-          directory: context.directory,
-          worktree: context.worktree,
-          resolved_path: pathApi.resolve(context.directory, input.path),
-        })
+        return JSON.stringify(await runPreflight({
+          projectRoot: context.directory,
+          packageRoot,
+          scope: input.scope ?? "all",
+          ...(input.case_id ? { caseId: input.case_id } : {}),
+        }))
+      },
+    }),
+    mm_agent_prepare: tool({
+      description: "Discover explicit input or problems/, then create or resume an immutable Case only through CaseContextStore.open.",
+      args: {
+        case_id: tool.schema.string(),
+        explicit_paths: tool.schema.array(tool.schema.string()).optional(),
+        revision_budget: tool.schema.object({
+          analysis: tool.schema.number(),
+          modeling: tool.schema.number(),
+          solving_per_task: tool.schema.number(),
+          reporting: tool.schema.number(),
+        }).optional(),
+      },
+      execute: async (input, context) => {
+        const budget = input.revision_budget
+        return JSON.stringify(await prepareCase({
+          projectRoot: context.directory,
+          runsRoot: path.join(context.directory, "runs"),
+          rubricRoot: path.join(packageRoot, "rubrics"),
+        }, {
+          caseId: input.case_id,
+          ...(input.explicit_paths ? { explicitPaths: input.explicit_paths } : {}),
+          ...(budget ? {
+            revisionBudget: {
+              analysis: budget.analysis,
+              modeling: budget.modeling,
+              solvingPerTask: budget.solving_per_task,
+              reporting: budget.reporting,
+            },
+          } : {}),
+        }))
       },
     }),
   },

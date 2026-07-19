@@ -9,7 +9,6 @@
 | `context/` | 项目级协作、Handoff、artifact 和反馈协议。设计或实现 Harness 行为前应先读这里。 |
 | `architecture/` | Canonical Core、Adapter 实现接口、论文对齐和参考工程取舍。 |
 | `roadmap/` | 简短里程碑文档。 |
-| `superpowers/plans/` | 阶段实施计划的保留路径；计划服从根 `PLAN.md` 与 canonical 文档，不代表或要求调用 Superpowers。 |
 
 ## 证据与参考
 
@@ -17,6 +16,7 @@
 |------|------|
 | `reference/` | 一手资料。MM-Agent 论文放在这里。 |
 | `research/` | 历史分析和外部项目调研。它们是证据，不是活跃指令。 |
+| `../.archived/implementation-records/` | 已完成里程碑的简短历史记录；只用于回溯，不参与当前实施。 |
 
 ## 边界规则
 
@@ -26,6 +26,8 @@
 - 版本目标放进 `roadmap/`。
 - 论文、规范、原始材料放进 `reference/`。
 - 调研、比较、分析放进 `research/`。
+- 根 `PLAN.md` 只描述里程碑预期结果、边界和验收证据，不保存逐步执行脚本。
+- 已完成的详细过程计划应删除或压缩到 `.archived/implementation-records/`；归档内容不是活跃指令。
 - 与旧 Claude/Codex 插件实现状态绑定的研究文档，应归档到 `.archived/legacy-claude-codex-plugin/`。
 
 不要在多个文档里重复同一个结论。需要引用时，链接到负责该结论的文档。

@@ -62,8 +62,8 @@ function normalizeModelMarkerText(parts: Array<string | undefined>): string {
   const text = parts.join("").trim()
   const inlineCode = /^`([^`\r\n]+)`$/u.exec(text)
   if (inlineCode?.[1]) return inlineCode[1].trim()
-  const fencedCode = /^```(?:text)?\s*([\s\S]*?)\s*```$/u.exec(text)
-  return (fencedCode?.[1] ?? text).trim()
+  const fencedCode = [...text.matchAll(/```(?:text)?\s*([\s\S]*?)\s*```/gu)]
+  return (fencedCode.length === 1 ? fencedCode[0]?.[1] : text)?.trim() ?? ""
 }
 
 function runRuntimeProcess(
@@ -212,6 +212,19 @@ test("runtime environment strips OpenCode config overrides but preserves provide
   }
 })
 
+test("runtime marker normalization accepts one fenced value with model narration", () => {
+  assert.equal(
+    normalizeModelMarkerText([
+      "The value of the marker field is:\n\n```\nMM_AGENT_MARKER\n```",
+    ]),
+    "MM_AGENT_MARKER",
+  )
+  assert.equal(
+    normalizeModelMarkerText(["prefix ```one``` suffix ```two```"]),
+    "prefix ```one``` suffix ```two```",
+  )
+})
+
 test("npm pack dry run contains the intended distribution surface", () => {
   const npmCli = process.env.npm_execpath
   assert.ok(npmCli)
@@ -227,7 +240,17 @@ test("npm pack dry run contains the intended distribution surface", () => {
   assert.equal(result.status, 0, result.stderr)
   const packs = JSON.parse(result.stdout) as Array<{ files?: Array<{ path?: string }> }>
   const files = (packs[0]?.files ?? []).map((file) => file.path ?? "")
-  for (const required of ["dist/index.js", "dist/install.js", "skills/mm-agent/SKILL.md"]) {
+  for (const required of [
+    "dist/index.js",
+    "dist/install.js",
+    "dist/tools/check.js",
+    "dist/tools/prepare.js",
+    "skills/mm-agent/SKILL.md",
+    "rubrics/analysis.md",
+    "rubrics/modeling.md",
+    "rubrics/solving.md",
+    "rubrics/reporting.md",
+  ]) {
     assert.ok(files.includes(required), required)
   }
   assert.ok(files.some((file) => file.startsWith("templates/cumcmthesis/")))
@@ -251,9 +274,12 @@ test("golden command rejects Step 1 execution", () => {
   assert.match(`${result.stdout}${result.stderr}`, /Golden Case belongs to PLAN Step 7/)
 })
 
-test("Skill carries the exact mm-agent command marker", async () => {
+test("Skill exposes Step 3 preflight and intake without a second public command", async () => {
   const skill = await readFile(path.join(repositoryRoot, "skills", "mm-agent", "SKILL.md"), "utf8")
-  assert.match(skill, /respond exactly `MM_AGENT_SKILL_DISCOVERED_31B7`/u)
+  assert.match(skill, /mm_agent_check/u)
+  assert.match(skill, /mm_agent_prepare/u)
+  assert.match(skill, /Stop after the environment and intake result/u)
+  assert.match(skill, /do not\s+invent `\/doctor`, `\/setup`, or another slash command/u)
 })
 
 test("build emits a loadable ESM Plugin entry and declarations", async () => {
@@ -314,90 +340,66 @@ test("config hook preserves an existing same-name agent unchanged", async () => 
   assert.deepEqual(config.agent?.["mm-agent-spike"], userAgent)
 })
 
-test("context Tool resolves a relative path from the real execution context", async () => {
-  const directory = path.join(os.tmpdir(), "mm-agent spike project")
-  const worktree = path.join(os.tmpdir(), "mm-agent spike worktree")
-  const relativePath = path.join("fixtures", "context.json")
-  const mmAgentPlugin = await loadPlugin()
-  const hooks = await mmAgentPlugin({ directory: "wrong-plugin-directory", worktree: "wrong-plugin-worktree" } as PluginInput)
-  const definition = hooks.tool?.mm_agent_spike_context
-
-  assert.ok(definition)
-  assert.match(definition.description, /read-only/i)
-  const result = await definition.execute(
-    { path: relativePath },
-    { directory, worktree } as ToolContext,
-  )
-  assert.equal(typeof result, "string")
-  assert.deepEqual(JSON.parse(result as string), {
-    directory,
-    worktree,
-    resolved_path: path.resolve(directory, relativePath),
-  })
-})
-
-test("context Tool enforces Windows drive and relative-path semantics", async () => {
-  const directory = "D:\\spike root\\project"
-  const worktree = "D:\\spike root"
-  const mmAgentPlugin = await loadPlugin()
-  const hooks = await mmAgentPlugin({ directory, worktree } as PluginInput)
-  const definition = hooks.tool?.mm_agent_spike_context
-  assert.notEqual(definition, undefined)
-  const context = { directory, worktree } as ToolContext
-
-  const result = await definition.execute({ path: "fixtures\\context.json" }, context)
-  assert.equal(typeof result, "string")
-  assert.equal(JSON.parse(result as string).resolved_path, path.win32.resolve(directory, "fixtures\\context.json"))
-
-  for (const invalidPath of ["C:\\outside\\context.json", "C:drive-relative.json", "\\\\server\\share\\context.json", "\\rooted.json", "/posix-rooted.json"]) {
-    await assert.rejects(() => definition.execute({ path: invalidPath }, context), /relative path/i)
-  }
-})
-
-test("context Tool selects POSIX drive and UNC path semantics independently of the host", async () => {
+test("Plugin registers only the implemented Step 3 deterministic Tools", async () => {
   const mmAgentPlugin = await loadPlugin()
   const hooks = await mmAgentPlugin({ directory: repositoryRoot, worktree: repositoryRoot } as PluginInput)
-  const definition = hooks.tool?.mm_agent_spike_context
-  assert.notEqual(definition, undefined)
 
-  const scenarios = [
-    {
-      directory: "/tmp/mm-agent-project",
-      worktree: "/tmp/mm-agent-project",
-      input: "fixtures/context.json",
-      expected: "/tmp/mm-agent-project/fixtures/context.json",
-    },
-    {
-      directory: "D:\\mm-agent\\project",
-      worktree: "D:\\mm-agent",
-      input: "fixtures\\context.json",
-      expected: "D:\\mm-agent\\project\\fixtures\\context.json",
-    },
-    {
-      directory: "\\\\server\\share\\project",
-      worktree: "\\\\server\\share",
-      input: "fixtures\\context.json",
-      expected: "\\\\server\\share\\project\\fixtures\\context.json",
-    },
-  ]
+  assert.deepEqual(Object.keys(hooks.tool ?? {}).sort(), [
+    "mm_agent_check",
+    "mm_agent_prepare",
+  ])
+  assert.match(hooks.tool?.mm_agent_check?.description ?? "", /structured evidence/i)
+  assert.match(hooks.tool?.mm_agent_prepare?.description ?? "", /CaseContextStore\.open/i)
+})
 
-  for (const scenario of scenarios) {
-    const result = await definition.execute(
-      { path: scenario.input },
-      { directory: scenario.directory, worktree: scenario.worktree } as ToolContext,
-    )
-    assert.equal(JSON.parse(result as string).resolved_path, scenario.expected, scenario.directory)
-  }
+test("check Tool uses the real execution directory for the Case write probe", async (t) => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "mm-agent-check-tool-"))
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  const mmAgentPlugin = await loadPlugin()
+  const hooks = await mmAgentPlugin({ directory: "wrong-plugin-directory", worktree: "wrong-plugin-worktree" } as PluginInput)
+  const definition = hooks.tool?.mm_agent_check
+  assert.ok(definition)
 
-  for (const absolutePath of ["/outside/context.json", "C:\\outside\\context.json", "\\\\server\\share\\context.json"]) {
-    await assert.rejects(
-      () => definition.execute(
-        { path: absolutePath },
-        { directory: "/tmp/mm-agent-project", worktree: "/tmp/mm-agent-project" } as ToolContext,
-      ),
-      /relative path/i,
-    )
-  }
+  const output = JSON.parse(await definition.execute(
+    { scope: "case", case_id: "case-tool" },
+    { directory, worktree: directory } as ToolContext,
+  ) as string) as { ok: boolean; checks: Array<Record<string, unknown>> }
+  assert.equal(output.ok, true)
+  assert.deepEqual(output.checks.map((check) => check.id), ["case-write"])
+  assert.match(String(output.checks[0]?.evidence), new RegExp(directory.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "u"))
+})
+
+test("prepare Tool snapshots relative explicit input and resumes it", async (t) => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "mm-agent-prepare-tool-"))
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  await writeFile(path.join(directory, "problem.md"), "tool input\n")
+  const mmAgentPlugin = await loadPlugin()
+  const hooks = await mmAgentPlugin({ directory, worktree: directory } as PluginInput)
+  const definition = hooks.tool?.mm_agent_prepare
+  assert.ok(definition)
+
+  const created = JSON.parse(await definition.execute(
+    { case_id: "case-tool", explicit_paths: ["problem.md"] },
+    { directory, worktree: directory } as ToolContext,
+  ) as string) as { ok: boolean; result?: { mode?: string } }
+  assert.equal(created.ok, true)
+  assert.equal(created.result?.mode, "created")
+
+  const resumed = JSON.parse(await definition.execute(
+    { case_id: "case-tool" },
+    { directory, worktree: directory } as ToolContext,
+  ) as string) as { ok: boolean; result?: { mode?: string } }
+  assert.equal(resumed.ok, true)
+  assert.equal(resumed.result?.mode, "resumed")
+  assert.equal(await readFile(path.join(directory, "problem.md"), "utf8"), "tool input\n")
+
+  const invalid = JSON.parse(await definition.execute(
+    { case_id: "../invalid" },
+    { directory, worktree: directory } as ToolContext,
+  ) as string) as { ok: boolean; error?: { code?: string; repair?: string } }
+  assert.equal(invalid.ok, false)
+  assert.equal(invalid.error?.code, "INVALID_CASE_ID")
+  assert.equal(invalid.error?.repair, "user")
 })
 
 test("compaction appends one active Case state hint without replacing the prompt", async (t) => {
@@ -1026,7 +1028,7 @@ test("runtime: isolated install loads the Plugin and discovers its Agent and Ski
   assert.equal(skill.location, path.join(configRoot, "skills", "mm-agent", "SKILL.md"))
 })
 
-test("runtime: model invokes the installed context Tool with real project paths", {
+test("runtime: model invokes Step 3 Tools, compiles the real template, and creates a recoverable Case", {
   skip: process.env.MM_AGENT_RUNTIME !== "1",
   timeout: 300_000,
 }, async (t) => {
@@ -1034,9 +1036,8 @@ test("runtime: model invokes the installed context Tool with real project paths"
   t.after(() => rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }))
   const projectRoot = path.join(root, "project")
   const configRoot = path.join(root, "config-home", "opencode")
-  const relativeFixture = path.join("fixtures", "context.json")
-  await mkdir(path.join(projectRoot, "fixtures"), { recursive: true })
-  await writeFile(path.join(projectRoot, relativeFixture), '{"marker":"MM_AGENT_TOOL_CONTEXT_6A82"}\n')
+  await mkdir(projectRoot, { recursive: true })
+  await writeFile(path.join(projectRoot, "problem.md"), "runtime immutable input\n")
 
   const npmCli = process.env.npm_execpath
   assert.ok(npmCli)
@@ -1054,9 +1055,10 @@ test("runtime: model invokes the installed context Tool with real project paths"
 
   const opencode = findOpenCodeBinary()
   const prompt = [
-    "Call mm_agent_spike_context exactly once with path fixtures/context.json.",
+    "Call mm_agent_check exactly once with scope tex.",
+    "After it completes, call mm_agent_prepare exactly once with case_id case-runtime and explicit_paths containing problem.md.",
     "Do not use any other tool.",
-    "Then reply exactly MM_AGENT_TOOL_DONE_4F19.",
+    "Then reply exactly MM_AGENT_STEP3_TOOLS_DONE_4F19.",
   ].join(" ")
   const result = runRuntimeProcess(
     opencode,
@@ -1065,7 +1067,7 @@ test("runtime: model invokes the installed context Tool with real project paths"
     runtimeEnvironment(root),
     240_000,
   )
-  assertRuntimeSuccess(result, "opencode run context Tool prompt")
+  assertRuntimeSuccess(result, "opencode run Step 3 Tool prompt")
   const events = result.stdout
     .split(/\r?\n/u)
     .filter(Boolean)
@@ -1074,17 +1076,62 @@ test("runtime: model invokes the installed context Tool with real project paths"
       sessionID?: string
       part?: { type?: string; tool?: string; text?: string; state?: { status?: string; output?: string } }
     })
-  const toolEvent = events.find((event) => event.type === "tool_use" && event.part?.tool === "mm_agent_spike_context")
-  assert.ok(toolEvent)
-  assert.equal(toolEvent.part?.state?.status, "completed")
-  assert.match(toolEvent.sessionID ?? "", /^ses_/u)
-  const output = JSON.parse(toolEvent.part?.state?.output ?? "") as Record<string, unknown>
-  assert.deepEqual(output, {
-    directory: projectRoot,
-    worktree: projectRoot,
-    resolved_path: path.resolve(projectRoot, relativeFixture),
+  const checkEvent = events.find((event) => event.type === "tool_use" && event.part?.tool === "mm_agent_check")
+  const prepareEvent = events.find((event) => event.type === "tool_use" && event.part?.tool === "mm_agent_prepare")
+  assert.ok(checkEvent)
+  assert.ok(prepareEvent)
+  assert.equal(checkEvent.part?.state?.status, "completed")
+  assert.equal(prepareEvent.part?.state?.status, "completed")
+  assert.match(checkEvent.sessionID ?? "", /^ses_/u)
+  assert.equal(prepareEvent.sessionID, checkEvent.sessionID)
+  const checkOutput = JSON.parse(checkEvent.part?.state?.output ?? "") as {
+    ok?: boolean
+    checks?: Array<{ id?: string; status?: string; evidence?: string }>
+  }
+  assert.equal(checkOutput.ok, true)
+  assert.deepEqual(checkOutput.checks?.map((check) => check.id), ["tex-template"])
+  assert.equal(checkOutput.checks?.[0]?.status, "pass")
+  assert.match(checkOutput.checks?.[0]?.evidence ?? "", /example\.tex; pdf_bytes=[1-9]\d*/u)
+  const prepareOutput = JSON.parse(prepareEvent.part?.state?.output ?? "") as {
+    ok?: boolean
+    result?: { mode?: string; snapshot?: { state?: { revision?: number } } }
+  }
+  assert.equal(prepareOutput.ok, true)
+  assert.equal(prepareOutput.result?.mode, "created")
+  assert.equal(prepareOutput.result?.snapshot?.state?.revision, 0)
+  assert.equal(await readFile(path.join(projectRoot, "problem.md"), "utf8"), "runtime immutable input\n")
+  assert.ok(events.some((event) => event.part?.type === "text" && event.part.text === "MM_AGENT_STEP3_TOOLS_DONE_4F19"))
+
+  const recoveryScript = [
+    "const { FileCaseContextStore } = await import(process.argv[1]);",
+    "const store = new FileCaseContextStore({ runsRoot: process.argv[2] });",
+    "const snapshot = await store.open(process.argv[3]);",
+    "process.stdout.write(JSON.stringify({ case_id: snapshot.caseFile.case_id, revision: snapshot.state.revision, files: snapshot.inputManifest.files.length }));",
+  ].join(" ")
+  const recovery = runRuntimeProcess(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      recoveryScript,
+      pathToFileURL(path.join(repositoryRoot, "dist", "core", "case-context-store.js")).href,
+      path.join(projectRoot, "runs"),
+      "case-runtime",
+    ],
+    projectRoot,
+    process.env,
+  )
+  assertRuntimeSuccess(recovery, "fresh-process Case recovery")
+  assert.deepEqual(JSON.parse(recovery.stdout), {
+    case_id: "case-runtime",
+    revision: 0,
+    files: 1,
   })
-  assert.ok(events.some((event) => event.part?.type === "text" && event.part.text === "MM_AGENT_TOOL_DONE_4F19"))
+  const persistedFacts = ["case.json", "state.json", path.join("input", "manifest.json")]
+  for (const relative of persistedFacts) {
+    const content = await readFile(path.join(projectRoot, "runs", "case-runtime", relative), "utf8")
+    assert.equal(content.includes(projectRoot), false, relative)
+  }
 })
 
 test("runtime: built-in task creates a linked fresh child that reads disk context", {
@@ -1203,7 +1250,8 @@ test("runtime: Skill slash command executes and restart rediscovers Plugin and S
   t.after(() => rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }))
   const projectRoot = path.join(root, "project")
   const configRoot = path.join(root, "config-home", "opencode")
-  await mkdir(projectRoot, { recursive: true })
+  await mkdir(path.join(projectRoot, "problems"), { recursive: true })
+  await writeFile(path.join(projectRoot, "problems", "problem.md"), "slash intake\n")
 
   const npmCli = process.env.npm_execpath
   assert.ok(npmCli)
@@ -1236,15 +1284,56 @@ test("runtime: Skill slash command executes and restart rediscovers Plugin and S
   const commandEvents = commandRun.stdout
     .split(/\r?\n/u)
     .filter(Boolean)
-    .map((line) => JSON.parse(line) as { sessionID?: string; part?: { type?: string; text?: string } })
+    .map((line) => JSON.parse(line) as {
+      type?: string
+      sessionID?: string
+      part?: {
+        type?: string
+        tool?: string
+        text?: string
+        state?: { status?: string; output?: string }
+      }
+    })
   const commandTexts = commandEvents
     .filter((event) => event.part?.type === "text")
     .map((event) => event.part?.text)
-  assert.equal(
-    normalizeModelMarkerText(commandTexts),
-    "MM_AGENT_SKILL_DISCOVERED_31B7",
-    `unexpected Skill command text events: ${sanitizeRuntimeOutput(JSON.stringify(commandTexts))}`,
+  const checkEvent = commandEvents.find(
+    (event) => event.type === "tool_use" && event.part?.tool === "mm_agent_check",
   )
+  assert.ok(checkEvent)
+  assert.equal(checkEvent.part?.state?.status, "completed")
+  const prepareEvent = commandEvents.find(
+    (event) => event.type === "tool_use" && event.part?.tool === "mm_agent_prepare",
+  )
+  const check = JSON.parse(checkEvent.part?.state?.output ?? "") as {
+    ok?: boolean
+    checks?: Array<{ id?: string; status?: string; repair?: string; evidence?: string }>
+  }
+  assert.equal(check.checks?.length, 8)
+  const python = check.checks?.find((item) => item.id === "python-3.12")
+  assert.match(python?.status ?? "", /^(?:pass|fail)$/u)
+  assert.equal(python?.repair, python?.status === "pass" ? "none" : "automatic")
+  assert.equal(
+    check.checks?.find((item) => item.id === "tex-template")?.status,
+    "pass",
+  )
+  assert.match(
+    check.checks?.find((item) => item.id === "tex-template")?.evidence ?? "",
+    /pdf_bytes=[1-9]\d*/u,
+  )
+  if (check.ok) {
+    assert.ok(prepareEvent)
+    assert.equal(prepareEvent.part?.state?.status, "completed")
+    const prepared = JSON.parse(prepareEvent.part?.state?.output ?? "") as {
+      ok?: boolean
+      result?: { mode?: string }
+    }
+    assert.equal(prepared.ok, true)
+    assert.equal(prepared.result?.mode, "created")
+  } else {
+    assert.equal(prepareEvent, undefined)
+  }
+  assert.ok(commandTexts.join(" ").length > 0)
   assert.match(commandEvents.find((event) => event.sessionID)?.sessionID ?? "", /^ses_/u)
 
   const restartedAgent = runRuntimeProcess(opencode, ["debug", "agent", "mm-agent-spike"], projectRoot, env)

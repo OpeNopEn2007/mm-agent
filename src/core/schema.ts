@@ -268,7 +268,12 @@ export type ActorRole = "analyst" | "modeler" | "solver" | "writer";
 export type Scope = "analysis" | "modeling" | `solving/${string}` | "reporting";
 export type OpenInput = {
   sourceKind: "explicit-path" | "problems-directory";
-  files: Array<{ label: string; sourcePath: string }>;
+  files: Array<{
+    label: string;
+    sourcePath: string;
+    expectedSize?: number;
+    expectedSha256?: string;
+  }>;
   policy: {
     revisionBudget: {
       analysis: number;
@@ -278,7 +283,11 @@ export type OpenInput = {
     };
     rubrics: Record<
       "analysis" | "modeling" | "solving" | "reporting",
-      { sourcePath: string }
+      {
+        sourcePath: string;
+        expectedSize?: number;
+        expectedSha256?: string;
+      }
     >;
   };
 };

@@ -69,7 +69,7 @@
 
 - `README.md` 解释产品、机制、目录和使用入口。
 - `IDEA.md` 解释项目为什么存在。
-- `PLAN.md` 解释当前实施顺序和验证 gate。
+- `PLAN.md` 定义当前里程碑的预期结果、完成边界和验收证据。
 - `HANDOFF.md` 记录当前交接状态。
 - `docs/context/` 定义持久项目与 Case 协议。
 - `docs/architecture/` 定义实现接口和论文对齐。
@@ -87,6 +87,13 @@
 - Case 完成前用新鲜命令验证计算、编译和 PDF。
 - 在 Golden Case 跑通前保持实现面窄。
 - 除非用户要求或里程碑需要，否则不要提交 commit。
+- 根 `PLAN.md` 是结果契约：描述里程碑结束时必须成立的事实、交付边界和验收证据，不规定逐步执行过程。
+- 本项目不使用 Superpowers 作为执行框架，也不强制 TDD、RED/GREEN、mutation 或逐微任务全量回归。执行模型根据风险选择实现与测试顺序。
+- 本仓库不得调用 `tdd` Skill；测试是验收证据，不是强制实现顺序。
+- 协议、安全、并发、迁移、数据完整性和 bug 修复必须有针对性回归证据；里程碑收口时 fresh 执行完整相关测试、Build、受影响的真实 runtime gate 和 diff/package checks。
+- 独立审查默认在里程碑候选完成后执行一次；只有新的 Critical/Important 风险证据才触发定向复审，不进行无新增证据的循环审查。
+- Subagent 只用于边界清楚且能独立验收的任务，不得与主 Agent 重复工作或并行修改同一文件。机械搜索/文档整理默认 `gpt-5.6-terra medium`，确定性枚举可用 `terra low`，低风险且边界明确的代码实现用 `gpt-5.6-sol medium`，安全、并发、跨平台、架构和最终验收保留 `gpt-5.6-sol high`；除非用户明确授权，不使用 `xhigh`、`max` 或 `ultra`。
+- 需要为 subagent 指定较低档位时，使用 `fork_turns="none"` 或有限正整数并提供自包含 brief；完整历史 fork 会继承主 Agent 的模型与推理档位，不能作为降档手段。
 
 ## 文档变更收口
 
@@ -95,7 +102,7 @@
 - `README.md`、`PLAN.md`、`HANDOFF.md` 和 `CHANGELOG.md` 是否与当前事实一致。
 - `docs/README.md` 是否准确描述文档分类。
 - `AGENTS.md` 与 `CLAUDE.md` 是否保持同一套规则（字节一致）。
-- 对旧路径、旧 runtime、旧命令和旧入口的活跃引用是否已搜索并移除（Pi CLI Extension、旧 Claude/Codex Plugin、`${CLAUDE_PLUGIN_ROOT}`、`dispatch_id`、`state_revision`、`active_dispatches`、`../../../` 路径示例、`pi-extension-harness.md`、`.planning/` 作为活跃 runtime 路径）。
+- 对旧路径、旧 runtime、旧命令、旧入口和旧执行框架的活跃引用是否已搜索并移除（Pi CLI Extension、旧 Claude/Codex Plugin、Superpowers、`${CLAUDE_PLUGIN_ROOT}`、`dispatch_id`、`state_revision`、`active_dispatches`、`../../../` 路径示例、`pi-extension-harness.md`、`.planning/` 作为活跃 runtime 路径）。
 - `.archived/` 的索引是否仍说明其历史性质。
 - `git status --short` 的无关改动是否被保留并记录。
 

@@ -14,7 +14,7 @@
 
 ## 当前状态
 
-`v1.0.0` 的 Canonical Core 由 `4ce82cd` 接受，OpenCode Adapter 设计由 `1040e63` 接受。OpenCode Plugin Spike 已由 `315c319` 接受；Step 2 CaseContextStore 已实现并通过 contract、并发、崩溃恢复、构建和 package 验证，同时保持 5 个真实 OpenCode Adapter runtime regression gate 全绿。下一实施切口是 Step 3 Preflight 与输入整理，本轮尚未开始。
+`v1.0.0` 的 Canonical Core 由 `4ce82cd` 接受，OpenCode Adapter 设计由 `1040e63` 接受。OpenCode Plugin Spike 已由 `315c319` 接受；Step 2 CaseContextStore 已由 `cfda6ea` 接受；Step 3 Preflight 与输入整理已在当前 acceptance HEAD 完成并通过 focused、完整回归、Build、package/diff 和 5 个无跳过的真实 OpenCode runtime gate。Step 4 尚未开始。
 
 - Canonical Core：[`docs/architecture/canonical-core.md`](docs/architecture/canonical-core.md) 与 [`docs/context/artifact-protocol.md`](docs/context/artifact-protocol.md) 是宿主无关机制唯一来源。
 - OpenCode Adapter：[`docs/architecture/opencode-plugin-harness.md`](docs/architecture/opencode-plugin-harness.md) 定义 v1 唯一 Adapter 的实现接口。
@@ -24,7 +24,7 @@
 - 当前目标是交付 Canonical Core 的 OpenCode Adapter 与一个真实赛题到 PDF 的 Golden Case。
 - PDF 不存在或 LaTeX 编译失败时，Case 不得标记为完成。
 
-当前执行计划见 [PLAN.md](PLAN.md)。当前交接状态见 [HANDOFF.md](HANDOFF.md)。
+当前里程碑结果契约见 [PLAN.md](PLAN.md)。当前交接状态见 [HANDOFF.md](HANDOFF.md)。
 
 ## 产品标准
 
@@ -224,7 +224,7 @@ OpenCode 会将安装后的 `mm-agent` Skill 自动暴露为 slash command。v1 
 2. `problems/` 下的赛题文件、附件和数据。
 3. 两者都不存在时询问用户。
 
-`mm_agent_prepare` 把发现的输入复制或整理到 `runs/<case-id>/input/`，生成输入 manifest 与四份 Rubric 快照，并固化 `case.json`。它不修改用户原始题目目录，也不保留可被后续访问的用户原始绝对路径。
+`mm_agent_prepare` 验证发现的输入，构造 input manifest 与 Case Policy，并且只通过 `CaseContextStore.open` 把输入副本、四份 Rubric 快照、`case.json` 和初始 `state.json` 固化到 Case。已有 Case 在省略新 intake 参数时恢复；冲突重复创建返回错误，不覆盖不可变事实。整个过程不修改用户原始题目目录，也不保留可被后续访问的用户原始绝对路径。
 
 ## 四阶段工作流
 
@@ -302,8 +302,8 @@ Problem Analysis、Modeling 和 Critic 的角色专属规则放在 Agent prompt 
 
 | Tool | 确定性职责 |
 |------|------------|
-| `mm_agent_check` | 检查 OpenCode、Plugin、Skills、uv/Python、Case 写权限、模型 cache 和 TeX 模板编译。 |
-| `mm_agent_prepare` | 发现输入、固化输入副本、写入 Case Policy 和四份 Rubric 快照，生成 `case.json`。 |
+| `mm_agent_check` | 检查 OpenCode、Plugin、Skills、uv/Python、Case 写权限、模型 cache 和 TeX 模板编译；只报告 HMML 状态，不选择模型或构建最终索引。 |
+| `mm_agent_prepare` | 发现并验证输入，构造 manifest 与 Case Policy，委托 `CaseContextStore.open` 固化不可变 Case。 |
 | `mm_agent_case` | `open`、`dispatch`、`gate`、`inspect`；管理 Case 状态、Context Manifest、Attempt 和 Artifact 提升。 |
 | `mm_agent_hmml` | 校验索引、执行 dense 或 lexical retrieval、记录模式、模型、revision、index hash 和分数。 |
 | `mm_agent_compute` | 在受控工作目录执行 Python、保存 stdout/stderr、timeout 和 Runtime Evidence。 |
@@ -694,7 +694,7 @@ Golden Case 只有在以下条件全部满足时通过：
 mm-agent/
 ├── README.md              # 完整产品与机制设计入口
 ├── IDEA.md                # 项目为什么存在
-├── PLAN.md                # 当前实施计划
+├── PLAN.md                # 里程碑结果与验收契约
 ├── HANDOFF.md             # 当前交接状态
 ├── CHANGELOG.md           # 版本与结构变化
 ├── AGENTS.md              # 通用 Agent 项目规则
@@ -716,12 +716,12 @@ mm-agent/
 └── .archived/             # 非活跃历史资产
 ```
 
-Step 1 已创建 npm package、最小 Plugin/Agent/installer、`mm-agent` Spike Skill 与宿主验证测试；Step 2 已创建 `src/core/` 的 CaseContextStore、持久 schema、安全路径、迁移、Context Recipe、Gate transaction 和 contract tests。其余 Skills、`runtime/`、完整 Tools 和 Golden Case 仍按 [PLAN.md](PLAN.md) 后续步骤创建；README 不把它们描述为可用功能。
+Step 1 已创建 npm package、最小 Plugin/Agent/installer 与宿主验证测试；Step 2 已创建 `src/core/` 的 CaseContextStore、持久 schema、安全路径、迁移、Context Recipe、Gate transaction 和 contract tests；Step 3 已交付 `mm_agent_check`、`mm_agent_prepare`、`/mm-agent` 的 preflight/intake 流程、四份 Rubric 快照源与 `problems/` 默认入口。Step 4 及其后的 HMML runtime、Compute/Compile、完整四阶段 Agents/Skills 和 Golden Case 仍以 [PLAN.md](PLAN.md) 的里程碑结果为准。
 
 ## 文档入口
 
 - [IDEA.md](IDEA.md)：项目动机和工程品味。
-- [PLAN.md](PLAN.md)：可执行实施顺序、文件面和验收 gate。
+- [PLAN.md](PLAN.md)：里程碑预期结果、完成边界和验收证据。
 - [HANDOFF.md](HANDOFF.md)：当前阶段、dirty state 和下一步动作。
 - [docs/context/project-kernel.md](docs/context/project-kernel.md)：项目 Kernel 与协作原则。
 - [docs/architecture/canonical-core.md](docs/architecture/canonical-core.md)：宿主无关机制唯一来源。

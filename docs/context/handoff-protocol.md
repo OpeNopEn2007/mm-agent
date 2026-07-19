@@ -12,7 +12,7 @@ Handoff 的目标是让任何智能体都能从仓库文件恢复项目真相，
 | `AGENTS.md` | 通用智能体入口。说明项目方向、必读顺序和工作规则。 |
 | `CLAUDE.md` | Claude 系智能体入口。内容与 `AGENTS.md` 保持同步。 |
 | `README.md` | 项目结构和入口。 |
-| `PLAN.md` | 当前里程碑的执行计划。 |
+| `PLAN.md` | 结果导向的里程碑契约：预期结果、交付边界和验收证据。 |
 | `docs/context/` | 项目级协议。 |
 
 `HANDOFF.md` 是活文件，只记录当前状态；本文件是协议文件，记录如何交接。
@@ -37,13 +37,7 @@ git branch --show-current
 git rev-parse --show-toplevel
 ```
 
-然后按顺序阅读：
-
-1. `README.md`
-2. `AGENTS.md` 或 `CLAUDE.md`
-3. `HANDOFF.md`
-4. `PLAN.md`
-5. 与任务相关的 `docs/context/` 或 `docs/architecture/` 文档
+然后读取 `AGENTS.md` 或 `CLAUDE.md`，并遵循其中统一维护的完整必读顺序；本文件不保存第二份易漂移的阅读清单。
 
 接手摘要应回答：
 
@@ -102,10 +96,8 @@ git rev-parse --show-toplevel
 ```markdown
 ## Required Reading
 
-1. AGENTS.md
-2. HANDOFF.md
-3. PLAN.md
-4. relevant source or docs files
+1. AGENTS.md or CLAUDE.md, including its required reading sequence
+2. task-specific source or docs files
 
 ## Goal
 
@@ -137,7 +129,7 @@ git rev-parse --show-toplevel
 - points needing commander review
 ```
 
-与具体工具、模型或聊天窗口有关的操作建议，应放在 prompt 外面，避免污染可复制任务块。
+与具体工具、模型、TDD 顺序或聊天窗口有关的操作建议，应放在 prompt 外面，避免把一种执行过程误写成项目验收条件。
 
 ## 验收 Worker 输出
 

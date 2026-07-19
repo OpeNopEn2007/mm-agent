@@ -17,6 +17,10 @@
 - 实现 CaseContextStore 的 `open / dispatch / gate / inspect` contract、`schema_version: 1` runtime schemas、显式 migration seam、Case-relative secure paths、SHA-256、原子 JSON 和跨 Store lock/CAS。
 - 实现固定 Role Recipe、三位 Attempt、Critic 复用 Manifest、Solver 直接依赖 read set、Review/promotion durable transaction、revision budget、blocker、DAG/wave、Task Memory、Runtime Evidence 和派生 completion evidence。
 - 增加 CaseContextStore contract tests；普通测试为 81 passed、0 failed，5 个真实 OpenCode Adapter runtime regression gate 在宿主 `1.18.3` 上全部通过。
+- 完成 Step 3 `mm_agent_check`：结构化检查 Node/OpenCode、uv/Python、Case 写权限、HMML candidate index/cache，并真实编译 bundled `cumcmthesis` 模板验证非空 PDF；检查过程不读取项目 `.venv`、不下载 Python、不选择 embedding 模型。
+- 完成 Step 3 `mm_agent_prepare`：显式路径优先、`problems/` 回退，只委托 `CaseContextStore.open` 固化输入、Policy、四份 Rubric 与初始状态；冲突、输入变化、linked path、无效 ID 和不可写存储均返回结构化失败。
+- `/mm-agent` Skill 在正文前执行 preflight 与 intake；存在 `fail` 时停止，未新增 `/doctor`、`/setup` 或其他公开入口。
+- Step 3 focused、完整回归、Build、package/diff 与 5 个真实 OpenCode runtime gate 通过；runtime 直接覆盖真实模板 PDF、模型调用两项 Tool 和新进程 Case 恢复。
 
 ### 文档
 - 接受 `4ce82cd` 提交的 Canonical Core（`docs/architecture/canonical-core.md` + `docs/context/artifact-protocol.md`）作为宿主无关机制唯一来源。
@@ -25,6 +29,10 @@
 - 必读顺序调整为 `README.md` → `IDEA.md` → `HANDOFF.md` → `PLAN.md` → `docs/context/project-kernel.md` → `docs/architecture/canonical-core.md` → `docs/context/artifact-protocol.md` → `docs/architecture/opencode-plugin-harness.md` → `docs/architecture/paper-alignment.md`。
 - `AGENTS.md` 与 `CLAUDE.md` 保持字节内容一致。
 - 删除 `docs/architecture/pi-extension-harness.md` 与依赖 `${CLAUDE_PLUGIN_ROOT}` 的过期 `.mcp.json`。
+- 将根 `PLAN.md` 重构为结果导向的里程碑契约，只描述预期结果、交付边界和验收证据；取消 Superpowers、强制 TDD/RED-GREEN 和逐微任务全量回归约束。
+- 进一步从 `PLAN.md` 移除测试顺序、审查次数和提交方式等执行规则，并明确 Step 3 的 Case 恢复/冲突语义、`prepare -> CaseContextStore.open` 所有权及 HMML 检查边界。
+- 删除活跃的 `docs/superpowers/` 过程计划，将 Step 2 压缩为 `.archived/implementation-records/` 下的历史记录，并明确归档不参与当前实施。
+- 项目入口明确禁止调用 `tdd` Skill，并按任务风险划分 Terra low/medium、Sol medium 与 Sol high 的 subagent 使用边界。
 
 ### 项目结构
 - 保留 `runs/.gitkeep` 以记录运行期 Case 输出目录边界。
@@ -42,7 +50,7 @@
 - 2026-05-16: 更新 `docs/research/paper-vs-implementation-gap-analysis.md` 全面差距分析（历史，已通过归档处理）。
 
 ### 开发方向
-- OpenCode Plugin Spike 与 CaseContextStore 已通过各自 gate；下一阶段按 `PLAN.md` 第 3 步实现 Preflight 与输入整理。
+- OpenCode Plugin Spike、CaseContextStore 与 Step 3 Preflight/输入整理已通过各自 gate；Step 4 HMML 检索评测尚未开始，本次不自动进入。
 - Spike 只验证 Adapter 宿主假设，不代表四阶段、HMML、Compute/Compile 或 Golden Case 已实现。
 - 旧 Pi、Claude/Codex Plugin 方向进入历史维护/归档状态，不再作为后续架构主线。
 

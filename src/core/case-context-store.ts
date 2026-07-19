@@ -150,19 +150,44 @@ export class FileCaseContextStore implements CaseContextStore {
         const relative = `input/files/${String(index + 1).padStart(3, "0")}-${safeLabel}${extension}`;
         const target = path.join(staging, ...relative.split("/"));
         await copyFile(source.sourcePath, target);
+        const copiedSize = (await stat(target)).size;
+        const copiedHash = await hashPath(target);
+        if (
+          (source.expectedSize !== undefined &&
+            copiedSize !== source.expectedSize) ||
+          (source.expectedSha256 !== undefined &&
+            copiedHash !== source.expectedSha256)
+        )
+          throw new CaseProtocolError(
+            "READ_SET_STALE",
+            `input changed while Case ${caseId} was being created: ${source.label}`,
+          );
         files.push({
           source_label: source.label,
           path: relative,
-          size: (await stat(target)).size,
-          sha256: await hashPath(target),
+          size: copiedSize,
+          sha256: copiedHash,
         });
       }
       const rubrics = {} as CaseFile["policy"]["rubrics"];
       for (const role of RUBRICS) {
         const relative = `input/policy/rubrics/${role}.md`;
         const target = path.join(staging, ...relative.split("/"));
-        await copyFile(input.policy.rubrics[role].sourcePath, target);
-        rubrics[role] = { path: relative, sha256: await hashPath(target) };
+        const rubricSource = input.policy.rubrics[role];
+        await copyFile(rubricSource.sourcePath, target);
+        const rubricSize = (await stat(target)).size;
+        const rubricHash = await hashPath(target);
+        if (
+          (rubricSource.expectedSize !== undefined &&
+            rubricSize !== rubricSource.expectedSize) ||
+          (rubricSource.expectedSha256 !== undefined &&
+            rubricHash !== rubricSource.expectedSha256)
+        )
+          throw new CaseProtocolError(
+            "READ_SET_STALE",
+            `Rubric changed while Case ${caseId} was being created: ${role}`,
+          );
+        rubrics[role] = { path: relative, sha256: rubricHash };
       }
       const manifest: InputManifest = { schema_version: SCHEMA_VERSION, files };
       const caseFile: CaseFile = {

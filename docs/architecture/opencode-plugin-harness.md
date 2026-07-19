@@ -50,9 +50,15 @@ type CheckResult = {
 }
 ```
 
+`mm_agent_check` 只报告 HMML index/cache 的当前可用性与修复分类；embedding 模型选择和最终索引构建属于 HMML 里程碑，不能由 preflight 提前完成。
+
+当前实现支持 `all`、`environment`、`case`、`hmml` 和 `tex` scope。完整检查项固定为 Node、OpenCode 与 Plugin API 兼容性、uv、禁止下载/禁止 project discovery 的 Python 3.12 探测、`runs/` 独占写入/删除探针、HMML candidate index、MM-Agent 专用 cache，以及 `templates/cumcmthesis/example.tex` 的真实 XeLaTeX 编译和非空 PDF 字节数。版本字符串不能替代模板编译；Python 探测会移除 `.venv`、Conda 和用户 site 环境影响，不安装或修改任何 Python。
+
 ### `mm_agent_prepare`
 
-解析显式输入或 `problems/`，创建 `runs/<case-id>/input/manifest.json` 和 `runs/<case-id>/case.json`，把输入副本和 Case Policy（含 revision budget 与四份 Rubric 快照）固化到 Case；不修改源文件，不保留可被后续访问的用户原始绝对路径。
+解析显式输入或 `problems/`，构造 input manifest 与 Case Policy，并且只通过 `CaseContextStore.open` 创建 `runs/<case-id>/input/manifest.json`、`case.json` 和初始 `state.json`。Core `open` 把输入副本、revision budget 与四份 Rubric 快照固化到 Case；Intake 不直接写 Case 状态，不修改源文件，也不保留可被后续访问的用户原始绝对路径。
+
+Tool 返回 `{ ok: true, result }` 或 `{ ok: false, error }`。错误包含稳定 code、可行动 message、`automatic / user / none` repair 和是否需要用户输入；无效 Case ID、空/缺失输入、linked input、linked/unwritable `runs/`、冲突输入或 Policy、源文件在发现与固化之间变化，以及损坏的 Rubric 都不能发布部分 Case。相同 Policy 的已有 Case 可在没有新 input 参数时恢复，不重新读取原始来源。
 
 ### `mm_agent_case`
 
@@ -68,7 +74,7 @@ type CaseAction =
 
 四个 action 直接映射 Core Interface：
 
-- `open` 既能根据 `inputManifest` 与 `CasePolicy` 固化输入副本、Rubric 快照、`case.json` 与初始 `state.json`，也能省略这些参数并先做 schema 校验以恢复已有 Case。
+- `open` 既能根据 `inputManifest` 与 `CasePolicy` 固化输入副本、Rubric 快照、`case.json` 与初始 `state.json`，也能省略这些参数并先做 schema 校验以恢复已有 Case；已有 Case 收到新的 intake 参数时必须返回冲突，不得覆盖不可变事实。
 - `dispatch` 为 Actor 创建唯一 Attempt，写入 `context.json`；`baseRevision` 仅作为 Manifest 的审计字段，不参与 Gate 的 compare-and-swap。
 - `gate` 必须携带调用方的 `expectedRevision`，由 Core 拒绝并发覆盖；只有 `pass` 才能提升 Artifact 并推进 Case 状态。
 - `inspect` 是只读操作，返回 `state.json`、accepted artifact index、由 attempt 目录推导的 active attempts、blockers 和派生 completion evidence，不写任何状态。

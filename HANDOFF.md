@@ -6,84 +6,63 @@
 
 ### Workspace
 
-- primary worktree: `D:\0_Main\02_Coding\mm-agent`，branch `main`，仍停在 `cb72307`；本轮未修改 main。
+- primary worktree: `D:\0_Main\02_Coding\mm-agent`，branch `main`，本轮未修改。
 - development worktree: `D:\0_Main\02_Coding\mm-agent\.worktrees\opencode-plugin-spike`，branch `feat/opencode-plugin-spike`。
-- latest accepted commits: `315c319 feat: validate OpenCode plugin harness`、`ab56d42 docs: record OpenCode plugin spike acceptance`，以及包含本文件的 `feat: implement CaseContextStore contract` Step 2 里程碑。
-- dirty state: 包含本文件的 Step 2 里程碑提交完成后应为 clean；`node_modules/`、`dist/`、`.superpowers/` 和测试 cache 为 ignored/generated。
-- linked worktrees: 仅上述 main 与 feature worktree。
-- stash: 无。早期 `docs: define OpenCode harness architecture` stash 已确认被 `4ce82cd` 与 `1040e63` 的 accepted 设计取代，并按用户明确授权在本轮 docs closeout 后删除。
-- remote state: 本轮没有 push；未获用户明确要求前不要 push。
+- accepted baseline: `315c319 feat: validate OpenCode plugin harness`、`ab56d42 docs: record OpenCode plugin spike acceptance`、`cfda6ea feat: implement CaseContextStore contract`。
+- Step 3 acceptance: 当前 HEAD 中 subject 为 `feat: implement Step 3 preflight and intake` 的里程碑提交；本文件与该提交共同构成接受事实，不依赖私人聊天。
+- generated only: `node_modules/`、`dist/` 和测试临时目录；不进入 commit。
+- stash: 无；本轮未 reset、stash、切换分支或修改 main。
+- remote state: 未 push；未获用户明确要求前不要 push。
 
 ### Current Phase
 
 - phase: `v1.0.0` 正式开发。
-- accepted step: `PLAN.md` Step 2 CaseContextStore 与文件契约。
-- next step: Step 3 Preflight 与输入整理，尚未开始；本轮停在 Step 2，不进入 Step 3。
-- forbidden next scope: Step 3 gate 通过前，不进入 HMML、Compute/Compile、四阶段编排或 Golden Case。
-- worker state: 无活动 worker；Step 2 的独立 Terra/high spec review 与 code-quality/security review 均已通过，所有 Critical/Important 均关闭。
+- accepted through: `PLAN.md` Step 3 Preflight 与输入整理。
+- current boundary: Step 3 已收口，本次立即停止；Step 4 HMML 检索评测与运行时尚未开始。
+- process rule: 根 `PLAN.md` 是结果契约；项目不使用 Superpowers，不调用 `tdd` Skill，也不强制 TDD/RED-GREEN 顺序。
+- review state: commander 对最终 Step 3 diff 完成协议、安全、失败语义、package 和 runtime 审查，Critical/Important 均已关闭；本轮未使用 subagent。
 
-### Accepted
+### Step 3 Accepted Result
 
-- `4ce82cd docs: define canonical core mechanisms` 仍是 Canonical Core 与 Artifact 协议的唯一宿主无关 baseline。
-- `1040e63 docs: align OpenCode adapter build plan` 仍是 OpenCode Adapter 设计 baseline。
-- `315c319 feat: validate OpenCode plugin harness` 接受 Step 1 实现：
-  - ESM package `@mm-agent/opencode@1.0.0`，固定 `@opencode-ai/plugin@1.18.2`。
-  - default Plugin、non-overwrite `mm-agent-spike` hidden Agent、只读 `mm_agent_spike_context` Tool 和可选 compaction hint。
-  - `mm-agent` Skill discovery/slash bridge。
-  - install/update/remove CLI、receipt hash、Plugin 注册所有权、用户修改冲突保护、lexical/realpath/junction 边界和 staged transaction rollback。
-  - Windows drive、UNC 与 POSIX path semantics。
-  - positive npm files allowlist；临时 `src/tools/spike.ts` 不存在。
-- 两轮独立 review 已关闭所有 Critical/Important findings；最终 whole-branch verdict 为 `Ready to accept: Yes`。
-- 旧 Python smoke suite 的 6 个 retired Claude-layout 失败仍属于 PLAN Step 7，不是 Step 1 gate。
+- Plugin 当前注册 `mm_agent_check` 与 `mm_agent_prepare` 两项已实现 Tool；临时 `mm_agent_spike_context` 已移除，唯一公开命令仍是 `/mm-agent`。
+- `mm_agent_check` 对 Node、OpenCode/Plugin API、uv、Python 3.12、Case 写权限、HMML candidate index/cache 和真实 `templates/cumcmthesis/example.tex` 编译返回 `pass / warn / fail`、直接 evidence 与 `automatic / user / none` repair。
+- Python 探测使用 `uv python find --no-project --no-python-downloads`，移除 `.venv`、Conda 与 user-site 环境影响；preflight 不安装 Python、不下载模型、不修改系统环境。
+- HMML 在 Step 3 只报告 candidate index 与专用 cache 状态；没有选择 embedding 模型或构建最终索引。
+- `mm_agent_prepare` 按显式路径优先、`problems/` 次之发现输入；只通过 `CaseContextStore.open` 固化输入副本、manifest、Policy、四份 Rubric 和初始 state。
+- prepare 支持无新 intake 参数的兼容 Case 恢复；冲突输入/Policy、输入发现后变化、linked input、linked/unwritable `runs/`、空输入和无效 Case ID 均返回结构化失败且不发布部分 Case。
+- `OpenInput` 的 transient expected size/hash 只用于在 Core copy 后绑定 discovery 事实；persisted schema 未改变，用户绝对源路径不进入 `case.json`、`state.json` 或 manifest。
+- `/mm-agent` 先执行完整 preflight；存在 fail 时停止在正文前，环境无 fail 才进入 intake，并在 Step 3 结果后等待用户确认。
 
-### Step 1 Accepted Verification Evidence
+### Acceptance Evidence
 
-Commander 在最终代码上 fresh 执行：
+- focused: `npx tsx --test --test-concurrency=1 tests/tools/check.test.ts tests/tools/prepare.test.ts` -> 13 passed、0 failed、0 skipped。
+- full: `npm test` -> 95 passed、0 failed、5 skipped；5 个 skip 只是普通模式下未启用的 runtime tests，不作为 runtime 证据。
+- build: `npm run build` -> exit 0，TypeScript 无诊断。
+- runtime: `npm run test:runtime` -> 5 passed、0 failed、0 skipped；真实 OpenCode `1.18.3` 覆盖安装/发现、模型调用 Step 3 Tools、真实 CUMCM 模板 PDF、fresh-process Case recovery、built-in task、slash/restart 与 compaction-off recovery。
+- package: `npm pack --dry-run --json` -> 81 files，约 1.91 MB packed / 2.51 MB unpacked；包含 `dist/tools/check*`、`dist/tools/prepare*` 与四份 Rubric，不含 tests、runs、cache、配置、凭据或 `templates/report-generator.py`。
+- diff/package gates: `git diff --check`、`git diff --no-index AGENTS.md CLAUDE.md`、package forbidden-path 检查和活跃旧入口搜索通过。
 
-- `npm install`: exit 0，0 vulnerabilities；有 `ini@7.0.0` 对 Node `24.8.0` 的非阻塞 `EBADENGINE` warning。
-- `npm test`: 34 passed，0 failed；5 个真实 runtime tests 在未设置 `MM_AGENT_RUNTIME` 时按设计 skip。
-- `npm run build`: exit 0，TypeScript 无诊断。
-- `npm run test:runtime`: 5 passed，0 failed，0 skipped；真实 OpenCode `1.18.2` 进程覆盖 Plugin/Agent/Skill、模型 Tool、fresh child read/linkage、slash/restart 和 compaction-off disk recovery。
-- `npm pack --dry-run`: exit 0，49 files，约 1.9 MB packed / 2.2 MB unpacked；不含 `templates/report-generator.py`。
-- `git diff --check`: exit 0；仅本文件旧工作区的 LF/CRLF 提示。
-- `git diff --no-index AGENTS.md CLAUDE.md`: exit 0。
-- transaction temp/backup artifacts: none；`src/tools/spike.ts`: absent。
+### Current Machine Preflight Snapshot
 
-完整逐组 RED/GREEN、sanitized runtime 命令和 review-fix 证据保存在 ignored 工作文件 `.superpowers/sdd/task-1-report.md`；持久 accepted 事实以 commit、测试和本文件为准。
+- pass: Node `24.8.0`、OpenCode `1.18.3` 对固定 Plugin API `1.18.2`、uv `0.10.6`、Case write probe、真实 CUMCM XeLaTeX 编译（非空 PDF）。
+- fail + automatic: Python 3.12 当前未找到。该结果证明正文会被正确阻止；它不是实现缺陷，也没有触发安装。
+- warn + none: bundled HMML candidate index 可读，最终选择有意留给 Step 4，本步骤无修复动作。
+- warn + automatic: 专用 cache 目录尚未创建。
 
-### Step 2 Accepted Evidence
+### Known Limits
 
-- 实现位于 `src/core/schema.ts`、`paths.ts`、`migrations.ts`、`context-recipes.ts` 和 `case-context-store.ts`；其唯一公开 contract 是 `open`、`dispatch`、`gate`、`inspect`。
-- 已覆盖 schema/migration、Case-relative 路径和 realpath/junction 防逃逸、原子写入、Case lock/CAS、durable Gate transaction、Attempt/Review/Role Recipe、Solver read set、预算/blocker、DAG/wave、Task Memory/Runtime Evidence、阶段推进和 completion evidence。`zod` 已直接固定为 `4.1.8`。
-- 前两轮独立 review 的已修问题：required read reconstruction、transaction cleanup ordering、Solver context 最小化与 Runtime Evidence、future-wave DAG、Case-root junction、crash-durable Gate transaction、跨 Store dispatch lock/staging collision。
-- 最终 Terra/high 复核另发现并修复：崩溃遗留与多竞争者 stale `state.lock` 回收、terminal Case 仍接受旧 sibling Gate、candidate/Review/promotion 父目录与 transaction staging junction TOCTOU、committed transaction 残留阻断只读恢复、Modeler 遗漏 immutable input 与任务级 retrieval evidence。Case lock 以唯一 choosing/request 文件的 bakery-style ticket 队列排序，每个 contender 只删除自己的文件或 dead-PID 的唯一请求，只有队首能处理 legacy `state.lock` 并 hard-link 完整 owner metadata；candidate 在 staging 前后绑定原 hash，Review 先写入绑定的 Attempt 临时文件；promotion 在未发布 preparation 中构建稳定根快照，发布后验证 transaction、next root 与原 stable root identity 再 atomic swap。
-- 当前普通回归：`npm test` 于 2026-07-18 通过，`81 passed`、`0 failed`、`5 skipped`（这 5 个是未设置 `MM_AGENT_RUNTIME` 时按设计跳过的真实 OpenCode tests）。
-- runtime 启动问题已做一个 RED/GREEN 切口：隔离 OpenCode 进程会在 `models.dev` 目录抓取超时时挂起；`runtimeEnvironment()` 现固定 `OPENCODE_DISABLE_MODELS_FETCH=1`，其 focused 环境测试先 RED（变量缺失）后 GREEN。该变量是 OpenCode 官方 CLI 环境变量，用于禁用远程模型源抓取。
-- 本机 OpenCode 从 `1.18.2` 更新到 `1.18.3` 后，runtime gate 不再把宿主 patch 硬编码为 API patch；它要求宿主与固定的 `@opencode-ai/plugin@1.18.2` 同 major/minor 且宿主 patch 不低于 API patch。
-- `npm run test:runtime` 于 2026-07-18 通过，`5 passed`、`0 failed`、`0 skipped`；覆盖隔离安装和 Plugin/Agent/Skill discovery、真实模型 Tool、built-in `task` fresh child、slash/restart 和 compaction-off recovery。这 5 项是 Step 1 Adapter regression，不是 CaseContextStore 的直接 runtime exercise。
-- `npm pack --dry-run --json` 为 69 files，其中 20 个 `dist/core/*` 文件；不含 tests、runs、cache、配置或凭据。
-
-### Known Concerns
-
-- transitive `ini@7.0.0` 声明的 Node engine 不包含本机 `24.8.0`；当前 install/build/runtime 全部通过，但 `engine-strict` 环境可能拒绝安装。不要为静默 warning 在 Step 1 内改动已 pin 的 OpenCode API。
-- 成功 transaction 提交后的 backup cleanup 是 best effort；极端 cleanup 失败可能留下 `.mm-agent-backup-*` snapshot，但不会破坏 committed Skill/config/receipt。后续若扩展 installer surface，应把 cleanup warning 结构化。
-- 继承 partial implementation 的历史 test-first 顺序不可追溯；本轮诚实记录了 retrofit mutation RED/GREEN，未把它伪称为历史 TDD。
-- Windows 上 `spawnSync` 的超时时间不能可靠地终止 OpenCode 子进程树；若 runtime command 再次超时，先用命令行和临时目录确认 PID 归属，再只结束该测试产生的树，避免影响用户的 OpenCode 实例。
-
-### In Flight
-
-- owner: 无。
-- task: 无。
-- expected output: 无。
-- next commander should wait for: 不需要等待旧 worker。
+- Step 3 不执行环境修复；用户后续明确要求“完善”时，才可在 MM-Agent 专用 cache 中安装 uv-managed Python 或准备 cache，仍不得修改系统 Python 或用户项目。
+- Step 3 不实现 HMML 检索、Compute/Compile Runtime Evidence、完整 Agents/Skills 编排或 Golden Case。
+- hidden `mm-agent-spike` Agent 继续承担已接受的 Step 1 fresh-child regression；完整五角色 Agent 面属于 Step 6。
+- transitive `ini@7.0.0` 的 Node engine 声明不包含本机 `24.8.0`；当前 install/build/runtime 全部通过，但 `engine-strict` 环境可能拒绝安装。
+- Windows `spawnSync` timeout 不能可靠终止复杂子进程树；runtime gate 使用隔离目录和已知 OpenCode binary，若未来超时必须先确认 PID 归属。
 
 ### Next Commander Action
 
-1. 在 `D:\0_Main\02_Coding\mm-agent\.worktrees\opencode-plugin-spike`、branch `feat/opencode-plugin-spike` 恢复工作，并确认 Step 2 milestone commit、clean status 和空 stash。
-2. 下一轮按 `PLAN.md` 第 3 步为 Preflight 与输入整理制定里程碑计划；不要复用或重写 CaseContextStore 的 accepted schema。
-3. Step 3 必须真实检查 Node/OpenCode、uv/Python、Case 可写性、HMML cache 和 TeX 编译能力，并安全复制输入；不得读取用户项目 `.venv`。
-4. 继续遵守一个完整里程碑一次 commit、未经用户要求不 push、不修改 main 的约束。
+1. 不自动执行任何下一步骤；Step 3 已收口。
+2. 只有用户明确启动 Step 4 后，才按 `PLAN.md` 的 Step 4 结果契约开展 HMML 离线评测与唯一模型选择。
+3. 不重写 accepted Canonical Core，不读取用户项目 `.venv`，不 push 未经授权的分支。
 
 ## Commit 判断
 
-Step 1 已由 `315c319` 接受，Step 1 文档收口为 `ab56d42`。包含本文件的唯一 `feat: implement CaseContextStore contract` 里程碑提交接受 Step 2；未 push，Step 3 尚未开始。
+Step 3 已达到单一里程碑 acceptance commit 条件。该提交后工作区应 clean；若发现额外 dirty 文件，先分类并保留用户无关改动，不得 reset 或 stash。
