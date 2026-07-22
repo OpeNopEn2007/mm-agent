@@ -41,7 +41,7 @@ export type CompileManifest = {
   created_at: string;
   status: "succeeded" | "failed";
   engine: "latexmk" | "xelatex" | "unavailable";
-  commands: Array<{ executable: string; args: string[]; exit_code: number | null; timed_out: boolean }>;
+  commands: Array<{ executable: string; args: string[]; exit_code: number | null; timed_out: boolean; stdout: string; stderr: string }>;
   environment: Record<string, string>;
   timeout_ms: number;
   stdout: string;
@@ -131,16 +131,22 @@ export async function runCompile(options: CompileOptions): Promise<CompileResult
       finalRun = await runner(latexmk, ["-xelatex", "-interaction=nonstopmode", "-halt-on-error", "-no-shell-escape", "-outdir=.", "main.tex"], {
         cwd: workingDirectory, env, timeoutMs,
       });
-      commands.push({ executable: latexmk, args: finalRun.args, exit_code: finalRun.exitCode, timed_out: finalRun.timedOut });
+      commands.push({ executable: latexmk, args: finalRun.args, exit_code: finalRun.exitCode, timed_out: finalRun.timedOut, stdout: finalRun.stdout, stderr: finalRun.stderr });
       logs.push(runSummary(finalRun));
-    } else if (xelatex) {
+    }
+    if (
+      xelatex &&
+      (!finalRun || finalRun.exitCode !== 0 || finalRun.timedOut || !(await nonEmptyFile(sourcePdfAbsolute)))
+    ) {
+      // A failed latexmk run may leave a partial PDF; never promote it over the fallback result.
+      await rm(sourcePdfAbsolute, { force: true });
       engine = "xelatex";
       for (let pass = 0; pass < 3; pass += 1) {
         const run = await runner(xelatex, ["-interaction=nonstopmode", "-halt-on-error", "-no-shell-escape", "-output-directory=.", "main.tex"], {
           cwd: workingDirectory, env, timeoutMs,
         });
         finalRun = run;
-        commands.push({ executable: xelatex, args: run.args, exit_code: run.exitCode, timed_out: run.timedOut });
+        commands.push({ executable: xelatex, args: run.args, exit_code: run.exitCode, timed_out: run.timedOut, stdout: run.stdout, stderr: run.stderr });
         logs.push(`pass ${pass + 1}\n${runSummary(run)}`);
         if (run.exitCode !== 0 || run.timedOut) break;
       }
@@ -165,7 +171,7 @@ export async function runCompile(options: CompileOptions): Promise<CompileResult
       timeout_ms: timeoutMs,
       stdout: finalRun?.stdout ?? "",
       stderr: finalRun?.stderr ?? "",
-      errors: succeeded ? [] : structuredErrors(finalRun?.stdout ?? "", finalRun?.stderr ?? logs.join("\n")),
+      errors: succeeded ? [] : structuredErrors(logs.join("\n"), logs.join("\n")),
       inputs,
       outputs,
       pdf,

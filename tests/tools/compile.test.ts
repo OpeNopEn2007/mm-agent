@@ -23,8 +23,8 @@ test("compile prefers latexmk and records a non-empty PDF", async (t) => {
     now: () => "2026-07-23T00:00:00.000Z",
     executableResolver: async (name) => name === "latexmk" ? "/tools/latexmk" : undefined,
     commandRunner: async (executable, args, options) => {
-      await writeFile(path.join(options.cwd, "report.pdf"), "%PDF-fixture\n");
-      return { executable, args, exitCode: 0, stdout: "Output written on report.pdf\n", stderr: "", timedOut: false };
+      await writeFile(path.join(options.cwd, "main.pdf"), "%PDF-fixture\n");
+      return { executable, args, exitCode: 0, stdout: "Output written on main.pdf\n", stderr: "", timedOut: false };
     },
   });
   assert.equal(result.ok, true);
@@ -46,13 +46,39 @@ test("compile falls back to three xelatex passes", async (t) => {
     executableResolver: async (name) => name === "xelatex" ? "/tools/xelatex" : undefined,
     commandRunner: async (executable, args, options) => {
       calls += 1;
-      if (calls === 3) await writeFile(path.join(options.cwd, "report.pdf"), "%PDF-fixture\n");
+      if (calls === 3) await writeFile(path.join(options.cwd, "main.pdf"), "%PDF-fixture\n");
       return { executable, args, exitCode: 0, stdout: `pass ${calls}\n`, stderr: "", timedOut: false };
     },
   });
   assert.equal(result.ok, true);
   if (result.ok) assert.equal(result.manifest.engine, "xelatex");
   assert.equal(calls, 3);
+});
+
+test("compile falls back when latexmk starts but fails", async (t) => {
+  const roots = await fixture();
+  t.after(() => rm(path.dirname(roots.projectRoot), { recursive: true, force: true }));
+  let xelatexCalls = 0;
+  const result = await runCompile({
+    ...roots,
+    caseId: "case-alpha",
+    executableResolver: async (name) => `/tools/${name}`,
+    commandRunner: async (executable, args, options) => {
+      if (executable.endsWith("latexmk"))
+        return { executable, args, exitCode: 127, stdout: "", stderr: "runscript.tlu failed\n", timedOut: false };
+      xelatexCalls += 1;
+      if (xelatexCalls === 3) await writeFile(path.join(options.cwd, "main.pdf"), "%PDF-fixture\n");
+      return { executable, args, exitCode: 0, stdout: `xelatex ${xelatexCalls}\n`, stderr: "", timedOut: false };
+    },
+  });
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.manifest.engine, "xelatex");
+  assert.equal(result.manifest.commands.length, 4);
+  assert.equal(result.manifest.commands[0]?.exit_code, 127);
+  assert.equal(xelatexCalls, 3);
+  assert.match(result.manifest.commands[0]?.stderr ?? "", /runscript\.tlu failed/u);
+  assert.match(result.manifest.commands[3]?.stdout ?? "", /xelatex 3/u);
 });
 
 test("compile keeps failure, no-PDF, and unavailable-TeX evidence actionable", async (t) => {

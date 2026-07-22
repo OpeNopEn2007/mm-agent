@@ -159,7 +159,7 @@ Step 3 完成后，用户运行 `/mm-agent` 即可在进入四阶段正文前得
 - Case 外工作目录、入口脚本和输出路径被拒绝。
 
 - Compute 仅从当前 Solver Attempt 的 `code/` 目录运行 MM-Agent 专用 Python 3.12；成功、失败和超时都写入带命令、净化环境、stdout/stderr、exit/timeout、输入输出 hash 的 Evidence manifest，并由 `execution-result.json` 引用。
-- Compile 仅从当前 Writer Attempt 编译 `main.tex`；每次清除旧 PDF，优先 `latexmk -xelatex`，缺失时以至多三遍 `xelatex` 回退，记录完整 `compile.log`、结构化错误、新 PDF hash 和 Runtime Evidence。
+- Compile 仅从当前 Writer Attempt 编译 `main.tex`；每次清除旧 PDF，优先 `latexmk -xelatex`，其缺失、失败、超时或无非空 PDF 时以至多三遍 `xelatex` 回退，记录完整 `compile.log`、结构化错误、新 PDF hash 和 Runtime Evidence。
 - Reporting `pass` 除原有非空 PDF 条件外，要求同一 Attempt 有成功且 hash 匹配的 Compile Runtime Evidence。
 
 **验收证据**

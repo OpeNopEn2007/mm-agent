@@ -622,7 +622,7 @@ Compute 只接受当前 Solver Attempt 的 `code/` 目录和其中的直接入�
 编译优先级：
 
 1. `latexmk -xelatex`。
-2. 缺少 `latexmk` 时，使用多遍 `xelatex`。
+2. `latexmk` 缺失、失败、超时或未生成非空 PDF 时，使用最多三遍 `xelatex`。
 
 支持目标是 TeX Live、MacTeX 和 MiKTeX 提供的标准 XeLaTeX。编译失败后，Writer 根据结构化错误摘要修复 `main.tex`，同时保留原始 `compile.log`。编译 manifest 作为 Runtime Evidence。未产生非空 `report/report.pdf` 时，compile Tool 不能返回成功。
 

@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { runCompile } from "../../src/tools/compile.js";
 import { runCompute } from "../../src/tools/compute.js";
+import { runCommand } from "../../src/tools/runtime.js";
 
 const enabled = process.env.MM_AGENT_REAL_RUNTIME === "1";
 
@@ -33,16 +34,20 @@ test("real runtime: dedicated Python records success failure and timeout evidenc
   assert.equal(timedOut.manifest?.timed_out, true);
 });
 
-test("real runtime: latexmk records successful and failed XeLaTeX evidence", { skip: !enabled, timeout: 120_000 }, async (t) => {
+test("real runtime: latexmk fallback records successful and failed XeLaTeX evidence", { skip: !enabled, timeout: 120_000 }, async (t) => {
   const projectRoot = await root();
   t.after(() => rm(projectRoot, { recursive: true, force: true }));
   const report = path.join(projectRoot, "runs", "case-alpha", "attempts", "reporting", "001");
   await writeFile(path.join(report, "main.tex"), "\\documentclass{article}\n\\begin{document}runtime\\end{document}\n");
-  const success = await runCompile({ projectRoot, caseId: "case-alpha", workDir: "attempts/reporting/001" });
+  const latexmkFailure = async (executable: string, args: string[], options: Parameters<typeof runCommand>[2]) =>
+    executable.toLowerCase().includes("latexmk")
+      ? { executable, args, exitCode: 127, stdout: "", stderr: "runscript.tlu fixture failure\n", timedOut: false }
+      : runCommand(executable, args, options);
+  const success = await runCompile({ projectRoot, caseId: "case-alpha", workDir: "attempts/reporting/001", commandRunner: latexmkFailure });
   assert.equal(success.ok, true);
-  if (success.ok) assert.equal(success.manifest.engine, "latexmk");
+  if (success.ok) assert.equal(success.manifest.engine, "xelatex");
   await writeFile(path.join(report, "main.tex"), "\\documentclass{article}\n\\begin{document}\\unknowncommand\\end{document}\n");
-  const failed = await runCompile({ projectRoot, caseId: "case-alpha", workDir: "attempts/reporting/001" });
+  const failed = await runCompile({ projectRoot, caseId: "case-alpha", workDir: "attempts/reporting/001", commandRunner: latexmkFailure });
   assert.equal(failed.ok, false);
   assert.equal(failed.manifest?.status, "failed");
   assert.ok((failed.manifest?.errors.length ?? 0) > 0);

@@ -47,6 +47,7 @@
 - Plugin 注册 `mm_agent_compute` 与 `mm_agent_compile`；两者只接受当前 Case 的 solving/reporting Attempt 路径，拒绝 Case 外、入口/输出 escape 和 link。
 - Compute 固定使用 MM-Agent 专用 Python 3.12，净化 `.venv`、Conda 与 user-site 环境；每次写入命令、环境、stdout、stderr、exit、timeout、输入/输出 hash 的 Evidence manifest，并更新 Attempt `execution-result.json` Runtime Evidence 引用。
 - Compile 优先 `latexmk -xelatex`，缺失时最多三遍 `xelatex`；每次删除旧 PDF，只将新非空 `main.pdf` 改名为 `report.pdf`，写入完整 `compile.log`、结构化错误和 Evidence manifest。
+- Compile fallback 已覆盖 `latexmk` 存在但失败、超时或无非空 PDF 的路径；同一 manifest 按命令保留 latexmk/xelatex 的 stdout、stderr、exit code 和 timeout。
 - Reporting Gate 要求同一 Attempt 的成功 Compile Evidence 与 candidate `compile.log`/`report.pdf` hash 匹配，不能通过手工 PDF 绕过。
 
 ### Step 5 Acceptance Evidence
@@ -55,6 +56,7 @@
 - full: `npm test` -> 106 passed、0 failed、8 skipped；8 个 skip 是未显式启用的 OpenCode model 或真实 Local Runtime gates。
 - build: `npm run build` -> exit 0，TypeScript 无诊断。
 - real local runtime: `MM_AGENT_REAL_RUNTIME=1 npx tsx --test --test-concurrency=1 tests/tools/runtime-evidence.real.test.ts` -> 2 passed、0 failed；覆盖专用 Python 成功/失败/超时和真实 latexmk 成功/失败。
+- fallback regression: `latexmk` 启动失败 fixture 后，真实 xelatex 三遍生成 PDF；完整 manifest 同时保留两种引擎 Evidence。
 - OpenCode runtime: `npm run test:runtime` -> isolated install/discovery 1 passed；5 个模型调用因无 `MM_AGENT_MINIMAX_API_KEY` 安全 skipped。它们在提供该变量时使用临时 provider config 与 `minimax/MiniMax-M3 --variant thinking --thinking`，不读取全局凭据。
 
 ### Step 3 Machine Preflight Snapshot
