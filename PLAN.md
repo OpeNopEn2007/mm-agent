@@ -2,7 +2,7 @@
 
 ## 当前结论
 
-`v1.0.0` 采用 Canonical Core + OpenCode Adapter。架构决策与协议设计已经接受；Step 1 至 Step 4 均已完成。当前边界停止在 HMML 检索评测与运行时，不进入 Step 5 Compute/Compile。
+`v1.0.0` 采用 Canonical Core + OpenCode Adapter。架构决策与协议设计已经接受；Step 1 至 Step 5 均已完成。当前边界停止在 Compute/Compile Runtime Evidence，不进入 Step 6 Agents/Skills 编排或 Golden Case。
 
 唯一公开入口是 `/mm-agent`。首个真实目标 Case 是 MM-Bench `2024_C` Wimbledon Momentum；在此之前，各确定性模块必须先在本地最小 fixture 上留下可重复验证的证据。
 
@@ -71,7 +71,7 @@ problems/.gitkeep                    默认用户输入目录
 | 2 | CaseContextStore 成为唯一 Case 状态、Context 和 Gate 协议实现。 | 已接受：`cfda6ea` |
 | 3 | `/mm-agent` 能可靠判断环境是否可用，并从用户输入创建或恢复不可变 Case。 | 已接受：当前 acceptance HEAD |
 | 4 | HMML 模型选择有数据依据，检索结果可追溯且有离线降级路径。 | 已完成：当前 acceptance commit |
-| 5 | 计算与 LaTeX/PDF 编译产生可重放的 Runtime Evidence。 | 待开始 |
+| 5 | 计算与 LaTeX/PDF 编译产生可重放的 Runtime Evidence。 | 已完成：当前 acceptance commit |
 | 6 | 四阶段 Agents、Skills 和 Tools 通过 Canonical Core 跑成真实工作流。 | 待开始 |
 | 7 | 最小 Case 与 MM-Bench 真实 Case 均能从输入闭环到非空 PDF，并可在新会话恢复。 | 待开始 |
 | 8 | 发布包、文档、历史资产和最终验证证据一致。 | 待开始 |
@@ -147,7 +147,7 @@ Step 3 完成后，用户运行 `/mm-agent` 即可在进入四阶段正文前得
 
 ### Step 5：Compute 与 Compile
 
-**预期结果**
+**已接受结果**
 
 数学结果和最终 PDF 都由真实机器执行支撑；成功与失败均留下足够证据供 Gate 判断和人工复查。
 
@@ -158,11 +158,16 @@ Step 3 完成后，用户运行 `/mm-agent` 即可在进入四阶段正文前得
 - 检索、计算和编译 manifest 都能作为带 provenance/hash 的 Runtime Evidence 被 Gate 引用。
 - Case 外工作目录、入口脚本和输出路径被拒绝。
 
+- Compute 仅从当前 Solver Attempt 的 `code/` 目录运行 MM-Agent 专用 Python 3.12；成功、失败和超时都写入带命令、净化环境、stdout/stderr、exit/timeout、输入输出 hash 的 Evidence manifest，并由 `execution-result.json` 引用。
+- Compile 仅从当前 Writer Attempt 编译 `main.tex`；每次清除旧 PDF，优先 `latexmk -xelatex`，缺失时以至多三遍 `xelatex` 回退，记录完整 `compile.log`、结构化错误、新 PDF hash 和 Runtime Evidence。
+- Reporting `pass` 除原有非空 PDF 条件外，要求同一 Attempt 有成功且 hash 匹配的 Compile Runtime Evidence。
+
 **验收证据**
 
 - 成功与失败 Python fixture 均可重放。
 - 成功与失败 TeX fixture 均产生预期 manifest/log。
 - 没有非空 PDF 时 Compile 不返回成功；缺失 TeX 时返回人工修复结论而不是无限重试。
+- Python 成功、失败、超时和 TeX 成功、失败、无 PDF fixture 均留下自动化证据；专用 Python/TeX 的真实运行单独 opt-in 执行。
 
 ### Step 6：Skills、Agents 与四阶段编排
 
@@ -237,4 +242,4 @@ Step 3 完成后，用户运行 `/mm-agent` 即可在进入四阶段正文前得
 
 ## 当前里程碑
 
-Step 4 HMML 检索评测与运行时已收口；41 条典型方法查询只保留为 `proposed` smoke regression，正式选型使用 80 条 `ai-adjudicated` 数据集。当前停止，不进入 Step 5 Compute/Compile、四阶段编排或 Golden Case。
+Step 5 Compute/Compile Runtime Evidence 已收口；41 条典型方法查询只保留为 `proposed` smoke regression，正式选型使用 80 条 `ai-adjudicated` 数据集。当前停止，不进入 Step 6 四阶段编排或 Golden Case。

@@ -24,6 +24,9 @@
 - 完成 Step 4 HMML：80 条双语 `ai-adjudicated` 查询、等价方法概念、论文对齐的 0.5 父级均值 + 0.5 叶方法评分、逐查询可复算报告和固定模型/index provenance。
 - 真实比较 GTE 与 BGE-M3 后选择 GTE（Recall@5 `0.8125` vs `0.6875`；MRR `0.7660` vs `0.6985`），发布唯一 768 维 GTE 索引，不打包模型权重或 BGE 候选索引。
 - `mm_agent_hmml` 输出 knowledge/model/index/query/candidate score/degraded reason；真实 OpenCode 隔离空 cache gate 验证 BM25 降级，固定 cache 验证 dense 检索。
+- 完成 Step 5 `mm_agent_compute`：仅在当前 Solver Attempt 的 `code/` 目录使用 MM-Agent 专用 Python 执行，保存命令、净化环境、stdout、stderr、exit/timeout、输入输出 hash 与 hash-addressed Runtime Evidence；成功引用写入 `execution-result.json`。
+- 完成 Step 5 `mm_agent_compile`：仅在当前 Writer Attempt 编译 `main.tex`，优先 `latexmk -xelatex`，缺失时回退最多三遍 `xelatex`，保留完整 `compile.log`、结构化错误、非空 PDF 与 Evidence。Report Gate 额外校验成功 Compile Evidence 与 PDF/日志 hash 对应。
+- 增加 Compute 成功/失败/超时、Compile 成功/失败/无 PDF、路径与 link 拒绝 fixture；真实专用 Python 和 XeLaTeX gate 可由 `MM_AGENT_REAL_RUNTIME=1` 重放。OpenCode 模型 runtime 调用固定 `minimax/MiniMax-M3` Thinking，且仅在显式 `MM_AGENT_MINIMAX_API_KEY` 存在时使用隔离 provider 配置。
 
 ### 文档
 - 接受 `4ce82cd` 提交的 Canonical Core（`docs/architecture/canonical-core.md` + `docs/context/artifact-protocol.md`）作为宿主无关机制唯一来源。
@@ -53,7 +56,7 @@
 - 2026-05-16: 更新 `docs/research/paper-vs-implementation-gap-analysis.md` 全面差距分析（历史，已通过归档处理）。
 
 ### 开发方向
-- OpenCode Plugin Spike、CaseContextStore、Step 3 Preflight/输入整理与 Step 4 HMML 检索评测/运行时均已通过各自 gate；当前停止在 Step 4，不自动进入 Compute/Compile。
+- OpenCode Plugin Spike、CaseContextStore、Step 3 Preflight/输入整理、Step 4 HMML 检索评测/运行时与 Step 5 Compute/Compile Runtime Evidence 均已通过各自 gate；当前停止在 Step 5，不自动进入 Agents/Skills 编排或 Golden Case。
 - Spike 只验证 Adapter 宿主假设，不代表四阶段、HMML、Compute/Compile 或 Golden Case 已实现。
 - 旧 Pi、Claude/Codex Plugin 方向进入历史维护/归档状态，不再作为后续架构主线。
 

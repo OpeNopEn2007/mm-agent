@@ -35,6 +35,32 @@ function runtimeEnvironment(root: string): NodeJS.ProcessEnv {
   }
 }
 
+// Runtime model calls are intentionally pinned to the cheaper MiniMax Thinking variant.
+function runtimeModelArgs(): string[] {
+  return ["--model", "minimax/MiniMax-M3", "--variant", "thinking", "--thinking"]
+}
+
+const runtimeModelEnabled = process.env.MM_AGENT_RUNTIME === "1" && Boolean(process.env.MM_AGENT_MINIMAX_API_KEY)
+
+async function configureRuntimeModel(configRoot: string): Promise<void> {
+  const configPath = path.join(configRoot, "opencode.json")
+  const config = JSON.parse(await readFile(configPath, "utf8")) as Record<string, unknown>
+  config.model = "minimax/MiniMax-M3"
+  config.provider = {
+    minimax: {
+      name: "MiniMax",
+      npm: "@ai-sdk/openai-compatible",
+      options: {
+        apiKey: process.env.MM_AGENT_MINIMAX_API_KEY,
+        baseURL: process.env.MM_AGENT_MINIMAX_API_HOST ?? "https://api.minimaxi.com/v1",
+        setCacheKey: true,
+      },
+      models: { "MiniMax-M3": { name: "MiniMax M3", limit: { context: 512000, output: 128000 } } },
+    },
+  }
+  await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`)
+}
+
 function findOpenCodeBinary(): string {
   if (process.env.OPENCODE_BIN) return process.env.OPENCODE_BIN
   if (process.platform === "win32") {
@@ -247,6 +273,8 @@ test("npm pack dry run contains the intended distribution surface", () => {
     "dist/index.js",
     "dist/install.js",
     "dist/tools/check.js",
+    "dist/tools/compile.js",
+    "dist/tools/compute.js",
     "dist/tools/hmml.js",
     "dist/tools/prepare.js",
     "runtime/hmml_benchmark.py",
@@ -355,18 +383,22 @@ test("config hook preserves an existing same-name agent unchanged", async () => 
   assert.deepEqual(config.agent?.["mm-agent-spike"], userAgent)
 })
 
-test("Plugin registers the implemented deterministic Tools through Step 4", async () => {
+test("Plugin registers the implemented deterministic Tools through Step 5", async () => {
   const mmAgentPlugin = await loadPlugin()
   const hooks = await mmAgentPlugin({ directory: repositoryRoot, worktree: repositoryRoot } as PluginInput)
 
   assert.deepEqual(Object.keys(hooks.tool ?? {}).sort(), [
     "mm_agent_check",
+    "mm_agent_compile",
+    "mm_agent_compute",
     "mm_agent_hmml",
     "mm_agent_prepare",
   ])
   assert.match(hooks.tool?.mm_agent_check?.description ?? "", /structured evidence/i)
   assert.match(hooks.tool?.mm_agent_prepare?.description ?? "", /CaseContextStore\.open/i)
   assert.match(hooks.tool?.mm_agent_hmml?.description ?? "", /BM25 fallback/i)
+  assert.match(hooks.tool?.mm_agent_compute?.description ?? "", /Runtime Evidence/i)
+  assert.match(hooks.tool?.mm_agent_compile?.description ?? "", /latexmk/i)
 })
 
 test("check Tool uses the real execution directory for the Case write probe", async (t) => {
@@ -1046,7 +1078,7 @@ test("runtime: isolated install loads the Plugin and discovers its Agent and Ski
 })
 
 test("runtime: model invokes Step 3 Tools, compiles the real template, and creates a recoverable Case", {
-  skip: process.env.MM_AGENT_RUNTIME !== "1",
+  skip: !runtimeModelEnabled,
   timeout: 300_000,
 }, async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "mm-agent-runtime-tool-"))
@@ -1067,6 +1099,7 @@ test("runtime: model invokes Step 3 Tools, compiles the real template, and creat
     process.env,
   )
   assertRuntimeSuccess(installResult, "installer CLI")
+  await configureRuntimeModel(configRoot)
   const gitInit = runRuntimeProcess("git", ["init"], projectRoot, process.env)
   assertRuntimeSuccess(gitInit, "git init")
 
@@ -1079,7 +1112,7 @@ test("runtime: model invokes Step 3 Tools, compiles the real template, and creat
   ].join(" ")
   const result = runRuntimeProcess(
     opencode,
-    ["run", "--format", "json", "--auto", prompt],
+    ["run", "--format", "json", "--auto", ...runtimeModelArgs(), prompt],
     projectRoot,
     runtimeEnvironment(root),
     240_000,
@@ -1152,7 +1185,7 @@ test("runtime: model invokes Step 3 Tools, compiles the real template, and creat
 })
 
 test("runtime: model invokes HMML and receives a traceable offline BM25 result", {
-  skip: process.env.MM_AGENT_RUNTIME !== "1",
+  skip: !runtimeModelEnabled,
   timeout: 300_000,
 }, async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "mm-agent-runtime-hmml-"))
@@ -1172,6 +1205,7 @@ test("runtime: model invokes HMML and receives a traceable offline BM25 result",
     process.env,
   )
   assertRuntimeSuccess(installResult, "installer CLI")
+  await configureRuntimeModel(configRoot)
   assertRuntimeSuccess(runRuntimeProcess("git", ["init"], projectRoot, process.env), "git init")
 
   const outputPath = "runs/case-hmml/tasks/task-01/retrieved-methods.json"
@@ -1184,7 +1218,7 @@ test("runtime: model invokes HMML and receives a traceable offline BM25 result",
   ].join(" ")
   const result = runRuntimeProcess(
     findOpenCodeBinary(),
-    ["run", "--format", "json", "--auto", prompt],
+    ["run", "--format", "json", "--auto", ...runtimeModelArgs(), prompt],
     projectRoot,
     {
       ...runtimeEnvironment(root),
@@ -1223,7 +1257,7 @@ test("runtime: model invokes HMML and receives a traceable offline BM25 result",
 })
 
 test("runtime: built-in task creates a linked fresh child that reads disk context", {
-  skip: process.env.MM_AGENT_RUNTIME !== "1",
+  skip: !runtimeModelEnabled,
   timeout: 300_000,
 }, async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "mm-agent-runtime-task-"))
@@ -1245,6 +1279,7 @@ test("runtime: built-in task creates a linked fresh child that reads disk contex
     process.env,
   )
   assertRuntimeSuccess(installResult, "installer CLI")
+  await configureRuntimeModel(configRoot)
   const gitInit = runRuntimeProcess("git", ["init"], projectRoot, process.env)
   assertRuntimeSuccess(gitInit, "git init")
 
@@ -1258,7 +1293,7 @@ test("runtime: built-in task creates a linked fresh child that reads disk contex
   ].join(" ")
   const result = runRuntimeProcess(
     opencode,
-    ["run", "--format", "json", "--auto", prompt],
+    ["run", "--format", "json", "--auto", ...runtimeModelArgs(), prompt],
     projectRoot,
     env,
     240_000,
@@ -1331,7 +1366,7 @@ test("runtime: built-in task creates a linked fresh child that reads disk contex
 })
 
 test("runtime: Skill slash command executes and restart rediscovers Plugin and Skill", {
-  skip: process.env.MM_AGENT_RUNTIME !== "1",
+  skip: !runtimeModelEnabled,
   timeout: 300_000,
 }, async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "mm-agent-runtime-restart-"))
@@ -1352,6 +1387,7 @@ test("runtime: Skill slash command executes and restart rediscovers Plugin and S
     process.env,
   )
   assertRuntimeSuccess(installResult, "installer CLI")
+  await configureRuntimeModel(configRoot)
   const gitInit = runRuntimeProcess("git", ["init"], projectRoot, process.env)
   assertRuntimeSuccess(gitInit, "git init")
 
@@ -1363,7 +1399,7 @@ test("runtime: Skill slash command executes and restart rediscovers Plugin and S
 
   const commandRun = runRuntimeProcess(
     opencode,
-    ["run", "--format", "json", "--auto", "--command", "mm-agent"],
+    ["run", "--format", "json", "--auto", ...runtimeModelArgs(), "--command", "mm-agent"],
     projectRoot,
     env,
     240_000,
@@ -1447,7 +1483,7 @@ test("runtime: Skill slash command executes and restart rediscovers Plugin and S
 })
 
 test("runtime: compaction-off fresh process recovers context and state from disk", {
-  skip: process.env.MM_AGENT_RUNTIME !== "1",
+  skip: !runtimeModelEnabled,
   timeout: 300_000,
 }, async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "mm-agent-runtime-recovery-"))
@@ -1475,6 +1511,7 @@ test("runtime: compaction-off fresh process recovers context and state from disk
     process.env,
   )
   assertRuntimeSuccess(installResult, "installer CLI")
+  await configureRuntimeModel(configRoot)
   const gitInit = runRuntimeProcess("git", ["init"], projectRoot, process.env)
   assertRuntimeSuccess(gitInit, "git init")
 
@@ -1491,7 +1528,7 @@ test("runtime: compaction-off fresh process recovers context and state from disk
   ].join(" ")
   const recovery = runRuntimeProcess(
     opencode,
-    ["run", "--format", "json", "--auto", prompt],
+    ["run", "--format", "json", "--auto", ...runtimeModelArgs(), prompt],
     projectRoot,
     env,
     240_000,

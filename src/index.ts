@@ -4,6 +4,8 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { SPIKE_AGENT_NAME, spikeAgentConfig } from "./agents.js"
 import { runPreflight } from "./tools/check.js"
+import { runCompile } from "./tools/compile.js"
+import { runCompute } from "./tools/compute.js"
 import { retrieveHmml } from "./tools/hmml.js"
 import { prepareCase } from "./tools/prepare.js"
 
@@ -109,6 +111,44 @@ const mmAgentPlugin = (async ({ directory }) => ({
           ...(input.mode ? { mode: input.mode } : {}),
         }))
       },
+    }),
+    mm_agent_compute: tool({
+      description: "Run a Python entry script only inside the current solving Attempt code directory and return hash-addressed Runtime Evidence.",
+      args: {
+        case_id: tool.schema.string(),
+        work_dir: tool.schema.string(),
+        entry_script: tool.schema.string(),
+        args: tool.schema.array(tool.schema.string()).optional(),
+        input_paths: tool.schema.array(tool.schema.string()).optional(),
+        output_paths: tool.schema.array(tool.schema.string()).optional(),
+        timeout_ms: tool.schema.number().optional(),
+      },
+      execute: async (input, context) => JSON.stringify(await runCompute({
+        projectRoot: context.directory,
+        caseId: input.case_id,
+        workDir: input.work_dir,
+        entryScript: input.entry_script,
+        ...(input.args ? { args: input.args } : {}),
+        ...(input.input_paths ? { inputPaths: input.input_paths } : {}),
+        ...(input.output_paths ? { outputPaths: input.output_paths } : {}),
+        ...(input.timeout_ms === undefined ? {} : { timeoutMs: input.timeout_ms }),
+      })),
+    }),
+    mm_agent_compile: tool({
+      description: "Compile main.tex only inside the current reporting Attempt, preferring latexmk -xelatex and returning hash-addressed Runtime Evidence.",
+      args: {
+        case_id: tool.schema.string(),
+        work_dir: tool.schema.string(),
+        main_tex: tool.schema.string().optional(),
+        timeout_ms: tool.schema.number().optional(),
+      },
+      execute: async (input, context) => JSON.stringify(await runCompile({
+        projectRoot: context.directory,
+        caseId: input.case_id,
+        workDir: input.work_dir,
+        ...(input.main_tex ? { mainTex: input.main_tex } : {}),
+        ...(input.timeout_ms === undefined ? {} : { timeoutMs: input.timeout_ms }),
+      })),
     }),
   },
   "experimental.session.compacting": async (_input, output) => {

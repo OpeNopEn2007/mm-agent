@@ -4,6 +4,7 @@ import {
   cp,
   lstat,
   mkdir,
+  readFile,
   readdir,
   realpath,
   rename,
@@ -839,6 +840,8 @@ export class FileCaseContextStore implements CaseContextStore {
             "solver execution evidence payload hash does not match",
           );
       }
+      if (review.verdict === "pass" && scope === "reporting")
+        await this.validateReportingRuntimeEvidence(root, manifest, candidates);
       if (review.verdict !== "pass")
         return this.applyNonPass(root, snapshot.state, manifest, review);
       const transactionId = randomUUID();
@@ -1776,6 +1779,50 @@ export class FileCaseContextStore implements CaseContextStore {
       "REVIEW_INVALID",
       "block Review for missing candidates requires valid failed Runtime Evidence",
     );
+  }
+  private async validateReportingRuntimeEvidence(
+    root: string,
+    manifest: ContextManifest,
+    candidates: PreparedPromotion[],
+  ): Promise<void> {
+    const prefix = `attempts/${manifest.scope}/${String(manifest.sequence).padStart(3, "0")}/evidence/`;
+    const evidenceDirectory = await resolveInsideCase(root, prefix, "existing").catch(() => undefined);
+    if (!evidenceDirectory)
+      throw new CaseProtocolError("SCHEMA_INVALID", "reporting pass requires successful Compile Runtime Evidence");
+    const pdfCandidate = candidates.find((candidate) => candidate.target === "report/report.pdf");
+    const logCandidate = candidates.find((candidate) => candidate.target === "report/compile.log");
+    if (!pdfCandidate || !logCandidate)
+      throw new CaseProtocolError("SCHEMA_INVALID", "reporting pass requires PDF and compile log candidates");
+    for (const entry of await readdir(evidenceDirectory, { withFileTypes: true })) {
+      if (!/^compile-\d{3}\.json$/u.test(entry.name) || !entry.isFile()) continue;
+      const referenceRelative = `${prefix}${entry.name}`;
+      try {
+        const reference = await readJson(
+          await resolveInsideCase(root, referenceRelative, "existing"),
+          RuntimeEvidenceSchema,
+        );
+        if (
+          reference.kind !== "compile" || reference.status !== "succeeded" || reference.exit_code !== 0 ||
+          !/^attempts\/reporting\/\d{3}\/evidence\/compile-\d{3}-manifest\.json$/u.test(reference.path)
+        ) continue;
+        const payload = await resolveInsideCase(root, reference.path, "existing");
+        if ((await hashPath(payload)) !== reference.sha256) continue;
+        const raw = JSON.parse(await readFile(payload, "utf8")) as {
+          kind?: unknown;
+          status?: unknown;
+          pdf?: { path?: unknown; sha256?: unknown } | null;
+          outputs?: Array<{ path?: unknown; sha256?: unknown }>;
+        };
+        if (
+          raw.kind === "compile" && raw.status === "succeeded" &&
+          raw.pdf?.path === pdfCandidate.candidate && raw.pdf.sha256 === pdfCandidate.sha256 &&
+          raw.outputs?.some((output) => output.path === logCandidate.candidate && output.sha256 === logCandidate.sha256)
+        ) return;
+      } catch {
+        continue;
+      }
+    }
+    throw new CaseProtocolError("SCHEMA_INVALID", "reporting pass requires valid successful Compile Runtime Evidence");
   }
   private async advanceState(root: string, state: CaseState): Promise<void> {
     const accepted = new Set(

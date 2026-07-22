@@ -14,7 +14,7 @@
 
 ## 当前状态
 
-`v1.0.0` 的 Canonical Core 由 `4ce82cd` 接受，OpenCode Adapter 设计由 `1040e63` 接受。OpenCode Plugin Spike 已由 `315c319` 接受；Step 2 CaseContextStore 已由 `cfda6ea` 接受；Step 3 Preflight 与输入整理已在 `5367dd0` 接受；Step 4 已完成 HMML 独立标签复核、真实双模型评测、唯一 GTE 层级索引、dense 检索和无模型 BM25 降级，不进入 Step 5 Compute/Compile。
+`v1.0.0` 的 Canonical Core 由 `4ce82cd` 接受，OpenCode Adapter 设计由 `1040e63` 接受。OpenCode Plugin Spike 已由 `315c319` 接受；Step 2 CaseContextStore 已由 `cfda6ea` 接受；Step 3 Preflight 与输入整理已在 `5367dd0` 接受；Step 4 已完成 HMML 独立标签复核、真实双模型评测、唯一 GTE 层级索引、dense 检索和无模型 BM25 降级；Step 5 已完成受控 Python 与 XeLaTeX Runtime Evidence，不进入 Step 6 Agents/Skills 编排或 Golden Case。
 
 - Canonical Core：[`docs/architecture/canonical-core.md`](docs/architecture/canonical-core.md) 与 [`docs/context/artifact-protocol.md`](docs/context/artifact-protocol.md) 是宿主无关机制唯一来源。
 - OpenCode Adapter：[`docs/architecture/opencode-plugin-harness.md`](docs/architecture/opencode-plugin-harness.md) 定义 v1 唯一 Adapter 的实现接口。
@@ -613,6 +613,8 @@ cache 保存 uv 环境、Hugging Face 模型和可重建索引。Case artifacts 
 
 Tool 不自动解释结果。Solver 根据 execution manifest 和输出文件生成 `execution-result.json` 与 `memory.json`。执行 manifest 作为 Runtime Evidence，可被同一 Attempt 或下游 Manifest 的 `required_reads` 引用。
 
+Compute 只接受当前 Solver Attempt 的 `code/` 目录和其中的直接入口脚本。它使用 MM-Agent 专用 Python 3.12、移除项目 `.venv`/Conda/user-site 环境，并把完整 manifest 写入同一 Attempt 的 `evidence/`；`execution-result.json` 是指向该 hash-addressed manifest 的 Runtime Evidence 引用。缺少专用 Python 只返回可行动结果，不安装或修改系统环境。
+
 ## LaTeX 编译
 
 `mm_agent_compile` 不捆绑 TeX 发行版。Preflight 用真实模板执行编译测试。
@@ -623,6 +625,8 @@ Tool 不自动解释结果。Solver 根据 execution manifest 和输出文件生
 2. 缺少 `latexmk` 时，使用多遍 `xelatex`。
 
 支持目标是 TeX Live、MacTeX 和 MiKTeX 提供的标准 XeLaTeX。编译失败后，Writer 根据结构化错误摘要修复 `main.tex`，同时保留原始 `compile.log`。编译 manifest 作为 Runtime Evidence。未产生非空 `report/report.pdf` 时，compile Tool 不能返回成功。
+
+Compile 只接受当前 Writer Attempt 的 `main.tex`。它清除旧 PDF，保存完整命令输出至 `compile.log`，将新生成的 `main.pdf` 仅在非空时改名为 `report.pdf`，并在 `evidence/` 留下含命令、环境、错误摘要、输入/输出 hash 的 manifest。Reporting Gate 要求同一 Attempt 有 hash 匹配的成功 Compile Evidence，不能只凭一个手工 PDF 完成。
 
 ## 失败恢复
 
@@ -715,7 +719,7 @@ mm-agent/
 └── .archived/             # 非活跃历史资产
 ```
 
-Step 1 已创建 npm package、最小 Plugin/Agent/installer 与宿主验证测试；Step 2 已创建 `src/core/` 的 CaseContextStore、持久 schema、安全路径、迁移、Context Recipe、Gate transaction 和 contract tests；Step 3 已交付 preflight/intake；Step 4 已交付可复算 HMML 评测、唯一 GTE 层级索引、可追溯 dense 检索与 BM25 降级。后续 Compute/Compile、完整四阶段 Agents/Skills 和 Golden Case 仍以 [PLAN.md](PLAN.md) 的里程碑结果为准。
+Step 1 已创建 npm package、最小 Plugin/Agent/installer 与宿主验证测试；Step 2 已创建 `src/core/` 的 CaseContextStore、持久 schema、安全路径、迁移、Context Recipe、Gate transaction 和 contract tests；Step 3 已交付 preflight/intake；Step 4 已交付可复算 HMML 评测、唯一 GTE 层级索引、可追溯 dense 检索与 BM25 降级；Step 5 已交付 Compute/Compile Runtime Evidence 与 Report Gate 的编译证据校验。完整四阶段 Agents/Skills 和 Golden Case 仍以 [PLAN.md](PLAN.md) 的里程碑结果为准。
 
 ## 文档入口
 

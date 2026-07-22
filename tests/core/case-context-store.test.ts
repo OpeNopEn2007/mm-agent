@@ -1160,6 +1160,48 @@ test("accepted artifacts advance modeling solving reporting and completion", asy
     path.join(reportingRoot, "report.pdf"),
     Buffer.from("%PDF-1.4\nfixture"),
   );
+  await mkdir(path.join(reportingRoot, "evidence"));
+  const reportPdfPath = path.join(reportingRoot, "report.pdf");
+  const compileLogPath = path.join(reportingRoot, "compile.log");
+  const compileManifestPath = path.join(reportingRoot, "evidence", "compile-001-manifest.json");
+  await writeJsonAtomic(compileManifestPath, {
+    schema_version: 1,
+    kind: "compile",
+    status: "succeeded",
+    exit_code: 0,
+    pdf: {
+      path: "attempts/reporting/001/report.pdf",
+      sha256: await hashPath(reportPdfPath),
+    },
+    outputs: [
+      {
+        path: "attempts/reporting/001/compile.log",
+        sha256: await hashPath(compileLogPath),
+      },
+    ],
+  });
+  const compileReference = {
+    schema_version: 1,
+    kind: "compile",
+    path: "attempts/reporting/001/evidence/compile-001-manifest.json",
+    sha256: await hashPath(compileManifestPath),
+    created_at: "2026-07-16T00:00:00.000Z",
+    status: "succeeded",
+    exit_code: 0,
+  };
+  const compileReferencePath = path.join(reportingRoot, "evidence", "compile-001.json");
+  await writeJsonAtomic(compileReferencePath, compileReference);
+  await rm(compileReferencePath);
+  await assert.rejects(
+    analysis.store.gate({
+      caseId: "case-alpha",
+      attemptId: reporting.attemptId,
+      review: passReview(reporting.attemptId, "attempts/reporting/001/report.pdf"),
+      expectedRevision: 3,
+    }),
+    hasCode("SCHEMA_INVALID"),
+  );
+  await writeJsonAtomic(compileReferencePath, compileReference);
   result = await analysis.store.gate({
     caseId: "case-alpha",
     attemptId: reporting.attemptId,
