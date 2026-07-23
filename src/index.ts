@@ -2,7 +2,8 @@ import { tool, type Plugin } from "@opencode-ai/plugin"
 import { readFile, readdir } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { SPIKE_AGENT_NAME, spikeAgentConfig } from "./agents.js"
+import { agentConfigs } from "./agents.js"
+import { runCaseAction } from "./tools/case.js"
 import { runPreflight } from "./tools/check.js"
 import { runCompile } from "./tools/compile.js"
 import { runCompute } from "./tools/compute.js"
@@ -41,9 +42,8 @@ async function findActiveCase(directory: string): Promise<string | undefined> {
 const mmAgentPlugin = (async ({ directory }) => ({
   config: async (config) => {
     config.agent ??= {}
-    if (!(SPIKE_AGENT_NAME in config.agent)) {
-      config.agent[SPIKE_AGENT_NAME] = spikeAgentConfig
-    }
+    for (const [name, agent] of Object.entries(agentConfigs))
+      if (!(name in config.agent)) config.agent[name] = agent
   },
   tool: {
     mm_agent_check: tool({
@@ -93,9 +93,47 @@ const mmAgentPlugin = (async ({ directory }) => ({
         }))
       },
     }),
+    mm_agent_case: tool({
+      description: "Direct CaseContextStore adapter for open, dispatch, gate, and inspect. Gate is the only state transition.",
+      args: {
+        action: tool.schema.enum(["open", "dispatch", "gate", "inspect"]),
+        case_id: tool.schema.string(),
+        role: tool.schema.enum(["analyst", "modeler", "solver", "writer"]).optional(),
+        task_id: tool.schema.string().optional(),
+        base_revision: tool.schema.number().optional(),
+        goal: tool.schema.string().optional(),
+        constraints: tool.schema.array(tool.schema.string()).optional(),
+        resolves_blocker: tool.schema.string().optional(),
+        attempt_id: tool.schema.string().optional(),
+        review: tool.schema.object({
+          schema_version: tool.schema.number(),
+          attempt_id: tool.schema.string(),
+          verdict: tool.schema.enum(["pass", "revise", "block"]),
+          findings: tool.schema.array(tool.schema.string()),
+          required_fixes: tool.schema.array(tool.schema.string()),
+          evidence: tool.schema.array(tool.schema.string()),
+          reviewed_at: tool.schema.string(),
+        }).optional(),
+        expected_revision: tool.schema.number().optional(),
+      },
+      execute: async (input, context) => JSON.stringify(await runCaseAction(context.directory, {
+        action: input.action,
+        caseId: input.case_id,
+        ...(input.role ? { role: input.role } : {}),
+        ...(input.task_id ? { taskId: input.task_id } : {}),
+        ...(input.base_revision === undefined ? {} : { baseRevision: input.base_revision }),
+        ...(input.goal ? { goal: input.goal } : {}),
+        ...(input.constraints ? { constraints: input.constraints } : {}),
+        ...(input.resolves_blocker ? { resolvesBlocker: input.resolves_blocker } : {}),
+        ...(input.attempt_id ? { attemptId: input.attempt_id } : {}),
+        ...(input.review ? { review: input.review } : {}),
+        ...(input.expected_revision === undefined ? {} : { expectedRevision: input.expected_revision }),
+      })),
+    }),
     mm_agent_hmml: tool({
       description: "Retrieve traceable HMML method candidates with the pinned dense index or an explicit BM25 fallback when the model cache is unavailable.",
       args: {
+        case_id: tool.schema.string().optional(),
         query: tool.schema.string(),
         top_k: tool.schema.number(),
         output_path: tool.schema.string(),
@@ -105,6 +143,7 @@ const mmAgentPlugin = (async ({ directory }) => ({
         return JSON.stringify(await retrieveHmml({
           projectRoot: context.directory,
           packageRoot,
+          ...(input.case_id ? { caseId: input.case_id } : {}),
           query: input.query,
           topK: input.top_k,
           outputPath: input.output_path,

@@ -35,12 +35,19 @@ function runtimeEnvironment(root: string): NodeJS.ProcessEnv {
   }
 }
 
-// Runtime model calls are intentionally pinned to the cheaper MiniMax Thinking variant.
 function runtimeModelArgs(): string[] {
+  if (process.env.MM_AGENT_HOST_RUNTIME === "1") {
+    const model = process.env.MM_AGENT_HOST_TEST_MODEL
+    if (!model) return []
+    const args = ["--model", model]
+    if (process.env.MM_AGENT_HOST_TEST_VARIANT) args.push("--variant", process.env.MM_AGENT_HOST_TEST_VARIANT)
+    return args
+  }
   return ["--model", "minimax/MiniMax-M3", "--variant", "thinking", "--thinking"]
 }
 
 const runtimeModelEnabled = process.env.MM_AGENT_RUNTIME === "1" && Boolean(process.env.MM_AGENT_MINIMAX_API_KEY)
+const runtimeHostModelEnabled = process.env.MM_AGENT_HOST_RUNTIME === "1"
 
 async function configureRuntimeModel(configRoot: string): Promise<void> {
   const configPath = path.join(configRoot, "opencode.json")
@@ -90,6 +97,11 @@ function normalizeModelMarkerText(parts: Array<string | undefined>): string {
   if (inlineCode?.[1]) return inlineCode[1].trim()
   const fencedCode = [...text.matchAll(/```(?:text)?\s*([\s\S]*?)\s*```/gu)]
   return (fencedCode.length === 1 ? fencedCode[0]?.[1] : text)?.trim() ?? ""
+}
+
+function matchesCompletionMarker(text: string | undefined, marker: string): boolean {
+  const normalized = normalizeModelMarkerText([text])
+  return normalized === marker || normalized === `${marker}.` || normalized === `${marker}。` || normalized === `${marker}!`
 }
 
 function runRuntimeProcess(
@@ -254,6 +266,14 @@ test("runtime marker normalization accepts one fenced value with model narration
   )
 })
 
+test("completion markers accept one terminal punctuation mark and no surrounding explanation", () => {
+  const marker = "MM_AGENT_STEP6_SESSION1_DONE"
+  for (const value of [marker, `${marker}.`, `${marker}。`, `\n\`${marker}\`\n`, `\`\`\`\n${marker}\n\`\`\``])
+    assert.equal(matchesCompletionMarker(value, marker), true, value)
+  for (const value of [`Completed: ${marker}`, `${marker} complete`, "MM_AGENT_STEP6_SESSION1_DONE_EXTRA"])
+    assert.equal(matchesCompletionMarker(value, marker), false, value)
+})
+
 test("npm pack dry run contains the intended distribution surface", () => {
   const npmCli = process.env.npm_execpath
   assert.ok(npmCli)
@@ -317,12 +337,22 @@ test("golden command rejects Step 1 execution", () => {
   assert.match(`${result.stdout}${result.stderr}`, /Golden Case belongs to PLAN Step 7/)
 })
 
-test("Skill exposes Step 3 preflight and intake without a second public command", async () => {
+test("Skills expose the four-stage workflow without a second public command", async () => {
   const skill = await readFile(path.join(repositoryRoot, "skills", "mm-agent", "SKILL.md"), "utf8")
   assert.match(skill, /mm_agent_check/u)
   assert.match(skill, /mm_agent_prepare/u)
-  assert.match(skill, /Stop after the environment and intake result/u)
+  assert.match(skill, /mm_agent_case/u)
+  assert.match(skill, /mm-critic/u)
+  assert.match(skill, /schema_version: 1/u)
+  assert.match(skill, /top-level\s+`attempt_id`/u)
+  assert.match(skill, /Case-relative existing-path evidence/u)
+  assert.match(skill, /`expected_revision`/u)
+  assert.match(skill, /Canonical Analysis output contract/u)
   assert.match(skill, /do not\s+invent `\/doctor`, `\/setup`, or another slash command/u)
+  for (const name of ["mm-hmml", "mm-compute", "mm-report"]) {
+    const installed = await readFile(path.join(repositoryRoot, "skills", name, "SKILL.md"), "utf8")
+    assert.match(installed, new RegExp(`name: ${name}`, "u"))
+  }
 })
 
 test("build emits a loadable ESM Plugin entry and declarations", async () => {
@@ -342,27 +372,53 @@ test("build emits a loadable ESM Plugin entry and declarations", async () => {
   assert.equal(typeof module.default, "function")
 })
 
-test("config hook injects the mm-agent-spike hidden subagent", async () => {
+test("config hook injects five hidden least-privilege stage subagents", async () => {
   const mmAgentPlugin = await loadPlugin()
   const hooks = await mmAgentPlugin({ directory: repositoryRoot, worktree: repositoryRoot } as PluginInput)
   const config = {} as Config
 
   await hooks.config?.(config)
 
-  assert.deepEqual(config.agent?.["mm-agent-spike"], {
-    description: "Reads project-local spike fixtures in a fresh child session.",
-    mode: "subagent",
-    hidden: true,
-    permission: {
-      read: "allow",
-      glob: "allow",
-      grep: "allow",
-      edit: "deny",
-      bash: "deny",
-      task: "deny",
-      webfetch: "deny",
-    },
-  })
+  assert.deepEqual(Object.keys(config.agent ?? {}).sort(), ["mm-analyst", "mm-critic", "mm-modeler", "mm-solver", "mm-writer"])
+  for (const [name, agent] of Object.entries(config.agent ?? {})) {
+    assert.equal(agent.hidden, true, name)
+    assert.equal(agent.mode, "subagent", name)
+    assert.equal(agent.permission?.task, "deny", name)
+    assert.equal(agent.permission?.mm_agent_case, "deny", name)
+    assert.equal(agent.permission?.["*"], "deny", name)
+    for (const tool of ["webfetch", "websearch", "lsp", "external_directory", "question"])
+      assert.equal(agent.permission?.[tool], "deny", `${name}:${tool}`)
+  }
+  assert.equal(config.agent?.["mm-critic"]?.permission?.edit, "deny")
+  const expectedAttempts = {
+    "mm-analyst": "runs/*/attempts/analysis/*/**",
+    "mm-modeler": "runs/*/attempts/modeling/*/**",
+    "mm-solver": "runs/*/attempts/solving/*/*/**",
+    "mm-writer": "runs/*/attempts/reporting/*/**",
+  }
+  for (const [name, attempt] of Object.entries(expectedAttempts)) {
+    const edit = config.agent?.[name]?.permission?.edit as Record<string, string>
+    assert.deepEqual(Object.keys(edit), ["*", attempt, `${attempt}/context.json`, `${attempt}/review.json`])
+    assert.equal(edit["*"], "deny")
+    assert.equal(edit[attempt], "allow")
+    assert.equal(edit[`${attempt}/context.json`], "deny")
+    assert.equal(edit[`${attempt}/review.json`], "deny")
+    assert.equal(edit["runs/*/state.json"], undefined)
+    assert.equal(edit["runs/*/artifacts/**"], undefined)
+    assert.equal(edit["runs/*/tasks/**"], undefined)
+    assert.equal(edit["runs/*/report/**"], undefined)
+  }
+  assert.deepEqual(config.agent?.["mm-analyst"]?.permission?.skill, { "*": "deny" })
+  assert.deepEqual(config.agent?.["mm-modeler"]?.permission?.skill, { "*": "deny", "mm-hmml": "allow" })
+  assert.deepEqual(config.agent?.["mm-solver"]?.permission?.skill, { "*": "deny", "mm-compute": "allow" })
+  assert.deepEqual(config.agent?.["mm-writer"]?.permission?.skill, { "*": "deny", "mm-report": "allow" })
+  assert.deepEqual(config.agent?.["mm-critic"]?.permission?.skill, { "*": "deny" })
+  const criticPrompt = config.agent?.["mm-critic"]?.prompt ?? ""
+  for (const required of ["schema_version must be exactly 1", "copy attempt_id exactly", "Case-relative paths", "reviewed_at must be UTC RFC 3339", "Before verdict pass", "DAG is acyclic"])
+    assert.match(criticPrompt, new RegExp(required, "u"))
+  const analystPrompt = config.agent?.["mm-analyst"]?.prompt ?? ""
+  for (const required of ["\"tasks\"", "depends_on", "wave", "Do not use waves, task_ids, or dependencies"])
+    assert.match(analystPrompt, new RegExp(required, "u"))
 })
 
 test("config hook preserves an existing same-name agent unchanged", async () => {
@@ -373,21 +429,22 @@ test("config hook preserves an existing same-name agent unchanged", async () => 
     model: "example/user-model",
     permission: { read: "deny" as const },
   }
-  const config = { agent: { "mm-agent-spike": userAgent } } as Config
+  const config = { agent: { "mm-analyst": userAgent } } as Config
   const mmAgentPlugin = await loadPlugin()
   const hooks = await mmAgentPlugin({ directory: repositoryRoot, worktree: repositoryRoot } as PluginInput)
 
   await hooks.config?.(config)
 
-  assert.strictEqual(config.agent?.["mm-agent-spike"], userAgent)
-  assert.deepEqual(config.agent?.["mm-agent-spike"], userAgent)
+  assert.strictEqual(config.agent?.["mm-analyst"], userAgent)
+  assert.deepEqual(config.agent?.["mm-analyst"], userAgent)
 })
 
-test("Plugin registers the implemented deterministic Tools through Step 5", async () => {
+test("Plugin registers the six deterministic Tools", async () => {
   const mmAgentPlugin = await loadPlugin()
   const hooks = await mmAgentPlugin({ directory: repositoryRoot, worktree: repositoryRoot } as PluginInput)
 
   assert.deepEqual(Object.keys(hooks.tool ?? {}).sort(), [
+    "mm_agent_case",
     "mm_agent_check",
     "mm_agent_compile",
     "mm_agent_compute",
@@ -396,6 +453,7 @@ test("Plugin registers the implemented deterministic Tools through Step 5", asyn
   ])
   assert.match(hooks.tool?.mm_agent_check?.description ?? "", /structured evidence/i)
   assert.match(hooks.tool?.mm_agent_prepare?.description ?? "", /CaseContextStore\.open/i)
+  assert.match(hooks.tool?.mm_agent_case?.description ?? "", /CaseContextStore/i)
   assert.match(hooks.tool?.mm_agent_hmml?.description ?? "", /BM25 fallback/i)
   assert.match(hooks.tool?.mm_agent_compute?.description ?? "", /Runtime Evidence/i)
   assert.match(hooks.tool?.mm_agent_compile?.description ?? "", /latexmk/i)
@@ -557,7 +615,7 @@ test("installer fresh install preserves unrelated config and writes a hashed rec
 
   const installedSkillPath = path.join(configRoot, "skills", "mm-agent", "SKILL.md")
   const installedSkill = await readFile(installedSkillPath, "utf8")
-  assert.match(installedSkill, /^---\nname: mm-agent\ndescription: /)
+  assert.match(installedSkill, /^---\r?\nname: mm-agent\r?\ndescription: /)
   const config = JSON.parse(await readFile(path.join(configRoot, "opencode.json"), "utf8"))
   assert.equal(config.username, "preserve-me")
   assert.deepEqual(config.plugin, ["existing-plugin", pluginEntry])
@@ -567,11 +625,11 @@ test("installer fresh install preserves unrelated config and writes a hashed rec
     version: "1.0.0",
     plugin_entry: pluginEntry,
     plugin_added: true,
-    installed_skills: ["mm-agent"],
-    files: [{
-      path: "skills/mm-agent/SKILL.md",
-      sha256: createHash("sha256").update(installedSkill).digest("hex"),
-    }],
+    installed_skills: ["mm-agent", "mm-hmml", "mm-compute", "mm-report"],
+    files: await Promise.all(["mm-agent", "mm-hmml", "mm-compute", "mm-report"].map(async (name) => {
+      const content = await readFile(path.join(configRoot, "skills", name, "SKILL.md"))
+      return { path: `skills/${name}/SKILL.md`, sha256: createHash("sha256").update(content).digest("hex") }
+    })),
   })
   assert.deepEqual(result.receipt, receipt)
   assert.equal(result.receiptPath, path.join(configRoot, "mm-agent", "receipt.json"))
@@ -596,7 +654,7 @@ test("installer update remove and reinstall lifecycle succeeds for unchanged fil
   assert.equal(updateResult.receipt.plugin_added, true)
   const removeResult = await installer.remove({ configRoot })
   assert.deepEqual(removeResult, {
-    removed: ["skills/mm-agent/SKILL.md"],
+    removed: ["skills/mm-agent/SKILL.md", "skills/mm-hmml/SKILL.md", "skills/mm-compute/SKILL.md", "skills/mm-report/SKILL.md"],
     conflicts: [],
   })
   assert.equal(existsSync(path.join(configRoot, "skills", "mm-agent", "SKILL.md")), false)
@@ -609,6 +667,98 @@ test("installer update remove and reinstall lifecycle succeeds for unchanged fil
   assert.equal(reinstallResult.receipt.plugin_entry, pluginEntry)
   assert.equal(reinstallResult.receipt.plugin_added, true)
   assert.equal(existsSync(path.join(configRoot, "skills", "mm-agent", "SKILL.md")), true)
+})
+
+test("installer upgrades a hash-verified legacy one-Skill receipt to four Skills", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mm-agent-legacy-upgrade-"))
+  t.after(() => rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }))
+  const configRoot = path.join(root, ".opencode")
+  const pluginEntry = pathToFileURL(path.join(root, "plugin.js")).href
+  const installer = await loadInstaller()
+  await installer.install({ configRoot, pluginEntry })
+  const legacySkill = await readFile(path.join(configRoot, "skills", "mm-agent", "SKILL.md"))
+  for (const name of ["mm-hmml", "mm-compute", "mm-report"])
+    await rm(path.join(configRoot, "skills", name), { recursive: true, force: true })
+  await writeFile(path.join(configRoot, "mm-agent", "receipt.json"), `${JSON.stringify({
+    package: "@mm-agent/opencode", version: "1.0.0", plugin_entry: pluginEntry, plugin_added: true,
+    installed_skills: ["mm-agent"],
+    files: [{ path: "skills/mm-agent/SKILL.md", sha256: createHash("sha256").update(legacySkill).digest("hex") }],
+  }, null, 2)}\n`)
+
+  const result = await installer.update({ configRoot, pluginEntry })
+  assert.deepEqual(result.receipt.installed_skills, ["mm-agent", "mm-hmml", "mm-compute", "mm-report"])
+  assert.equal(result.receipt.files.length, 4)
+  for (const name of ["mm-agent", "mm-hmml", "mm-compute", "mm-report"])
+    assert.equal(existsSync(path.join(configRoot, "skills", name, "SKILL.md")), true, name)
+})
+
+test("installer preserves legacy owned and unowned files when an upgrade conflicts", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mm-agent-legacy-conflict-"))
+  t.after(() => rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }))
+  const configRoot = path.join(root, ".opencode")
+  const pluginEntry = pathToFileURL(path.join(root, "plugin.js")).href
+  const installer = await loadInstaller()
+  await installer.install({ configRoot, pluginEntry })
+  const legacySkillPath = path.join(configRoot, "skills", "mm-agent", "SKILL.md")
+  const legacySkill = await readFile(legacySkillPath)
+  for (const name of ["mm-hmml", "mm-compute", "mm-report"])
+    await rm(path.join(configRoot, "skills", name), { recursive: true, force: true })
+  const receiptPath = path.join(configRoot, "mm-agent", "receipt.json")
+  const legacyReceipt = `${JSON.stringify({
+    package: "@mm-agent/opencode", version: "1.0.0", plugin_entry: pluginEntry, plugin_added: true,
+    installed_skills: ["mm-agent"],
+    files: [{ path: "skills/mm-agent/SKILL.md", sha256: createHash("sha256").update(legacySkill).digest("hex") }],
+  }, null, 2)}\n`
+  await writeFile(receiptPath, legacyReceipt)
+  const userSkillPath = path.join(configRoot, "skills", "mm-hmml", "SKILL.md")
+  await mkdir(path.dirname(userSkillPath), { recursive: true })
+  await writeFile(userSkillPath, "user skill\n")
+  await assert.rejects(() => installer.update({ configRoot, pluginEntry }), (error: unknown) => {
+    assert.equal((error as Error).name, "InstallerConflictError")
+    assert.deepEqual((error as { conflicts?: string[] }).conflicts, ["skills/mm-hmml/SKILL.md"])
+    return true
+  })
+  assert.equal(await readFile(userSkillPath, "utf8"), "user skill\n")
+  assert.equal(await readFile(receiptPath, "utf8"), legacyReceipt)
+  await writeFile(legacySkillPath, "user modified legacy skill\n")
+  await rm(userSkillPath)
+  await assert.rejects(() => installer.update({ configRoot, pluginEntry }), /Modified owned file conflict: skills\/mm-agent\/SKILL\.md/u)
+  assert.equal(await readFile(legacySkillPath, "utf8"), "user modified legacy skill\n")
+})
+
+test("legacy receipt upgrade rolls back every Skill when the transaction cannot replace config", {
+  skip: process.platform !== "win32",
+}, async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mm-agent-legacy-rollback-"))
+  t.after(() => rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }))
+  const configRoot = path.join(root, ".opencode")
+  const pluginEntry = pathToFileURL(path.join(root, "plugin.js")).href
+  const installer = await loadInstaller()
+  await installer.install({ configRoot, pluginEntry })
+  const legacySkillPath = path.join(configRoot, "skills", "mm-agent", "SKILL.md")
+  const legacySkill = await readFile(legacySkillPath)
+  for (const name of ["mm-hmml", "mm-compute", "mm-report"])
+    await rm(path.join(configRoot, "skills", name), { recursive: true, force: true })
+  const receiptPath = path.join(configRoot, "mm-agent", "receipt.json")
+  const legacyReceipt = `${JSON.stringify({
+    package: "@mm-agent/opencode", version: "1.0.0", plugin_entry: pluginEntry, plugin_added: true,
+    installed_skills: ["mm-agent"],
+    files: [{ path: "skills/mm-agent/SKILL.md", sha256: createHash("sha256").update(legacySkill).digest("hex") }],
+  }, null, 2)}\n`
+  await writeFile(receiptPath, legacyReceipt)
+  const configPath = path.join(configRoot, "opencode.json")
+  const configBefore = await readFile(configPath, "utf8")
+  const release = await acquireWindowsReadLock(configPath)
+  try {
+    await assert.rejects(() => installer.update({ configRoot, pluginEntry }))
+  } finally {
+    await release()
+  }
+  assert.equal(await readFile(legacySkillPath, "utf8"), legacySkill.toString("utf8"))
+  assert.equal(await readFile(receiptPath, "utf8"), legacyReceipt)
+  assert.equal(await readFile(configPath, "utf8"), configBefore)
+  for (const name of ["mm-hmml", "mm-compute", "mm-report"])
+    assert.equal(existsSync(path.join(configRoot, "skills", name, "SKILL.md")), false, name)
 })
 
 test("installer update reports a modified owned file and does not overwrite it", async (t) => {
@@ -856,7 +1006,7 @@ test("installer update replaces only its previous plugin entry", async (t) => {
   assert.equal(updatedConfig.username, "preserve-me")
   assert.deepEqual(updatedConfig.plugin, [unrelatedPlugin, newPluginEntry])
   const removeResult = await installer.remove({ configRoot })
-  assert.deepEqual(removeResult, { removed: ["skills/mm-agent/SKILL.md"], conflicts: [] })
+  assert.deepEqual(removeResult, { removed: ["skills/mm-agent/SKILL.md", "skills/mm-hmml/SKILL.md", "skills/mm-compute/SKILL.md", "skills/mm-report/SKILL.md"], conflicts: [] })
   const removedConfig = JSON.parse(await readFile(path.join(configRoot, "opencode.json"), "utf8"))
   assert.equal(removedConfig.username, "preserve-me")
   assert.deepEqual(removedConfig.plugin, [unrelatedPlugin])
@@ -1062,19 +1212,23 @@ test("runtime: isolated install loads the Plugin and discovers its Agent and Ski
   assert.deepEqual([hostMajor, hostMinor], [apiMajor, apiMinor])
   assert.ok(hostPatch >= apiPatch, `OpenCode ${hostVersion} is older than Plugin API ${pluginApiVersion}`)
 
-  const agentResult = runRuntimeProcess(opencode, ["debug", "agent", "mm-agent-spike"], projectRoot, env)
-  assertRuntimeSuccess(agentResult, "opencode debug agent mm-agent-spike")
-  const agent = JSON.parse(agentResult.stdout) as Record<string, unknown>
-  assert.equal(agent.name, "mm-agent-spike")
-  assert.equal(agent.mode, "subagent")
-  assert.equal(agent.hidden, true)
+  for (const name of ["mm-analyst", "mm-modeler", "mm-solver", "mm-writer", "mm-critic"]) {
+    const agentResult = runRuntimeProcess(opencode, ["debug", "agent", name], projectRoot, env)
+    assertRuntimeSuccess(agentResult, `opencode debug agent ${name}`)
+    const agent = JSON.parse(agentResult.stdout) as Record<string, unknown>
+    assert.equal(agent.name, name)
+    assert.equal(agent.mode, "subagent")
+    assert.equal(agent.hidden, true)
+  }
 
   const skillResult = runRuntimeProcess(opencode, ["debug", "skill"], projectRoot, env)
   assertRuntimeSuccess(skillResult, "opencode debug skill")
   const skills = JSON.parse(skillResult.stdout) as Array<Record<string, unknown>>
-  const skill = skills.find((candidate) => candidate.name === "mm-agent")
-  assert.ok(skill)
-  assert.equal(skill.location, path.join(configRoot, "skills", "mm-agent", "SKILL.md"))
+  for (const name of ["mm-agent", "mm-hmml", "mm-compute", "mm-report"]) {
+    const skill = skills.find((candidate) => candidate.name === name)
+    assert.ok(skill)
+    assert.equal(skill.location, path.join(configRoot, "skills", name, "SKILL.md"))
+  }
 })
 
 test("runtime: model invokes Step 3 Tools, compiles the real template, and creates a recoverable Case", {
@@ -1256,6 +1410,158 @@ test("runtime: model invokes HMML and receives a traceable offline BM25 result",
   assert.ok(events.some((event) => event.part?.type === "text" && event.part.text === "MM_AGENT_HMML_DONE_91C7"))
 })
 
+test("runtime: Main gates a real Analyst candidate after a fresh Critic review", {
+  skip: !runtimeModelEnabled && !runtimeHostModelEnabled,
+  timeout: 300_000,
+}, async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mm-agent-runtime-step6-"))
+  const keepFailedRuntime = process.env.MM_AGENT_KEEP_FAILED_RUNTIME === "1"
+  t.after(async () => {
+    if (keepFailedRuntime) {
+      t.diagnostic(`Step 6 runtime project retained at ${root}`)
+      return
+    }
+    await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+  })
+  const projectRoot = path.join(root, "project")
+  const configRoot = path.join(root, "config-home", "opencode")
+  await mkdir(projectRoot, { recursive: true })
+  await writeFile(path.join(projectRoot, "problem.md"), "Determine the total cost of buying 3 notebooks at 2 dollars each.\n")
+
+  const npmCli = process.env.npm_execpath
+  assert.ok(npmCli)
+  assertRuntimeSuccess(runRuntimeProcess(process.execPath, [npmCli, "run", "build"], repositoryRoot, process.env), "npm run build")
+  if (runtimeHostModelEnabled) {
+    await writeFile(path.join(projectRoot, "opencode.json"), `${JSON.stringify({
+      plugin: [pathToFileURL(path.join(repositoryRoot, "dist", "index.js")).href],
+    }, null, 2)}\n`)
+  } else {
+    assertRuntimeSuccess(runRuntimeProcess(
+      process.execPath,
+      [path.join(repositoryRoot, "dist", "install.js"), "install", "--config-root", configRoot],
+      repositoryRoot,
+      process.env,
+    ), "installer CLI")
+    await configureRuntimeModel(configRoot)
+  }
+  assertRuntimeSuccess(runRuntimeProcess("git", ["init"], projectRoot, process.env), "git init")
+
+  const opencode = findOpenCodeBinary()
+  const env = runtimeHostModelEnabled ? process.env : runtimeEnvironment(root)
+  const caseId = runtimeHostModelEnabled ? `case-step6-host-${Date.now().toString(36)}` : "case-step6-runtime"
+  type RuntimeToolState = {
+    status?: string
+    input?: Record<string, unknown>
+    output?: string
+    error?: unknown
+    metadata?: { parentSessionId?: string; sessionId?: string } | Record<string, unknown>
+  }
+  type RuntimeEvent = {
+    type?: string
+    sessionID?: string
+    part?: {
+      type?: string
+      tool?: string
+      text?: string
+      state?: RuntimeToolState
+    }
+  }
+  const runMain = (label: string, prompt: string, timeout = 150_000): RuntimeEvent[] => {
+    const result = runRuntimeProcess(
+      opencode,
+      ["run", "--format", "json", "--auto", ...runtimeModelArgs(), prompt],
+      projectRoot,
+      env,
+      timeout,
+    )
+    assertRuntimeSuccess(result, label)
+    return result.stdout.split(/\r?\n/u).filter(Boolean).map((line) => JSON.parse(line) as RuntimeEvent)
+  }
+  const assertToolCompleted = (label: string, event: RuntimeEvent | undefined): void => {
+    assert.equal(
+      event?.part?.state?.status,
+      "completed",
+      `${label}; main_session=${event?.sessionID ?? "unknown"}; tool_state=${sanitizeRuntimeOutput(JSON.stringify(event?.part?.state ?? {}))}`,
+    )
+  }
+
+  const session1 = runMain("Step 6 prepare and dispatch", [
+    `Call mm_agent_prepare exactly once with case_id ${caseId} and explicit_paths [problem.md].`,
+    `Then call mm_agent_case exactly once with action dispatch, case_id ${caseId}, role analyst, and goal Analyze the notebook-cost problem.`,
+    "Do not call task, inspect, gate, or any other mm_agent Tool. Reply exactly MM_AGENT_STEP6_SESSION1_DONE.",
+  ].join(" "))
+  const session2 = runMain("Step 6 Analyst task", [
+    `Call mm_agent_case exactly once with action inspect and case_id ${caseId}. Use only its disk-backed active Attempt contextPath.`,
+    "Then use built-in task exactly once with subagent_type mm-analyst. Tell it to read that contextPath and create every expected output in that Attempt only. tasks.json must be exactly {\"schema_version\":1,\"tasks\":[{\"id\":\"task-01\",\"description\":\"Compute the notebook cost\",\"requires_computation\":false}]}. task-graph.json must be exactly {\"schema_version\":1,\"tasks\":[{\"id\":\"task-01\",\"depends_on\":[],\"wave\":1}]}. Return its required JSON status.",
+    "Do not call dispatch, gate, or any other mm_agent Tool. Reply exactly MM_AGENT_STEP6_SESSION2_DONE.",
+  ].join(" "))
+  const session3 = runMain("Step 6 Critic and Gate", [
+    `Call mm_agent_case exactly once with action inspect and case_id ${caseId}. Use only its disk-backed active Attempt contextPath.`,
+    "Then use built-in task exactly once with subagent_type mm-critic. Tell it to read that same active contextPath and candidate outputs, then return exactly one bare Review JSON with schema_version 1, its exact context attempt_id, verdict pass, string arrays, existing Case-relative evidence paths, and UTC RFC 3339 reviewed_at.",
+    `Immediately call mm_agent_case exactly once with action gate for ${caseId}, top-level attempt_id copied from the active Manifest, expected_revision from this inspect state revision, and the Critic Review verbatim. If Gate returns an error, stop and report it without retrying or altering the Review. Do not call dispatch or any other mm_agent Tool. Reply exactly MM_AGENT_STEP6_SESSION3_DONE.`,
+  ].join(" "))
+  const sessionIds = [session1, session2, session3].map((events) => events.find((event) => event.sessionID)?.sessionID)
+  assert.equal(new Set(sessionIds).size, 3)
+  for (const sessionId of sessionIds) assert.match(sessionId ?? "", /^ses_/u)
+
+  const session1Tools = session1.filter((event) => event.type === "tool_use")
+  const dispatchEvent = session1Tools.find((event) => event.part?.tool === "mm_agent_case")
+  assertToolCompleted("Session 1 dispatch", dispatchEvent)
+  const dispatch = JSON.parse(dispatchEvent?.part?.state?.output ?? "") as { attemptId?: string; contextPath?: string }
+  assert.equal(dispatch.attemptId, "analysis-001")
+  assert.equal(dispatch.contextPath, "attempts/analysis/001/context.json")
+
+  const analystTask = session2.find((event) => event.type === "tool_use" && event.part?.tool === "task")
+  const criticTask = session3.find((event) => event.type === "tool_use" && event.part?.tool === "task")
+  assert.equal(analystTask?.part?.state?.input?.subagent_type, "mm-analyst")
+  assert.equal(criticTask?.part?.state?.input?.subagent_type, "mm-critic")
+  assertToolCompleted("Session 2 Analyst task", analystTask)
+  assertToolCompleted("Session 3 Critic task", criticTask)
+  const actorChildId = (analystTask?.part?.state?.metadata as { sessionId?: string } | undefined)?.sessionId
+  const criticChildId = (criticTask?.part?.state?.metadata as { sessionId?: string } | undefined)?.sessionId
+  assert.match(actorChildId ?? "", /^ses_/u)
+  assert.match(criticChildId ?? "", /^ses_/u)
+  assert.notEqual(actorChildId, criticChildId)
+  assert.equal((analystTask?.part?.state?.metadata as { parentSessionId?: string } | undefined)?.parentSessionId, sessionIds[1])
+  assert.equal((criticTask?.part?.state?.metadata as { parentSessionId?: string } | undefined)?.parentSessionId, sessionIds[2])
+  const criticExport = runRuntimeProcess(opencode, ["export", criticChildId ?? ""], projectRoot, env)
+  assertRuntimeSuccess(criticExport, "opencode export Critic child")
+  const criticParts = (JSON.parse(criticExport.stdout) as {
+    messages?: Array<{ parts?: Array<{ type?: string; tool?: string }> }>
+  }).messages?.flatMap((message) => message.parts ?? []) ?? []
+  assert.equal(criticParts.some((part) => part.type === "tool" && (part.tool === "edit" || part.tool === "mm_agent_case" || part.tool === "task")), false)
+  const session3CaseEvents = session3.filter((event) => event.type === "tool_use" && event.part?.tool === "mm_agent_case")
+  assert.equal(session3CaseEvents.length, 2)
+  assertToolCompleted("Session 3 inspect", session3CaseEvents[0])
+  assertToolCompleted("Session 3 gate", session3CaseEvents[1])
+  const gated = JSON.parse(session3CaseEvents[1]?.part?.state?.output ?? "") as { outcome?: string }
+  assert.equal(gated.outcome, "pass")
+
+  const caseRoot = path.join(projectRoot, "runs", caseId)
+  const attempts = await readdir(path.join(caseRoot, "attempts", "analysis"), { withFileTypes: true })
+  assert.deepEqual(attempts.filter((entry) => entry.isDirectory()).map((entry) => entry.name), ["001"])
+  const state = JSON.parse(await readFile(path.join(caseRoot, "state.json"), "utf8")) as {
+    revision?: number; stage?: string; accepted_artifacts?: Array<{ path?: string }>
+  }
+  assert.equal(state.revision, 1)
+  assert.equal(state.stage, "modeling")
+  assert.deepEqual(state.accepted_artifacts?.map((artifact) => artifact.path).sort(), [
+    "artifacts/problem-understanding.md",
+    "artifacts/task-graph.json",
+    "artifacts/tasks.json",
+  ])
+  for (const name of ["problem-understanding.md", "tasks.json", "task-graph.json"]) {
+    const candidate = await readFile(path.join(caseRoot, "attempts", "analysis", "001", name), "utf8")
+    const accepted = await readFile(path.join(caseRoot, "artifacts", name), "utf8")
+    assert.equal(accepted, candidate, name)
+  }
+  assert.equal(existsSync(path.join(caseRoot, "attempts", "analysis", "001", "review.json")), true)
+  assert.ok(session1.some((event) => event.part?.type === "text" && matchesCompletionMarker(event.part.text, "MM_AGENT_STEP6_SESSION1_DONE")))
+  assert.ok(session2.some((event) => event.part?.type === "text" && matchesCompletionMarker(event.part.text, "MM_AGENT_STEP6_SESSION2_DONE")))
+  assert.ok(session3.some((event) => event.part?.type === "text" && matchesCompletionMarker(event.part.text, "MM_AGENT_STEP6_SESSION3_DONE")))
+  t.diagnostic(`Step 6 runtime sessions: main=${sessionIds.join(",")}; actor=${actorChildId}; critic=${criticChildId}`)
+})
+
 test("runtime: built-in task creates a linked fresh child that reads disk context", {
   skip: !runtimeModelEnabled,
   timeout: 300_000,
@@ -1286,7 +1592,7 @@ test("runtime: built-in task creates a linked fresh child that reads disk contex
   const opencode = findOpenCodeBinary()
   const env = runtimeEnvironment(root)
   const prompt = [
-    "Use the built-in task tool exactly once with subagent_type mm-agent-spike.",
+    "Use the built-in task tool exactly once with subagent_type mm-critic.",
     "Tell the child to read context.json from the project root and return exactly the marker value.",
     "Do not read context.json yourself and do not use any other tool.",
     "After the child responds, reply with exactly the child's response.",
@@ -1393,7 +1699,7 @@ test("runtime: Skill slash command executes and restart rediscovers Plugin and S
 
   const opencode = findOpenCodeBinary()
   const env = runtimeEnvironment(root)
-  const firstLoad = runRuntimeProcess(opencode, ["debug", "agent", "mm-agent-spike"], projectRoot, env)
+  const firstLoad = runRuntimeProcess(opencode, ["debug", "agent", "mm-analyst"], projectRoot, env)
   assertRuntimeSuccess(firstLoad, "first opencode debug agent")
   assert.equal(JSON.parse(firstLoad.stdout).hidden, true)
 
@@ -1467,10 +1773,10 @@ test("runtime: Skill slash command executes and restart rediscovers Plugin and S
   assert.ok(commandTexts.join(" ").length > 0)
   assert.match(commandEvents.find((event) => event.sessionID)?.sessionID ?? "", /^ses_/u)
 
-  const restartedAgent = runRuntimeProcess(opencode, ["debug", "agent", "mm-agent-spike"], projectRoot, env)
+  const restartedAgent = runRuntimeProcess(opencode, ["debug", "agent", "mm-analyst"], projectRoot, env)
   assertRuntimeSuccess(restartedAgent, "restarted opencode debug agent")
   const agent = JSON.parse(restartedAgent.stdout) as Record<string, unknown>
-  assert.equal(agent.name, "mm-agent-spike")
+  assert.equal(agent.name, "mm-analyst")
   assert.equal(agent.hidden, true)
 
   const restartedSkill = runRuntimeProcess(opencode, ["debug", "skill"], projectRoot, env)
@@ -1517,9 +1823,9 @@ test("runtime: compaction-off fresh process recovers context and state from disk
 
   const opencode = findOpenCodeBinary()
   const env = { ...runtimeEnvironment(root), OPENCODE_DISABLE_AUTOCOMPACT: "1" }
-  const firstProcess = runRuntimeProcess(opencode, ["debug", "agent", "mm-agent-spike"], projectRoot, env)
+  const firstProcess = runRuntimeProcess(opencode, ["debug", "agent", "mm-critic"], projectRoot, env)
   assertRuntimeSuccess(firstProcess, "compaction-off first OpenCode process")
-  assert.equal(JSON.parse(firstProcess.stdout).name, "mm-agent-spike")
+  assert.equal(JSON.parse(firstProcess.stdout).name, "mm-critic")
 
   const prompt = [
     "Use the read tool to read context.json and runs/case-alpha/state.json from disk.",

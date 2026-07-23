@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 import { lstat, mkdir, readFile, realpath, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { hashPath, writeJsonAtomic } from "../core/paths.js";
+import { FileCaseContextStore } from "../core/case-context-store.js";
+import { hashPath, resolveInsideCase, writeJsonAtomic } from "../core/paths.js";
 
 type MethodEntry = {
   method_id: string;
@@ -120,6 +121,7 @@ export type HmmlOptions = {
   query: string;
   topK: number;
   outputPath: string;
+  caseId?: string;
   mode?: "auto" | "bm25";
   cacheRoot?: string;
   env?: NodeJS.ProcessEnv;
@@ -228,6 +230,30 @@ async function resolveOutput(projectRoot: string, relative: string): Promise<str
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
   return absolute;
+}
+
+async function resolveModelingOutput(projectRoot: string, caseId: string, outputPath: string): Promise<string> {
+  const store = new FileCaseContextStore({ runsRoot: path.join(projectRoot, "runs") });
+  const snapshot = await store.inspect(caseId);
+  const manifests = snapshot.activeAttempts.filter((attempt) => attempt.role === "modeler");
+  if (manifests.length !== 1) throw new Error("HMML retrieval requires exactly one active Modeling Attempt");
+  const promotion = manifests[0]!.promotions.find((item) =>
+    item.candidate === outputPath && /^tasks\/[^/]+\/retrieved-methods\.json$/u.test(item.target),
+  );
+  if (!promotion || !manifests[0]!.allowed_writes.includes(outputPath))
+    throw new Error("output_path must exactly match a retrieval promotion in the active Modeling Manifest");
+  const root = await realpath(path.join(projectRoot, "runs", caseId));
+  const output = await resolveInsideCase(root, outputPath, "candidate");
+  await mkdir(path.dirname(output), { recursive: true });
+  const parent = await realpath(path.dirname(output));
+  assertInside(root, parent, "output_path parent");
+  try {
+    const info = await lstat(output);
+    if (!info.isFile() || info.isSymbolicLink()) throw new Error("output_path is not a direct regular file");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  return output;
 }
 
 async function runDense(
@@ -431,7 +457,9 @@ export async function retrieveHmml(options: HmmlOptions): Promise<HmmlRetrievalR
   if (!query) throw new Error("query must not be empty");
   if (!Number.isSafeInteger(options.topK) || options.topK < 1 || options.topK > 20)
     throw new Error("top_k must be an integer between 1 and 20");
-  const output = await resolveOutput(options.projectRoot, options.outputPath);
+  const output = options.caseId
+    ? await resolveModelingOutput(options.projectRoot, options.caseId, options.outputPath)
+    : await resolveOutput(options.projectRoot, options.outputPath);
   const { manifest, methods, manifestPath, knowledgeRoot } = await loadRuntime(options.packageRoot);
   const sourceEnv = options.env ?? process.env;
   const cacheRoot = path.resolve(options.cacheRoot ?? sourceEnv.MM_AGENT_CACHE_DIR ?? defaultCacheRoot(sourceEnv));

@@ -14,7 +14,7 @@
 
 ## 当前状态
 
-`v1.0.0` 的 Canonical Core 由 `4ce82cd` 接受，OpenCode Adapter 设计由 `1040e63` 接受。OpenCode Plugin Spike 已由 `315c319` 接受；Step 2 CaseContextStore 已由 `cfda6ea` 接受；Step 3 Preflight 与输入整理已在 `5367dd0` 接受；Step 4 已完成 HMML 独立标签复核、真实双模型评测、唯一 GTE 层级索引、dense 检索和无模型 BM25 降级；Step 5 已完成受控 Python 与 XeLaTeX Runtime Evidence，不进入 Step 6 Agents/Skills 编排或 Golden Case。
+`v1.0.0` 的 Canonical Core 由 `4ce82cd` 接受，OpenCode Adapter 设计由 `1040e63` 接受。OpenCode Plugin Spike 已由 `315c319` 接受；Step 2 CaseContextStore 已由 `cfda6ea` 接受；Step 3 Preflight 与输入整理已在 `5367dd0` 接受；Step 4 已完成 HMML 独立标签复核、真实双模型评测、唯一 GTE 层级索引、dense 检索和无模型 BM25 降级；Step 5 已完成受控 Python 与 XeLaTeX Runtime Evidence；Step 6 已接受：五个 hidden stage Agents、四份安装 Skills、`mm_agent_case` 与 Actor -> Critic -> Gate 已在真实 OpenCode host runtime 跑通。Golden Case 尚未开始。
 
 - Canonical Core：[`docs/architecture/canonical-core.md`](docs/architecture/canonical-core.md) 与 [`docs/context/artifact-protocol.md`](docs/context/artifact-protocol.md) 是宿主无关机制唯一来源。
 - OpenCode Adapter：[`docs/architecture/opencode-plugin-harness.md`](docs/architecture/opencode-plugin-harness.md) 定义 v1 唯一 Adapter 的实现接口。
@@ -719,7 +719,7 @@ mm-agent/
 └── .archived/             # 非活跃历史资产
 ```
 
-Step 1 已创建 npm package、最小 Plugin/Agent/installer 与宿主验证测试；Step 2 已创建 `src/core/` 的 CaseContextStore、持久 schema、安全路径、迁移、Context Recipe、Gate transaction 和 contract tests；Step 3 已交付 preflight/intake；Step 4 已交付可复算 HMML 评测、唯一 GTE 层级索引、可追溯 dense 检索与 BM25 降级；Step 5 已交付 Compute/Compile Runtime Evidence 与 Report Gate 的编译证据校验。完整四阶段 Agents/Skills 和 Golden Case 仍以 [PLAN.md](PLAN.md) 的里程碑结果为准。
+Step 1 已创建 npm package、最小 Plugin/Agent/installer 与宿主验证测试；Step 2 已创建 `src/core/` 的 CaseContextStore、持久 schema、安全路径、迁移、Context Recipe、Gate transaction 和 contract tests；Step 3 已交付 preflight/intake；Step 4 已交付可复算 HMML 评测、唯一 GTE 层级索引、可追溯 dense 检索与 BM25 降级；Step 5 已交付 Compute/Compile Runtime Evidence 与 Report Gate 的编译证据校验；Step 6 已接受五角色权限、四份安装 Skill、直接 `mm_agent_case` Adapter 与真实 Actor -> Critic -> Gate host runtime。Golden Case 仍未开始，以 [PLAN.md](PLAN.md) 的里程碑结果为准。
 
 ## 文档入口
 

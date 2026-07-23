@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { hashPath } from "../../src/core/paths.js";
+import { FileCaseContextStore } from "../../src/core/case-context-store.js";
 import { retrieveHmml } from "../../src/tools/hmml.js";
 
 function combined(files: Record<string, { sha256: string }>): string {
@@ -288,5 +289,55 @@ test("HMML rejects path escapes and index tampering before retrieval", async () 
     );
   } finally {
     await rm(path.dirname(second.packageRoot), { recursive: true, force: true });
+  }
+});
+
+test("HMML writes only an active Modeling Manifest retrieval candidate", async () => {
+  const { packageRoot, projectRoot, cacheRoot } = await fixture();
+  try {
+    const source = path.join(projectRoot, "problem.md");
+    await writeFile(source, "problem\n");
+    const rubrics = path.join(projectRoot, "rubrics");
+    await mkdir(rubrics);
+    for (const name of ["analysis", "modeling", "solving", "reporting"])
+      await writeFile(path.join(rubrics, `${name}.md`), `${name}\n`);
+    const store = new FileCaseContextStore({ runsRoot: path.join(projectRoot, "runs") });
+    await store.open("case-modeling", {
+      sourceKind: "explicit-path",
+      files: [{ label: "problem", sourcePath: source }],
+      policy: {
+        revisionBudget: { analysis: 1, modeling: 1, solvingPerTask: 1, reporting: 1 },
+        rubrics: Object.fromEntries(["analysis", "modeling", "solving", "reporting"].map((name) => [name, { sourcePath: path.join(rubrics, `${name}.md`) }])) as never,
+      },
+    });
+    const analysis = await store.dispatch({ caseId: "case-modeling", role: "analyst", goal: "analyze" });
+    const attempt = path.join(projectRoot, "runs", "case-modeling", "attempts", "analysis", "001");
+    await writeFile(path.join(attempt, "problem-understanding.md"), "# Problem\n");
+    await writeFile(path.join(attempt, "tasks.json"), '{"schema_version":1,"tasks":[{"id":"task-01","description":"solve","requires_computation":false}]}\n');
+    await writeFile(path.join(attempt, "task-graph.json"), '{"schema_version":1,"tasks":[{"id":"task-01","depends_on":[],"wave":1}]}\n');
+    await store.gate({
+      caseId: "case-modeling", attemptId: analysis.attemptId, expectedRevision: 0,
+      review: { schema_version: 1, attempt_id: analysis.attemptId, verdict: "pass", findings: [], required_fixes: [], evidence: ["attempts/analysis/001/problem-understanding.md"], reviewed_at: "2026-07-16T00:00:00.000Z" },
+    });
+    const modeling = await store.dispatch({ caseId: "case-modeling", role: "modeler", goal: "model" });
+    const outputPath = modeling.manifest.allowed_writes.find((item) => item.endsWith("retrieved-methods/task-01.json"));
+    assert.ok(outputPath);
+    const result = await retrieveHmml({ packageRoot, projectRoot, caseId: "case-modeling", cacheRoot, query: "customer waiting queue", topK: 1, outputPath: outputPath! });
+    assert.equal(result.retrieval_mode, "bm25");
+    assert.deepEqual(JSON.parse(await readFile(path.join(projectRoot, "runs", "case-modeling", ...outputPath!.split("/")), "utf8")), result);
+    await assert.rejects(
+      retrieveHmml({ packageRoot, projectRoot, caseId: "case-modeling", cacheRoot, query: "queue", topK: 1, outputPath: "tasks/task-01/retrieved-methods.json" }),
+      /exactly match/u,
+    );
+    await assert.rejects(
+      retrieveHmml({ packageRoot, projectRoot, caseId: "case-modeling", cacheRoot, query: "queue", topK: 1, outputPath: "attempts/modeling/002/retrieved-methods/task-01.json" }),
+      /exactly match/u,
+    );
+    await assert.rejects(
+      retrieveHmml({ packageRoot, projectRoot, caseId: "case-modeling", cacheRoot, query: "queue", topK: 1, outputPath: modeling.manifest.allowed_writes.find((item) => item.endsWith("modeling-scheme.md"))! }),
+      /retrieval promotion/u,
+    );
+  } finally {
+    await rm(path.dirname(packageRoot), { recursive: true, force: true });
   }
 });

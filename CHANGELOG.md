@@ -27,7 +27,11 @@
 - 完成 Step 5 `mm_agent_compute`：仅在当前 Solver Attempt 的 `code/` 目录使用 MM-Agent 专用 Python 执行，保存命令、净化环境、stdout、stderr、exit/timeout、输入输出 hash 与 hash-addressed Runtime Evidence；成功引用写入 `execution-result.json`。
 - 完成 Step 5 `mm_agent_compile`：仅在当前 Writer Attempt 编译 `main.tex`，优先 `latexmk -xelatex`，缺失时回退最多三遍 `xelatex`，保留完整 `compile.log`、结构化错误、非空 PDF 与 Evidence。Report Gate 额外校验成功 Compile Evidence 与 PDF/日志 hash 对应。
 - 修复 Step 5 Compile fallback：`latexmk` 存在但退出失败、超时或未生成非空 PDF 时同样回退 XeLaTeX；Evidence 的命令记录保留两种引擎各自的 stdout/stderr、exit code 和 timeout。
-- 增加 Compute 成功/失败/超时、Compile 成功/失败/无 PDF、路径与 link 拒绝 fixture；真实专用 Python 和 XeLaTeX gate 可由 `MM_AGENT_REAL_RUNTIME=1` 重放。OpenCode 模型 runtime 调用固定 `minimax/MiniMax-M3` Thinking，且仅在显式 `MM_AGENT_MINIMAX_API_KEY` 存在时使用隔离 provider 配置。
+- 增加 Compute 成功/失败/超时、Compile 成功/失败/无 PDF、路径与 link 拒绝 fixture；真实专用 Python 和 XeLaTeX gate 可由 `MM_AGENT_REAL_RUNTIME=1` 重放。OpenCode 模型 runtime 只在显式测试凭据存在时使用隔离 provider 配置。
+- 完成 Step 6：注册五个 hidden stage Agents、安装四份 Skills，并由 `mm_agent_case` Adapter 统一暴露 Case `open / dispatch / gate / inspect`。
+- 固化 Canonical Analyst、Review 与 Gate contracts；Actor/Critic 复用同一 Attempt，Gate 负责 promotion 和状态推进。
+- 安装器支持 legacy 单 Skill receipt 的事务升级，并保留用户文件冲突保护。
+- 真实 OpenCode Actor -> Critic -> Gate host runtime 验证完成。
 
 ### 文档
 - 接受 `4ce82cd` 提交的 Canonical Core（`docs/architecture/canonical-core.md` + `docs/context/artifact-protocol.md`）作为宿主无关机制唯一来源。

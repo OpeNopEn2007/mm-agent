@@ -11,17 +11,27 @@ export type InstallerOptions = {
   pluginEntry?: string
 }
 
-export type Receipt = {
+type ReceiptBase = {
   package: "@mm-agent/opencode"
   version: "1.0.0"
   plugin_entry: string
   plugin_added: boolean
-  installed_skills: ["mm-agent"]
+  installed_skills: string[]
   files: Array<{
     path: string
     sha256: string
   }>
 }
+
+export type Receipt = ReceiptBase & {
+  installed_skills: ["mm-agent", "mm-hmml", "mm-compute", "mm-report"]
+}
+
+type LegacyReceipt = ReceiptBase & {
+  installed_skills: ["mm-agent"]
+}
+
+type StoredReceipt = Receipt | LegacyReceipt
 
 export type InstallResult = {
   receipt: Receipt
@@ -51,10 +61,15 @@ export class InstallerReceiptError extends Error {
 }
 
 const packageRoot = fileURLToPath(new URL("..", import.meta.url))
-const ownedSkillPath = "skills/mm-agent/SKILL.md"
+const ownedSkillPaths = [
+  "skills/mm-agent/SKILL.md",
+  "skills/mm-hmml/SKILL.md",
+  "skills/mm-compute/SKILL.md",
+  "skills/mm-report/SKILL.md",
+] as const
 const configFilePath = "opencode.json"
 const receiptFilePath = "mm-agent/receipt.json"
-const allowedOwnedPaths = new Set([ownedSkillPath])
+const allowedOwnedPaths = new Set<string>(ownedSkillPaths)
 
 export function defaultConfigRoot(): string {
   return path.join(os.homedir(), ".config", "opencode")
@@ -138,11 +153,11 @@ async function readOwnedFile(configRoot: string, relativePath: string): Promise<
   return readFile(targetPath)
 }
 
-function validateReceipt(configRoot: string, value: unknown): Receipt {
+function validateReceipt(configRoot: string, value: unknown): StoredReceipt {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new InstallerReceiptError("expected an object")
   }
-  const receipt = value as Partial<Receipt>
+  const receipt = value as Partial<StoredReceipt>
   if (receipt.package !== "@mm-agent/opencode" || receipt.version !== "1.0.0") {
     throw new InstallerReceiptError("package or version mismatch")
   }
@@ -152,14 +167,12 @@ function validateReceipt(configRoot: string, value: unknown): Receipt {
   if (typeof receipt.plugin_added !== "boolean") {
     throw new InstallerReceiptError("plugin_added must be a boolean")
   }
-  if (
-    !Array.isArray(receipt.installed_skills)
-    || receipt.installed_skills.length !== 1
-    || receipt.installed_skills[0] !== "mm-agent"
-  ) {
-    throw new InstallerReceiptError("installed_skills must contain only mm-agent")
-  }
-  if (!Array.isArray(receipt.files) || receipt.files.length !== allowedOwnedPaths.size) {
+  const legacy = JSON.stringify(receipt.installed_skills) === JSON.stringify(["mm-agent"])
+  const current = JSON.stringify(receipt.installed_skills) === JSON.stringify(["mm-agent", "mm-hmml", "mm-compute", "mm-report"])
+  if (!legacy && !current)
+    throw new InstallerReceiptError("installed_skills must be the legacy mm-agent set or the current four-Skill set")
+  const ownedPaths: readonly string[] = legacy ? [ownedSkillPaths[0]] : ownedSkillPaths
+  if (!Array.isArray(receipt.files) || receipt.files.length !== ownedPaths.length) {
     throw new InstallerReceiptError("files must describe every installer-owned path exactly once")
   }
   const seen = new Set<string>()
@@ -174,16 +187,18 @@ function validateReceipt(configRoot: string, value: unknown): Receipt {
     ) {
       throw new InstallerReceiptError("invalid file entry")
     }
+    if (!ownedPaths.includes(file.path))
+      throw new InstallerReceiptError(`unowned path in receipt: ${file.path}`)
     resolveOwnedPath(configRoot, file.path)
     seen.add(file.path)
   }
-  if ([...allowedOwnedPaths].some((owned) => !seen.has(owned))) {
+  if (ownedPaths.some((owned) => !seen.has(owned))) {
     throw new InstallerReceiptError("missing installer-owned path")
   }
-  return receipt as Receipt
+  return receipt as StoredReceipt
 }
 
-async function readReceipt(configRoot: string): Promise<Receipt> {
+async function readReceipt(configRoot: string): Promise<StoredReceipt> {
   let source: string
   try {
     source = (await readConfigFile(configRoot, receiptFilePath)).toString("utf8")
@@ -200,7 +215,7 @@ async function readReceipt(configRoot: string): Promise<Receipt> {
   return validateReceipt(configRoot, parsed)
 }
 
-async function readReceiptIfPresent(configRoot: string): Promise<Receipt | undefined> {
+async function readReceiptIfPresent(configRoot: string): Promise<StoredReceipt | undefined> {
   try {
     return await readReceipt(configRoot)
   } catch (error) {
@@ -209,7 +224,7 @@ async function readReceiptIfPresent(configRoot: string): Promise<Receipt | undef
   }
 }
 
-async function findConflicts(configRoot: string, receipt: Receipt): Promise<string[]> {
+async function findConflicts(configRoot: string, receipt: StoredReceipt): Promise<string[]> {
   const conflicts: string[] = []
   for (const file of receipt.files) {
     try {
@@ -218,6 +233,18 @@ async function findConflicts(configRoot: string, receipt: Receipt): Promise<stri
     } catch (error) {
       if (error instanceof InstallerReceiptError) throw error
       conflicts.push(file.path)
+    }
+  }
+  if (receipt.installed_skills.length === 1) {
+    for (const ownedPath of ownedSkillPaths.slice(1)) {
+      const target = resolveOwnedPath(configRoot, ownedPath)
+      await assertRealPathBoundary(configRoot, target)
+      try {
+        await lstat(target)
+        conflicts.push(ownedPath)
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+      }
     }
   }
   return conflicts
@@ -350,10 +377,12 @@ async function applyTransaction(configRoot: string, changes: TransactionChange[]
 async function writeInstallation(
   configRoot: string,
   pluginEntry: string,
-  previousReceipt?: Receipt,
+  previousReceipt?: StoredReceipt,
 ): Promise<InstallResult> {
-  const sourceSkillPath = path.join(packageRoot, "skills", "mm-agent", "SKILL.md")
-  const skill = await readFile(sourceSkillPath, "utf8")
+  const skills = await Promise.all(ownedSkillPaths.map(async (ownedPath) => ({
+    path: ownedPath,
+    content: await readFile(path.join(packageRoot, ...ownedPath.split("/")), "utf8"),
+  })))
   const config = await readConfig(configRoot)
   let plugins = Array.isArray(config.plugin) ? [...config.plugin] : []
   if (previousReceipt && previousReceipt.plugin_entry !== pluginEntry && previousReceipt.plugin_added) {
@@ -372,11 +401,11 @@ async function writeInstallation(
     version: "1.0.0",
     plugin_entry: pluginEntry,
     plugin_added: pluginAdded ?? false,
-    installed_skills: ["mm-agent"],
-    files: [{ path: ownedSkillPath, sha256: sha256(skill) }],
+    installed_skills: ["mm-agent", "mm-hmml", "mm-compute", "mm-report"],
+    files: skills.map((skill) => ({ path: skill.path, sha256: sha256(skill.content) })),
   }
   await applyTransaction(configRoot, [
-    { relativePath: ownedSkillPath, content: skill },
+    ...skills.map((skill) => ({ relativePath: skill.path, content: skill.content })),
     { relativePath: configFilePath, content: `${JSON.stringify(config, null, 2)}\n` },
     { relativePath: receiptFilePath, content: `${JSON.stringify(receipt, null, 2)}\n` },
   ])
@@ -395,13 +424,15 @@ export async function install(options: InstallerOptions = {}): Promise<InstallRe
     const conflicts = await findConflicts(configRoot, existingReceipt)
     if (conflicts.length > 0) throw new InstallerConflictError(conflicts)
   } else {
-    const installedSkillPath = resolveOwnedPath(configRoot, ownedSkillPath)
-    await assertRealPathBoundary(configRoot, installedSkillPath)
-    try {
-      await lstat(installedSkillPath)
-      throw new InstallerConflictError([ownedSkillPath])
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+    for (const ownedSkillPath of ownedSkillPaths) {
+      const installedSkillPath = resolveOwnedPath(configRoot, ownedSkillPath)
+      await assertRealPathBoundary(configRoot, installedSkillPath)
+      try {
+        await lstat(installedSkillPath)
+        throw new InstallerConflictError([ownedSkillPath])
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+      }
     }
   }
   return writeInstallation(configRoot, pluginEntry, existingReceipt)

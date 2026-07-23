@@ -2,7 +2,7 @@
 
 ## 当前结论
 
-`v1.0.0` 采用 Canonical Core + OpenCode Adapter。架构决策与协议设计已经接受；Step 1 至 Step 5 均已完成。当前边界停止在 Compute/Compile Runtime Evidence，不进入 Step 6 Agents/Skills 编排或 Golden Case。
+`v1.0.0` 采用 Canonical Core + OpenCode Adapter。架构决策与协议设计已经接受；Step 1 至 Step 6 均已接受。当前边界不进入 Step 7 Golden Case。
 
 唯一公开入口是 `/mm-agent`。首个真实目标 Case 是 MM-Bench `2024_C` Wimbledon Momentum；在此之前，各确定性模块必须先在本地最小 fixture 上留下可重复验证的证据。
 
@@ -72,7 +72,7 @@ problems/.gitkeep                    默认用户输入目录
 | 3 | `/mm-agent` 能可靠判断环境是否可用，并从用户输入创建或恢复不可变 Case。 | 已接受：当前 acceptance HEAD |
 | 4 | HMML 模型选择有数据依据，检索结果可追溯且有离线降级路径。 | 已完成：当前 acceptance commit |
 | 5 | 计算与 LaTeX/PDF 编译产生可重放的 Runtime Evidence。 | 已完成：当前 acceptance commit |
-| 6 | 四阶段 Agents、Skills 和 Tools 通过 Canonical Core 跑成真实工作流。 | 待开始 |
+| 6 | 四阶段 Agents、Skills 和 Tools 通过 Canonical Core 跑成真实工作流。 | 已接受：当前 acceptance commit |
 | 7 | 最小 Case 与 MM-Bench 真实 Case 均能从输入闭环到非空 PDF，并可在新会话恢复。 | 待开始 |
 | 8 | 发布包、文档、历史资产和最终验证证据一致。 | 待开始 |
 
@@ -240,6 +240,11 @@ Step 3 完成后，用户运行 `/mm-agent` 即可在进入四阶段正文前得
 - 用数据库、MCP memory server 或隐藏会话状态替代 Case 文件。
 - 恢复归档中的 Claude/Codex Plugin、Pi CLI Extension 或 Superpowers 工作流。
 
+## 后续协议演进候选
+
+- 可考虑采用 Git 风格的内容寻址标识：Artifact、Runtime Evidence、索引和不可变 manifest 持久保存完整 SHA-256，对用户只展示当前范围内足够唯一的短前缀；独立运行事件仍使用 ULID、UUID 或包含随机 nonce 的标识，避免相同内容合并为同一次运行。
+- `case_id`、`task_id` 和 `attempt_id` 继续保持当前可读语义。若未来要把哈希标识纳入已接受的 Case schema、路径或引用协议，必须设计显式 schema migration，不在 Step 7 Golden Case 中顺带改写。
+
 ## 当前里程碑
 
-Step 5 Compute/Compile Runtime Evidence 已收口；41 条典型方法查询只保留为 `proposed` smoke regression，正式选型使用 80 条 `ai-adjudicated` 数据集。当前停止，不进入 Step 6 四阶段编排或 Golden Case。
+Step 1 至 Step 6 已接受；41 条典型方法查询只保留为 `proposed` smoke regression，正式选型使用 80 条 `ai-adjudicated` 数据集。当前停止，不进入 Step 7 Golden Case。
