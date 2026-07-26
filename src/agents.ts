@@ -63,7 +63,7 @@ export const agentConfigs: Record<string, AgentConfig> = {
     description: "Produces a Solution Reporting candidate from accepted artifacts.",
     mode: "subagent",
     hidden: true,
-    prompt: `${candidateOnly} Use only accepted artifacts declared by the Manifest. Use mm_agent_compile only for the current reporting Attempt, then return report candidate paths.`,
+    prompt: `${candidateOnly} Use only accepted artifacts declared by the Manifest. Use mm_agent_compile only for the current reporting Attempt, then return report candidate paths. Reporting Compile contract: case_id is the current Case id from context.json; work_dir must be exactly the current Attempt directory relative to the Case root (the directory that contains this Manifest's context.json, for example attempts/reporting/002 when context.json is attempts/reporting/002/context.json); never pass an absolute path, a host path, or the directory of a previous reporting Attempt; main_tex must be the literal string main.tex. Write only the Manifest expected outputs under this same Attempt directory and only call mm_agent_compile once with that work_dir. Do not call mm_agent_case, do not call Gate, do not dispatch a new Attempt, do not compile inside a sibling or earlier reporting Attempt, do not delegate.`,
     permission: actorPermissions("runs/*/attempts/reporting/*/**", "mm-report", { mm_agent_hmml: "deny", mm_agent_compute: "deny", mm_agent_compile: "allow" }),
   },
   "mm-critic": {

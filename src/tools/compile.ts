@@ -44,6 +44,7 @@ export type CompileManifest = {
   commands: Array<{ executable: string; args: string[]; exit_code: number | null; timed_out: boolean; stdout: string; stderr: string }>;
   environment: Record<string, string>;
   timeout_ms: number;
+  exit_code: number | null;
   stdout: string;
   stderr: string;
   errors: string[];
@@ -169,6 +170,7 @@ export async function runCompile(options: CompileOptions): Promise<CompileResult
       commands,
       environment: environmentEvidence(env),
       timeout_ms: timeoutMs,
+      exit_code: finalRun?.exitCode ?? null,
       stdout: finalRun?.stdout ?? "",
       stderr: finalRun?.stderr ?? "",
       errors: succeeded ? [] : structuredErrors(logs.join("\n"), logs.join("\n")),

@@ -212,7 +212,7 @@ test("package shape declares the Step 1 ESM distribution surface", async () => {
   assert.equal(packageJson.main, "./dist/index.js")
   assert.equal(packageJson.types, "./dist/index.d.ts")
   assert.deepEqual(packageJson.bin, { "mm-agent-opencode": "./dist/install.js" })
-  assert.deepEqual(Object.keys(packageJson.scripts ?? {}).sort(), ["build", "golden", "test", "test:runtime"])
+  assert.deepEqual(Object.keys(packageJson.scripts ?? {}).sort(), ["build", "golden", "test", "test:runtime", "validate-config"])
   assert.deepEqual(packageJson.files, [
     "dist",
     "skills",
@@ -325,16 +325,15 @@ test("npm pack dry run contains the intended distribution surface", () => {
   assert.equal(files.some((file) => /(^|\/)(?:__pycache__|tests)(?:\/|$)|\.pyc$/u.test(file)), false)
 })
 
-test("golden command rejects Step 1 execution", () => {
-  const npmCli = process.env.npm_execpath
-  assert.ok(npmCli)
-  const result = spawnSync(process.execPath, [npmCli, "run", "golden"], {
-    cwd: repositoryRoot,
-    encoding: "utf8",
-  })
-
-  assert.notEqual(result.status, 0)
-  assert.match(`${result.stdout}${result.stderr}`, /Golden Case belongs to PLAN Step 7/)
+test("golden command invokes the Step 7 runner", async () => {
+  const packageJson = JSON.parse(await readFile(packageUrl, "utf8")) as { scripts?: Record<string, string> }
+  assert.equal(packageJson.scripts?.golden, "node scripts/run-golden-case.mjs")
+  const runner = await readFile(path.join(repositoryRoot, "scripts", "run-golden-case.mjs"), "utf8")
+  assert.match(runner, /mm_agent_compute/u)
+  assert.match(runner, /mm_agent_compile/u)
+  assert.match(runner, /mm_agent_case/u)
+  assert.match(runner, /multi-wave/u)
+  assert.match(runner, /MM-Bench requires/u)
 })
 
 test("Skills expose the four-stage workflow without a second public command", async () => {

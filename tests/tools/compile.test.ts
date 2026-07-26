@@ -30,10 +30,12 @@ test("compile prefers latexmk and records a non-empty PDF", async (t) => {
   assert.equal(result.ok, true);
   if (!result.ok) return;
   assert.equal(result.manifest.engine, "latexmk");
+  assert.equal(result.manifest.exit_code, 0);
   assert.equal(result.manifest.pdf?.path, `${roots.workDir}/report.pdf`);
   assert.match(result.evidence.path, /compile-001-manifest\.json$/u);
   const reference = JSON.parse(await readFile(path.join(roots.projectRoot, "runs", "case-alpha", "attempts", "reporting", "001", "evidence", "compile-001.json"), "utf8"));
   assert.deepEqual(reference, result.evidence);
+  assert.equal(reference.exit_code, 0);
 });
 
 test("compile falls back to three xelatex passes", async (t) => {

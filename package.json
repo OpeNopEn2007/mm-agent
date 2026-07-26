@@ -8,10 +8,11 @@
     "mm-agent-opencode": "./dist/install.js"
   },
   "scripts": {
-    "test": "tsx --test --test-concurrency=1 tests/step6.test.ts tests/plugin-spike.test.ts tests/core/case-context-store.test.ts tests/tools/*.test.ts",
+    "test": "tsx --test --test-concurrency=1 tests/step6.test.ts tests/plugin-spike.test.ts tests/golden-runner.test.ts tests/golden-resume.test.ts tests/mmbench-validation.test.ts tests/writer-contract.test.ts tests/core/case-context-store.test.ts tests/tools/*.test.ts",
     "build": "tsc -p tsconfig.json",
     "test:runtime": "cross-env MM_AGENT_RUNTIME=1 tsx --test --test-concurrency=1 --test-name-pattern=^runtime: tests/plugin-spike.test.ts",
-    "golden": "node -e \"console.error('Golden Case belongs to PLAN Step 7 and is unavailable in Step 1'); process.exit(1)\""
+    "golden": "node scripts/run-golden-case.mjs",
+    "validate-config": "node scripts/validate-config.mjs"
   },
   "files": [
     "dist",

@@ -1367,7 +1367,26 @@ export class FileCaseContextStore implements CaseContextStore {
       nextIdentity,
       `next ${stableRoot} root`,
     );
-    await rename(next, stable);
+    try {
+      await rename(next, stable);
+    } catch (error) {
+      if (await this.lexicalExists(stable)) {
+        if (stableIdentity)
+          await this.assertDirectoryIdentity(
+            root,
+            stable,
+            stableIdentity,
+            `stable ${stableRoot} root`,
+          );
+        const stableInfo = await lstat(stable);
+        if (stableInfo.isSymbolicLink() || !stableInfo.isDirectory())
+          throw new CaseProtocolError(
+            "PATH_ESCAPE",
+            `stable Case root was replaced: ${stableRoot}`,
+          );
+      }
+      throw error;
+    }
     await this.assertDirectoryIdentity(
       root,
       stable,

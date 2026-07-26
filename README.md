@@ -14,7 +14,7 @@
 
 ## 当前状态
 
-`v1.0.0` 的 Canonical Core 由 `4ce82cd` 接受，OpenCode Adapter 设计由 `1040e63` 接受。OpenCode Plugin Spike 已由 `315c319` 接受；Step 2 CaseContextStore 已由 `cfda6ea` 接受；Step 3 Preflight 与输入整理已在 `5367dd0` 接受；Step 4 已完成 HMML 独立标签复核、真实双模型评测、唯一 GTE 层级索引、dense 检索和无模型 BM25 降级；Step 5 已完成受控 Python 与 XeLaTeX Runtime Evidence；Step 6 已接受：五个 hidden stage Agents、四份安装 Skills、`mm_agent_case` 与 Actor -> Critic -> Gate 已在真实 OpenCode host runtime 跑通。Golden Case 尚未开始。
+`v1.0.0` 的 Canonical Core 由 `4ce82cd` 接受，OpenCode Adapter 设计由 `1040e63` 接受。OpenCode Plugin Spike 已由 `315c319` 接受；Step 2 CaseContextStore 已由 `cfda6ea` 接受；Step 3 Preflight 与输入整理已在 `5367dd0` 接受；Step 4 已完成 HMML 独立标签复核、真实双模型评测、唯一 GTE 层级索引、dense 检索和无模型 BM25 降级；Step 5 已完成受控 Python 与 XeLaTeX Runtime Evidence；Step 6 已接受：五个 hidden stage Agents、四份安装 Skills、`mm_agent_case` 与 Actor -> Critic -> Gate 已在真实 OpenCode host runtime 跑通。Step 7 提供 `npm run golden` runner 与 minimal/multi-wave fixtures；真实完成验收仍在进行中。
 
 - Canonical Core：[`docs/architecture/canonical-core.md`](docs/architecture/canonical-core.md) 与 [`docs/context/artifact-protocol.md`](docs/context/artifact-protocol.md) 是宿主无关机制唯一来源。
 - OpenCode Adapter：[`docs/architecture/opencode-plugin-harness.md`](docs/architecture/opencode-plugin-harness.md) 定义 v1 唯一 Adapter 的实现接口。

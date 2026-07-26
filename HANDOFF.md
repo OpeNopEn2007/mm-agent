@@ -8,17 +8,18 @@
 
 - primary worktree: `D:\0_Main\02_Coding\mm-agent`，branch `main`，本轮未修改。
 - development worktree: `D:\0_Main\02_Coding\mm-agent\.worktrees\opencode-plugin-spike`，branch `feat/opencode-plugin-spike`。
-- current HEAD: `0f84830 fix: fall back to xelatex after latexmk failure`。
+- current HEAD: `24fa079 feat: complete Step 6 agent orchestration`。
 - accepted baseline: `315c319 feat: validate OpenCode plugin harness`、`ab56d42 docs: record OpenCode plugin spike acceptance`、`cfda6ea feat: implement CaseContextStore contract`、`5367dd0 feat: implement Step 3 preflight and intake`、`1998db6 feat: complete Step 4 HMML retrieval runtime`。
 - generated only: `node_modules/`、`dist/` 和测试临时目录；不进入 commit。
-- uncommitted Step 6 files: `package.json`、`skills/`、`src/agents.ts`、`src/index.ts`、`src/install.ts`、`src/tools/case.ts`、`src/tools/hmml.ts`、`tests/step6.test.ts`、`tests/plugin-spike.test.ts`、`tests/tools/hmml.test.ts`、`README.md`、`PLAN.md`、本文件。`AGENTS.md` 与 `CLAUDE.md` 是进入本轮前已有的用户改动，未修改；acceptance commit 后仍保留它们。
-- remote state: 未 push；未获用户明确要求前不要 push。
+- Step 7 checkpoint scope: `package.json`、`scripts/run-golden-case.mjs`、`scripts/golden-resume.mjs`、`scripts/mmbench-validate.mjs`、`scripts/prepare-mmbench-2024-c.mjs`、`scripts/validate-config.mjs`、`rubrics/`、`skills/mm-report/SKILL.md`、相关 `src/` 与 `tests/`、`README.md`、`CHANGELOG.md`、本文件。旧 `tests/mmbench_validate.py` 与 `tests/mmbench-validation.yaml` 已由 Step 7 runner 替代并删除。
+- `AGENTS.md` 与 `CLAUDE.md` 是进入本轮前已有的其他会话改动，不属于 Step 7 checkpoint；继续保留在工作区，不纳入 commit。
+- remote handoff target: `origin/feat/opencode-plugin-spike`。用户已授权为换机恢复创建并 push 当前 checkpoint；它不是 Step 7 acceptance commit。
 
 ### Current Phase
 
 - phase: `v1.0.0` 正式开发。
 - accepted through: `PLAN.md` Step 6 Skills、Agents 与四阶段编排。
-- current boundary: Step 6 已收口；等待用户明确启动 Step 7 Golden Case，当前立即停止在 Step 7 前。
+- current boundary: Step 7 Golden Case 实现与本地验证进行中；不进入 Step 8，且不得在独立验收前创建 acceptance commit。
 - process rule: 根 `PLAN.md` 是结果契约；项目不使用 Superpowers，不调用 `tdd` Skill，也不强制 TDD/RED-GREEN 顺序。
 - collaboration guidance: 开发期用提示词引导 Build 与 General 分工，不将模型或思考档位写成项目固定依赖。Build 倾向负责范围、决策、验收和核心构建；General 倾向协助边界明确、可验证的高工作量任务。
 - review state: Step 5 以结果契约、路径安全、失败语义、package 和真实 Local Runtime gate 收口；OpenCode 模型 runtime 使用隔离 MiniMax M3 Thinking 配置，未提供显式测试凭据时安全跳过模型调用。
@@ -75,6 +76,23 @@
 - 该 runtime 的自动测试最初只因 Session 1 输出 marker 带末尾 `.` 而产生 false negative；生产 flow 已通过。测试现严格规范化 marker 的首尾空白、单层 inline/fenced code 和单个 `.`/`。`/`!` 终止符，拒绝任何额外文字或相似 marker。修复后仅执行无模型回归，未重复任何付费模型调用。
 - 最新收口验证：marker/Step 6 focused 4 passed；`npm test` 114 passed、0 failed、9 skipped；`npm run build` 通过；`npm pack --dry-run --json` 130 files；`git diff --check` 与 `git diff --no-index AGENTS.md CLAUDE.md` 通过。
 
+### Step 7 In-Progress Result / Runtime Evidence
+
+- `scripts/run-golden-case.mjs` 以真实 OpenCode `task`、五个角色、HMML、Compute、Compile 和 `mm_agent_case` Gate 驱动 minimal 与 multi-wave fixture；仅 Agent 写 candidate，Critic 返回 Review，Gate 提升 stable artifact。`--model`、`--variant` 和 `--timeout-ms` 都是可选的；缺省时 runner 不传模型相关参数，trace 只记 `host-default`。失败运行保留脱敏 Tool state、session IDs、stdout/stderr、timeout 和临时项目。
+- `--resume <project-or-trace>` 先在 fresh OpenCode session 调用 `inspect`，随后从 `state.json`、accepted artifact、active Attempt 与 DAG 恢复：accepted scope 永不重派；active scope 复用既有 Attempt；Solving 只处理 current wave 未接受 task；completed Case 只执行 completion inspect。resume planner 的无模型回归覆盖 Solver revision、后续 wave、Reporting 和 completed evidence。
+- multi-wave runner 并行 dispatch/Actor/Critic，并在每个 wave 内串行 Gate；它读取 `task-total` Manifest，断言只包含直接依赖 `tasks/task-a/memory.json`。
+- 旧 `tests/mmbench_validate.py` 和 `tests/mmbench-validation.yaml` 已删除：它们仅服务旧 `.planning/`/Claude 假设，已由 Step 7 runner 替代。
+- 先前真实 minimal run 使用过当时的显式 DeepSeek 配置，证明 prepare、Analysis、Modeling、HMML dense retrieval、fresh Critic 和 Gate；初次 Critic 路径前缀错误与 modeling rubric revise 均由真实 Critic 暴露，runner 已修正并以 Gate-first revision 处理。当前 runner 不绑定该 provider 或 variant。
+- 最新真实 minimal run 在 Solver revision 的 fresh Critic 调用收到 provider HTTP 402 `Insufficient Balance`，因此没有完成、没有非空 PDF，也不算 runtime 通过。未重试；临时运行证据保留在本机运行目录，未写入项目文档。
+- 官方 MM-Bench `2024_C` 输入由 `scripts/prepare-mmbench-2024-c.mjs` 准备到 OS cache 或 `MM_AGENT_MMBENCH_CACHE_DIR`，不进入仓库或 npm 包。provenance 固定官方 repository、problem/dataset URLs、upstream commit、retrieval date；README 的 CC BY-NC 4.0 声明与 root LICENSE 的 GPL-3.0 文本并列记录，`redistribution: false`，不作法律结论。
+- MM-Bench runner 显式接收 `--mmbench-problem`、`--mmbench-dataset`、`--mmbench-provenance` 三个文件，在 `scripts/mmbench-validate.mjs` 中校验三者是普通文件、provenance 字段齐全且 `redistribution === false`、题目 JSON 的 `dataset_path` 严格包含所提供 CSV 的文件名；runner 将三者一起复制到临时 Golden project 并交付给 `mm_agent_prepare`，因此 Solver 与 Reporter 都通过 Canonical input facts 访问题目与数据集。
+- `canonicalTaskMemoryFields` 在 minimal、multi-wave 与 resume 三条 Solver 路径共享同一文本；rubrics/solving.md 明确 Canonical TaskMemory schema 必填字段、Critical/required fixes 与 Gate 最终权威；`npm run validate-config` 通过最小解析+字段断言无模型校验该契约并在 exit 0；其结果是 contract 字段数组 + 来源数组。无运行期 OpenCode 调用。
+- Gate A 已由真实 MiniMax M3 Thinking runtime 接受：`reporting-002` 的 Compile Evidence 为 `exit_code: 0`，fresh Critic verdict 为 `pass`，Gate 提升 reporting artifacts，minimal Case 达到 revision `5`、status `completed`。这项结果替代此前 Gate A 未验证/失败的旧状态；不要重跑或重建 minimal Case。
+- Gate B 已通过真实 runtime 接受 Analysis 与 Modeling，并推进到 multi-wave Solver `task-a`。当前阻塞属于确定性的 Review 传递边界：导出的 Gate Tool input 可见 `review.schema_version: 1`，但 Core 在处理 `revise` Review 时报告 `schema_version undefined is unsupported`。现有证据排除 Critic 输出内容和 provider 调用失败，但尚未定位字段是在 Runner、OpenCode Tool schema、Adapter mapping 还是 Core 调用前丢失。没有修改 Canonical schema，也没有执行破坏性操作。
+- Gate B 的下一项修复必须先用无模型回归穿过真实 Plugin Tool `execute -> runCaseAction -> Core Gate`，逐层记录同一 Review，并只修复被证据证明丢失字段的边界；不得以默认补 `schema_version: 1`、放宽 Core 或仅加 assertion 作为修复。无模型验证通过后再恢复同一 multi-wave Case；Gate B 通过后继续材料齐备的 Gate C MM-Bench。
+- 2026-07-26 换机 checkpoint 的 fresh 无模型验证：`npm test` 为 144 passed、0 failed、9 opt-in runtime skipped；`npm run build`、`npm run validate-config`、`npm pack --dry-run --json`（130 entries）与 `git diff --check` 均通过。skipped 不计为 Gate B 或 Gate C runtime 证据。
+- Step 7 当前仅 Gate A 被接受；Gate B 与 Gate C 未接受，因此这个换机 checkpoint 不代表 Step 7 完成，也不得进入 Step 8。
+
 ### Step 3 Machine Preflight Snapshot
 
 - pass: Node `24.8.0`、OpenCode `1.18.3` 对固定 Plugin API `1.18.2`、uv `0.10.6`、Case write probe、真实 CUMCM XeLaTeX 编译（非空 PDF）。
@@ -86,7 +104,6 @@
 
 - Preflight 的 `uv python find` 仍只探测已登记的解释器；本机的 Step 5 专用 Python 已存在于 MM-Agent cache，但不改变 Step 3 的无下载、无 project discovery 语义。
 - Step 6 尚未执行 Golden Case；该工作只属于 Step 7。
-- `tests/mmbench-validation.yaml` 仍保存旧 `.planning/` fixture 路径，且不被 `npm test` 或 Step 5 gate 调用；按 `PLAN.md` Step 7 的旧 v0 fixture 清理边界处理，未在本里程碑扩展范围。
 - transitive `ini@7.0.0` 的 Node engine 声明不包含本机 `24.8.0`；当前 install/build/runtime 全部通过，但 `engine-strict` 环境可能拒绝安装。
 - Windows `spawnSync` timeout 不能可靠终止复杂子进程树；runtime gate 使用隔离目录和已知 OpenCode binary，若未来超时必须先确认 PID 归属。
 - Step 4 的 41 条典型方法查询保留为 `label_status: proposed` 的 `hmml-smoke.json`；它只用于回归烟雾测试，不能用于 GTE/BGE-M3 模型选型。
@@ -98,10 +115,23 @@
 
 ### Next Commander Action
 
-1. 等待用户明确启动 Step 7 Golden Case。
-2. 启动后使用 `runtime/hmml-manifest.json` 与 `runtime/evaluation/summary.json` 恢复 Step 4 的固定索引和评测事实。
-3. 不重写 accepted Canonical Core，不读取用户项目 `.venv`，不 push 未经授权的分支。
+1. 在新电脑 checkout `origin/feat/opencode-plugin-spike`，读取本文件并确认 Step 7 checkpoint、Golden Case 外部输入与模型配置；本机 `%TEMP%` Case/trace 不随 Git 迁移，不能把它们当作跨机恢复事实。
+2. 为 Gate B 增加无模型 Plugin Tool 边界回归，定位 `review.schema_version` 从可见 Tool input 到 Core 之间的实际丢失点；只修复该层并运行 focused tests、`npm test`、`npm run build`、`npm run validate-config` 与 `git diff --check`。
+3. 无模型证据通过后，以 Runtime General 使用 `minimax/MiniMax-M3 --variant thinking` 执行新的 multi-wave Gate B；它不是对旧临时 Case 的跨机 resume。Gate B 通过后准备并执行 Gate C MM-Bench。
+4. 不重写 accepted Canonical Core，不读取用户项目 `.venv`，不进入 Step 8。
+
+### Cross-Machine Recovery Brief
+
+- Git 是换机后的唯一同步事实源。新电脑执行 `git fetch origin`，然后 checkout/track `origin/feat/opencode-plugin-spike`；不要从 `main` 重新做 Step 7，也不要创建另一个实现分支。开始前确认 `git branch --show-current`、`git status --short` 和本文件。
+- 当前 checkpoint 是 work in progress，不是 Step 7 acceptance。已经接受的 runtime 事实只有 Gate A minimal completed；Gate B 的 Analysis/Modeling 已跑通但 Solver revise Review 在 Tool/Adapter/Core 边界丢失 `schema_version`；Gate C 未执行。不得把无模型测试、skipped runtime 或配置检查称作 Gate B/C 通过。
+- 原电脑的 Golden Case、trace、OpenCode Session、MM-Bench cache 和 provider 配置都在机器本地，不在 Git 中。不要把文档中的摘要误当作可恢复的 Case 文件；新电脑需要重新安装依赖、确认 OpenCode/TeX/uv/Python，并建立新的 multi-wave runtime 证据。
+- MM-Bench 官方题目、CSV 与 provenance 因 redistribution 约束不进入仓库。先运行 `node scripts/prepare-mmbench-2024-c.mjs --help`，在新电脑重新准备外部材料；Gate C 只接受显式的 `--mmbench-problem`、`--mmbench-dataset`、`--mmbench-provenance`。
+- 开发主会话使用 GPT-5.6-Terra medium 负责架构、关键代码、派发与审计；它可以直接修改高耦合或一次写准更省成本的代码。边界清楚、机械、长时间或真实 runtime 工作优先派给 OpenCode `General`；General 使用本机配置的 `minimax/MiniMax-M3` Thinking，不得嵌套 `task`，不得自行宣布里程碑接受。
+- 允许“诊断 -> 确定性修复 -> 无模型验证 -> 新 runtime 验证”的循环。禁止的是没有新证据和新修复的盲目相同重跑；一次 runtime 失败不是自动停止条件。真正外部阻塞（认证/余额/服务、缺少 MM-Bench 外部输入、需要 Canonical schema migration 或破坏性操作授权）才交回用户。
+- 项目不使用 Superpowers，也不调用 `tdd` Skill；不强制 RED/GREEN 流程。结果标准仍是 `PLAN.md` 的可观察交付和 Gate 证据。
+- `AGENTS.md` 与 `CLAUDE.md` 的本机其他会话改动没有进入本 checkpoint。新电脑以远端文件为准；需要保留的协作事实已经写在本节，不依赖那两份未提交改动。
+- 新开发会话的首要任务不是再次运行付费模型，而是构造一个无模型回归，真实穿过 Plugin Tool `execute -> runCaseAction -> Core Gate`，用 `verdict: revise` 且 `schema_version: 1` 的 Review 找到字段丢失位置。只有这个回归定位并修复后，才由 General 运行新的 Gate B。
 
 ## Commit 判断
 
-Step 6 acceptance commit 后不 push；`AGENTS.md` 与 `CLAUDE.md` 的用户原有改动保留在工作区。
+本次按用户明确授权创建一个 Step 7 work-in-progress checkpoint 并 push 到 `origin/feat/opencode-plugin-spike`，用于换机继续。该 commit 不得标记为 Step 7 accepted；`AGENTS.md` 与 `CLAUDE.md` 的其他会话改动保留在本机工作区且不纳入 checkpoint。

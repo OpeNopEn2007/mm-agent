@@ -10,6 +10,8 @@
 ## [Unreleased]
 
 ### 实现
+- 增加 Step 7 Golden Case runner、minimal/multi-wave fixtures 与运行期直接依赖断言；runner 通过真实 OpenCode Agent、Tool、Critic、Gate、Compute 和 Compile 路径执行，不用手写 Review 或 stable artifact 复制替代运行期事实。
+- 删除仅依赖旧 `.planning/` 路径的 MMBench Python validation fixture；真实 MM-Bench 仍要求显式提供题目材料与 provenance。
 - 接受 `315c319 feat: validate OpenCode plugin harness`，完成 `@mm-agent/opencode` 的 ESM Plugin Spike、最小 hidden Agent、只读 context Tool、`mm-agent` Skill 和显式 install/update/remove CLI。
 - installer 使用 receipt hash、Plugin 注册所有权、路径/realpath 边界、junction escape 拒绝和带 rollback 的 staged transaction，保护用户修改和非拥有文件。
 - 真实 OpenCode `1.18.2` runtime gate 覆盖 Plugin/Agent/Skill、slash command、模型驱动 Tool、built-in `task` fresh child linkage、重启和 compaction-off 磁盘恢复。
