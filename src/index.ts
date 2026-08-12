@@ -2,7 +2,7 @@ import { tool, type Plugin } from "@opencode-ai/plugin"
 import { readFile, readdir } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { agentConfigs } from "./agents.js"
+import { createAgentConfigs } from "./agents.js"
 import { runCaseAction } from "./tools/case.js"
 import { runPreflight } from "./tools/check.js"
 import { runCompile } from "./tools/compile.js"
@@ -39,10 +39,10 @@ async function findActiveCase(directory: string): Promise<string | undefined> {
   return candidates.length === 1 ? candidates[0] : undefined
 }
 
-const mmAgentPlugin = (async ({ directory }) => ({
+const mmAgentPlugin = (async ({ directory, worktree }) => ({
   config: async (config) => {
     config.agent ??= {}
-    for (const [name, agent] of Object.entries(agentConfigs))
+    for (const [name, agent] of Object.entries(createAgentConfigs(directory, worktree)))
       if (!(name in config.agent)) config.agent[name] = agent
   },
   tool: {

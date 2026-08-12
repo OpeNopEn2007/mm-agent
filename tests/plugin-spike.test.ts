@@ -1,4 +1,4 @@
-import type { Config, PluginInput, ToolContext } from "@opencode-ai/plugin"
+import { tool, type Config, type PluginInput, type ToolContext } from "@opencode-ai/plugin"
 import assert from "node:assert/strict"
 import { spawn, spawnSync } from "node:child_process"
 import { createHash } from "node:crypto"
@@ -198,6 +198,9 @@ test("package shape declares the Step 1 ESM distribution surface", async () => {
   const packageJson = JSON.parse(await readFile(packageUrl, "utf8")) as {
     name?: string
     version?: string
+    description?: string
+    license?: string
+    repository?: { type?: string; url?: string }
     type?: string
     main?: string
     types?: string
@@ -208,6 +211,12 @@ test("package shape declares the Step 1 ESM distribution surface", async () => {
 
   assert.equal(packageJson.name, "@mm-agent/opencode")
   assert.equal(packageJson.version, "1.0.0")
+  assert.ok(packageJson.description)
+  assert.equal(packageJson.license, "MIT")
+  assert.deepEqual(packageJson.repository, {
+    type: "git",
+    url: "git+https://github.com/OpeNopEn2007/mm-agent.git",
+  })
   assert.equal(packageJson.type, "module")
   assert.equal(packageJson.main, "./dist/index.js")
   assert.equal(packageJson.types, "./dist/index.d.ts")
@@ -216,16 +225,17 @@ test("package shape declares the Step 1 ESM distribution surface", async () => {
   assert.deepEqual(packageJson.files, [
     "dist",
     "skills",
-    "agents",
     "rubrics",
     "runtime",
     "!runtime/tests",
+    "!runtime/evaluation",
     "!runtime/**/__pycache__",
     "!runtime/.pytest_cache",
     "knowledge",
     "templates/cumcmthesis",
     "templates/mcmthesis",
     "schemas",
+    "THIRD_PARTY_NOTICES.md",
   ])
 })
 
@@ -290,6 +300,9 @@ test("npm pack dry run contains the intended distribution surface", () => {
   const packs = JSON.parse(result.stdout) as Array<{ files?: Array<{ path?: string }> }>
   const files = (packs[0]?.files ?? []).map((file) => file.path ?? "")
   for (const required of [
+    "LICENSE",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md",
     "dist/index.js",
     "dist/install.js",
     "dist/tools/check.js",
@@ -323,6 +336,7 @@ test("npm pack dry run contains the intended distribution surface", () => {
     false,
   )
   assert.equal(files.some((file) => /(^|\/)(?:__pycache__|tests)(?:\/|$)|\.pyc$/u.test(file)), false)
+  assert.equal(files.some((file) => /(^|\/)(?:evaluation|prompts|scripts|servers)(?:\/|$)|requirements\.txt$/u.test(file)), false)
 })
 
 test("golden command invokes the Step 7 runner", async () => {
@@ -347,6 +361,8 @@ test("Skills expose the four-stage workflow without a second public command", as
   assert.match(skill, /Case-relative existing-path evidence/u)
   assert.match(skill, /`expected_revision`/u)
   assert.match(skill, /Canonical Analysis output contract/u)
+  assert.match(skill, /Do not tell the Actor to promote/u)
+  assert.match(skill, /Do not redefine or extend the Actor output schema/u)
   assert.match(skill, /do not\s+invent `\/doctor`, `\/setup`, or another slash command/u)
   for (const name of ["mm-hmml", "mm-compute", "mm-report"]) {
     const installed = await readFile(path.join(repositoryRoot, "skills", name, "SKILL.md"), "utf8")
@@ -410,13 +426,14 @@ test("config hook injects five hidden least-privilege stage subagents", async ()
   assert.deepEqual(config.agent?.["mm-analyst"]?.permission?.skill, { "*": "deny" })
   assert.deepEqual(config.agent?.["mm-modeler"]?.permission?.skill, { "*": "deny", "mm-hmml": "allow" })
   assert.deepEqual(config.agent?.["mm-solver"]?.permission?.skill, { "*": "deny", "mm-compute": "allow" })
+  assert.match(config.agent?.["mm-solver"]?.prompt ?? "", /never invoke TDD or Superpowers Skills/u)
   assert.deepEqual(config.agent?.["mm-writer"]?.permission?.skill, { "*": "deny", "mm-report": "allow" })
   assert.deepEqual(config.agent?.["mm-critic"]?.permission?.skill, { "*": "deny" })
   const criticPrompt = config.agent?.["mm-critic"]?.prompt ?? ""
-  for (const required of ["schema_version must be exactly 1", "copy attempt_id exactly", "Case-relative paths", "reviewed_at must be UTC RFC 3339", "Before verdict pass", "DAG is acyclic"])
+  for (const required of ["schema_version must be exactly 1", "copy attempt_id exactly", "Case-relative paths", "reviewed_at must be UTC RFC 3339", "Before verdict pass", "DAG is acyclic", "factual contradiction", "recommendations explicitly requested", "every other key are forbidden"])
     assert.match(criticPrompt, new RegExp(required, "u"))
   const analystPrompt = config.agent?.["mm-analyst"]?.prompt ?? ""
-  for (const required of ["\"tasks\"", "depends_on", "wave", "Do not use waves, task_ids, or dependencies"])
+  for (const required of ["\"tasks\"", "depends_on", "wave", "Do not use waves, task_ids, or dependencies", "never add wave, depends_on, input_paths, or output_paths"])
     assert.match(analystPrompt, new RegExp(required, "u"))
 })
 
@@ -506,6 +523,72 @@ test("prepare Tool snapshots relative explicit input and resumes it", async (t) 
   assert.equal(invalid.ok, false)
   assert.equal(invalid.error?.code, "INVALID_CASE_ID")
   assert.equal(invalid.error?.repair, "user")
+})
+
+test("config hook scopes actor edits to the project when OpenCode reports a non-Git worktree root", async () => {
+  const mmAgentPlugin = await loadPlugin()
+  const worktree = path.parse(repositoryRoot).root
+  const hooks = await mmAgentPlugin({ directory: repositoryRoot, worktree } as PluginInput)
+  const config = {} as Config
+
+  await hooks.config?.(config)
+
+  const relativeAttempt = path.relative(worktree, path.join(repositoryRoot, "runs", "*", "attempts", "analysis", "*", "**")).replaceAll("\\", "/")
+  const edit = config.agent?.["mm-analyst"]?.permission?.edit as Record<string, string>
+  assert.equal(edit[relativeAttempt], "allow")
+  assert.equal(edit[`${relativeAttempt}/context.json`], "deny")
+  assert.equal(edit[`${relativeAttempt}/review.json`], "deny")
+  assert.equal(edit["runs/*/attempts/analysis/*/**"], undefined)
+})
+
+test("case Tool preserves a versioned revise Review through Plugin execute", async (t) => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "mm-agent-case-tool-revise-"))
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  await writeFile(path.join(directory, "problem.md"), "revise boundary fixture\n")
+  const mmAgentPlugin = await loadPlugin()
+  const hooks = await mmAgentPlugin({ directory, worktree: directory } as PluginInput)
+  const prepare = hooks.tool?.mm_agent_prepare
+  const definition = hooks.tool?.mm_agent_case
+  assert.ok(prepare)
+  assert.ok(definition)
+  const context = { directory, worktree: directory } as ToolContext
+  const caseId = "case-tool-revise"
+
+  await prepare.execute({
+    case_id: caseId,
+    explicit_paths: ["problem.md"],
+  }, context)
+  const dispatched = JSON.parse(await definition.execute({
+    action: "dispatch",
+    case_id: caseId,
+    role: "analyst",
+    goal: "analyze",
+  }, context) as string) as { attemptId: string; contextPath: string }
+  const attempt = path.join(directory, "runs", caseId, path.dirname(dispatched.contextPath))
+  await writeFile(path.join(attempt, "problem-understanding.md"), "# Understanding\n")
+  await writeFile(path.join(attempt, "tasks.json"), '{"schema_version":1,"tasks":[{"id":"task-01","description":"solve","requires_computation":false}]}\n')
+  await writeFile(path.join(attempt, "task-graph.json"), '{"schema_version":1,"tasks":[{"id":"task-01","depends_on":[],"wave":1}]}\n')
+  const review = {
+    schema_version: 1,
+    attempt_id: dispatched.attemptId,
+    verdict: "revise" as const,
+    findings: ["clarify the understanding"],
+    required_fixes: ["add one constraint"],
+    evidence: ["attempts/analysis/001/problem-understanding.md"],
+    reviewed_at: "2026-07-29T00:00:00.000Z",
+  }
+
+  const gateArgs = tool.schema.object(definition.args).parse({
+    action: "gate",
+    case_id: caseId,
+    attempt_id: dispatched.attemptId,
+    review,
+    expected_revision: 0,
+  })
+  const gated = JSON.parse(await definition.execute(gateArgs, context) as string) as { outcome: string }
+
+  assert.equal(gated.outcome, "revise")
+  assert.deepEqual(JSON.parse(await readFile(path.join(attempt, "review.json"), "utf8")), review)
 })
 
 test("compaction appends one active Case state hint without replacing the prompt", async (t) => {

@@ -819,11 +819,13 @@ export class FileCaseContextStore implements CaseContextStore {
           RuntimeEvidenceSchema,
         );
         const attemptPrefix = `attempts/${manifest.scope}/${String(manifest.sequence).padStart(3, "0")}/`;
+        const evidenceName = evidence.path.slice(`${attemptPrefix}evidence/`.length);
         if (
           evidence.kind !== "compute" ||
           evidence.status !== "succeeded" ||
           evidence.exit_code !== 0 ||
-          !evidence.path.startsWith(attemptPrefix)
+          !evidence.path.startsWith(`${attemptPrefix}evidence/`) ||
+          !/^compute-\d{3}-manifest\.json$/u.test(evidenceName)
         )
           throw new CaseProtocolError(
             "SCHEMA_INVALID",
@@ -839,6 +841,21 @@ export class FileCaseContextStore implements CaseContextStore {
             "SCHEMA_INVALID",
             "solver execution evidence payload hash does not match",
           );
+        const payload = JSON.parse(await readFile(evidencePayload, "utf8")) as {
+          entry_script?: { path?: unknown; sha256?: unknown };
+          inputs?: Array<{ path?: unknown; sha256?: unknown }>;
+          outputs?: Array<{ path?: unknown; sha256?: unknown }>;
+        };
+        const files = [payload.entry_script, ...(payload.inputs ?? []), ...(payload.outputs ?? [])];
+        if (files.length === 0)
+          throw new CaseProtocolError("SCHEMA_INVALID", "solver Compute Evidence has no hashed files");
+        for (const file of files) {
+          if (typeof file?.path !== "string" || typeof file.sha256 !== "string")
+            throw new CaseProtocolError("SCHEMA_INVALID", "solver Compute Evidence contains an invalid file reference");
+          const current = await resolveInsideCase(root, file.path, "existing");
+          if ((await hashPath(current)) !== file.sha256)
+            throw new CaseProtocolError("SCHEMA_INVALID", `solver Compute Evidence hash is stale for ${file.path}`);
+        }
       }
       if (review.verdict === "pass" && scope === "reporting")
         await this.validateReportingRuntimeEvidence(root, manifest, candidates);

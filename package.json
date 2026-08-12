@@ -1,6 +1,12 @@
 {
   "name": "@mm-agent/opencode",
   "version": "1.0.0",
+  "description": "An OpenCode harness that turns mathematical-modeling problems into gated artifacts, reproducible computations, and compiled PDF reports.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OpeNopEn2007/mm-agent.git"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -17,16 +23,17 @@
   "files": [
     "dist",
     "skills",
-    "agents",
     "rubrics",
     "runtime",
     "!runtime/tests",
+    "!runtime/evaluation",
     "!runtime/**/__pycache__",
     "!runtime/.pytest_cache",
     "knowledge",
     "templates/cumcmthesis",
     "templates/mcmthesis",
-    "schemas"
+    "schemas",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "dependencies": {
     "@opencode-ai/plugin": "1.18.2",

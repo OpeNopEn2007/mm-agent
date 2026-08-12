@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict"
+import { tool } from "@opencode-ai/plugin"
 import { spawnSync } from "node:child_process"
-import { cp, mkdir, mkdtemp, readFile, readdir, stat, writeFile } from "node:fs/promises"
+import { cp, mkdir, mkdtemp, readFile, readdir, rename, stat, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
-import { hasSuccessfulCompileEvidence, isAttemptComplete, planGoldenResume } from "./golden-resume.mjs"
+import { canonicalizeReviewEvidence, hasMmbenchCoachQuality, hasSuccessfulCompileEvidence, hasSuccessfulComputeEvidence, isAttemptComplete, planGoldenResume } from "./golden-resume.mjs"
 import { validateMmbench } from "./mmbench-validate.mjs"
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
@@ -24,25 +25,41 @@ const timeoutMs = Number(option("--timeout-ms") ?? "300000")
 const validateConfig = args.includes("--validate-config")
 const preflight = args.includes("--preflight")
 const providedOutputRoot = option("--output")
+const providedPluginEntry = option("--plugin-entry")
 const mmbenchProblem = option("--mmbench-problem")
 const mmbenchDataset = option("--mmbench-dataset")
 const mmbenchProvenance = option("--mmbench-provenance")
+const pluginEntry = providedPluginEntry
+  ? (path.isAbsolute(providedPluginEntry) || !/^[a-z][a-z0-9+.-]*:/iu.test(providedPluginEntry)
+      ? pathToFileURL(path.resolve(providedPluginEntry)).href
+      : new URL(providedPluginEntry).href)
+  : pathToFileURL(path.join(repositoryRoot, "dist", "index.js")).href
 
 if (args.includes("--help")) {
-  console.log("Usage: node scripts/run-golden-case.mjs [--validate-config] [--preflight] [minimal] [multi-wave] [mmbench] [--model provider/model] [--variant variant] [--timeout-ms milliseconds] [--output directory] [--resume project-or-trace] [--mmbench-problem file --mmbench-dataset file --mmbench-provenance file]")
+  console.log("Usage: node scripts/run-golden-case.mjs [--validate-config] [--preflight] [minimal] [multi-wave] [mmbench] [--model provider/model] [--variant variant] [--timeout-ms milliseconds] [--output directory] [--resume project-or-trace] [--plugin-entry file-or-url] [--mmbench-problem file --mmbench-dataset file --mmbench-provenance file]")
   process.exit(0)
 }
 if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1) throw new Error("--timeout-ms must be a positive integer")
-if (cases.includes("mmbench") && !(mmbenchProblem && mmbenchDataset && mmbenchProvenance))
+if (!resumeTarget && cases.includes("mmbench") && !(mmbenchProblem && mmbenchDataset && mmbenchProvenance))
   throw new Error("MM-Bench requires --mmbench-problem, --mmbench-dataset, and --mmbench-provenance; no source material is bundled")
 
 const outputRoot = validateConfig
   ? null
   : providedOutputRoot ?? await mkdtemp(path.join(os.tmpdir(), "mm-agent-golden-"))
 
-const trace = { schema_version: 1, model: model ?? "host-default", variant: variant ?? "host-default", timeout_ms: timeoutMs, output_root: outputRoot, cases: [] }
+const trace = { schema_version: 1, model: model ?? "host-default", variant: variant ?? "host-default", timeout_ms: timeoutMs, plugin_entry: pluginEntry, output_root: outputRoot, cases: [] }
 const tracePath = outputRoot ? path.join(outputRoot, "golden-runtime.json") : null
-const saveTrace = () => tracePath ? writeFile(tracePath, `${JSON.stringify(trace, null, 2)}\n`) : undefined
+let traceWrite = Promise.resolve()
+const saveTrace = () => {
+  if (!tracePath) return undefined
+  const snapshot = `${JSON.stringify(trace, null, 2)}\n`
+  traceWrite = traceWrite.then(async () => {
+    const temporary = `${tracePath}.tmp`
+    await writeFile(temporary, snapshot)
+    await rename(temporary, tracePath)
+  })
+  return traceWrite
+}
 
 function runProcess(executable, commandArgs, cwd, timeout = timeoutMs) {
   return spawnSync(executable, commandArgs, { cwd, encoding: "utf8", timeout, maxBuffer: 32 * 1024 * 1024, env: process.env })
@@ -129,19 +146,34 @@ async function childParts(runCase, taskEvent) {
   return { child, parts }
 }
 
+async function caseTool(runCase) {
+  const { default: mmAgentPlugin } = await import(pluginEntry)
+  const hooks = await mmAgentPlugin({ directory: runCase.projectRoot, worktree: runCase.projectRoot })
+  const definition = hooks.tool?.mm_agent_case
+  assert.ok(definition, "Plugin must expose mm_agent_case")
+  return { definition, context: { directory: runCase.projectRoot, worktree: runCase.projectRoot } }
+}
+
 async function dispatch(runCase, role, goal, taskId) {
-  const task = taskId ? `, task_id ${taskId}` : ""
   const label = `dispatch-${role}${taskId ? `-${taskId}` : ""}`
-  const inspectRun = await mainRun(runCase, `${label}-inspect`, `Call mm_agent_case exactly once with action inspect and case_id ${runCase.caseId}. Do not call any other Tool. Reply exactly DISPATCH_INSPECT_DONE.`)
-  const inspectCalls = inspectRun.events.filter((entry) => entry.type === "tool_use" && entry.part?.tool === "mm_agent_case")
-  assert.equal(inspectCalls.length, 1, `${label}: inspection must make exactly one Case call`)
-  assert.equal(inspectCalls[0]?.part?.state?.status, "completed")
-  const baseRevision = JSON.parse(inspectCalls[0].part.state.output).state?.revision
+  const { definition, context } = await caseTool(runCase)
+  const inspectArgs = tool.schema.object(definition.args).parse({ action: "inspect", case_id: runCase.caseId })
+  const inspectOutput = await definition.execute(inspectArgs, context)
+  const baseRevision = JSON.parse(inspectOutput).state?.revision
   assert.ok(Number.isSafeInteger(baseRevision), `${label}: inspection must return an integer state revision`)
 
-  const run = await mainRun(runCase, label, `Call mm_agent_case exactly once with action dispatch, case_id ${runCase.caseId}, role ${role}${task}, base_revision ${baseRevision}, and goal ${JSON.stringify(goal)}. Do not call any other Tool. Reply exactly DISPATCH_DONE.`)
-  const event = completedTool(run, "mm_agent_case")
-  const output = JSON.parse(event.part.state.output)
+  const args = tool.schema.object(definition.args).parse({
+    action: "dispatch",
+    case_id: runCase.caseId,
+    role,
+    ...(taskId ? { task_id: taskId } : {}),
+    base_revision: baseRevision,
+    goal,
+  })
+  const raw = await definition.execute(args, context)
+  runCase.tool_states.push({ label, session_id: "deterministic-runner", tool: "mm_agent_case", status: "completed", output: sanitized(raw), error: "" })
+  await saveTrace()
+  const output = JSON.parse(raw)
   assert.match(output.contextPath ?? "", /^attempts\//u)
   return output
 }
@@ -181,49 +213,91 @@ function actorToolAllowlist(role) {
   }
 }
 
-function actorChildInstructions(role, contextPath, instructions) {
+function actorChildInstructions(role, caseId, contextPath, instructions) {
   const allowlist = actorToolAllowlist(role)
+  const diskContextPath = `runs/${caseId}/${contextPath}`
+  const caseRoot = `runs/${caseId}/`
   const allowClause = allowlist.forbid === "any"
-    ? "The child must not call any mm_agent Tool, including mm_agent_hmml, mm_agent_compute, mm_agent_compile, or mm_agent_case."
-    : `The child may call only ${allowlist.allow.join(" and ")} and must not call ${allowlist.forbid.join(", ")}; it must not call any other mm_agent Tool.`
+    ? "The child must not call any mm_agent Tool, including mm_agent_hmml, mm_agent_compute, mm_agent_compile, or mm_agent_case; ordinary filesystem tools remain available for Manifest work."
+    : `Among mm_agent Tools, the child may call only ${allowlist.allow.join(" and ")} and must not call ${allowlist.forbid.join(", ")}; it must not call any other mm_agent Tool. Ordinary filesystem read, write, and shell tools remain available for Manifest work.`
   const roleClause = role === "writer"
-    ? ` The child must write only this Manifest's expected outputs under the directory containing ${contextPath} and call mm_agent_compile exactly once with that directory as work_dir and main_tex "main.tex".`
+    ? ` The child must write only this Manifest's expected outputs and call mm_agent_compile using the Case-root-relative contract below; it may retry while repairing the current Candidate, must preserve every Evidence record, and must finish on successful Compile Evidence.`
     : ` The child must write only this Manifest's expected outputs.`
   const guardClause = ` The child must never call mm_agent_case, must never call Gate, must never call built-in task, must never nest delegation, and must never call any mm_agent Tool outside its role allowlist.`
-  return `${actorDispatchContract(role, contextPath)} ${allowClause}${roleClause}${guardClause} ${instructions} Reply exactly ACTOR_DONE.`
+  return `${actorDispatchContract(role, diskContextPath)} The Case root is exactly ${caseRoot}; resolve every Manifest path p as ${caseRoot} + p, never relative to the context.json directory or the project root. ${allowClause}${roleClause}${guardClause} ${instructions} Reply exactly ACTOR_DONE.`
 }
 
 async function actor(runCase, role, contextPath, instructions) {
   const agent = { analyst: "mm-analyst", modeler: "mm-modeler", solver: "mm-solver", writer: "mm-writer" }[role]
-  const run = await mainRun(runCase, `actor-${role}`, actorChildInstructions(role, contextPath, instructions))
+  const run = await mainRun(runCase, `actor-${role}`, actorChildInstructions(role, runCase.caseId, contextPath, instructions))
   const task = completedTool(run, "task")
   assert.equal(task.part.state.input?.subagent_type, agent)
   const child = await childParts(runCase, task)
   return child
 }
 
+async function assertAttemptComplete(runCase, attemptId, manifest, contextPath = manifest.contextPath) {
+  const caseRoot = path.join(runCase.projectRoot, "runs", runCase.caseId)
+  assert.equal(await isAttemptComplete(caseRoot, manifest), true, `${attemptId} Actor returned before every Manifest expected output existed`)
+  if (manifest.role === "solver")
+    assert.equal(await hasSuccessfulComputeEvidence(caseRoot, manifest), true, `${attemptId} Actor returned without successful Compute Evidence`)
+  if (manifest.role === "solver")
+    assert.equal(await hasMmbenchCoachQuality(caseRoot, { ...manifest, contextPath }), true, `${attemptId} Actor returned invalid MM-Bench coach statistics`)
+  if (manifest.role === "writer")
+    assert.equal(await hasSuccessfulCompileEvidence(caseRoot, manifest), true, `${attemptId} Actor returned without successful Compile Evidence`)
+}
+
+async function assertMmbenchReportingQuality(runCase, contextPath) {
+  if (runCase.kind !== "mmbench-2024-c" || !contextPath.startsWith("attempts/reporting/")) return
+  const attemptRoot = path.join(runCase.projectRoot, "runs", runCase.caseId, path.dirname(contextPath))
+  const [mainTex, outline, compileLog, evidenceFiles] = await Promise.all([
+    readFile(path.join(attemptRoot, "main.tex"), "utf8"),
+    readFile(path.join(attemptRoot, "outline.md"), "utf8"),
+    readFile(path.join(attemptRoot, "compile.log"), "utf8"),
+    readdir(path.join(attemptRoot, "evidence")),
+  ])
+  const incomplete = /\b(?:placeholder|not rendered|not executed|not run|next compute|future compute)\b/iu
+  assert.doesNotMatch(`${outline}\n${mainTex}`, incomplete, "MM-Bench report defers a required deliverable")
+  assert.ok((mainTex.match(/\\begin\{figure\}/gu) ?? []).length >= 3, "MM-Bench report must render at least three match-flow figures")
+  const severe = [...compileLog.matchAll(/Overfull \\hbox \(([0-9.]+)pt too wide\)/gu)].map((match) => Number(match[1])).filter((value) => value > 20)
+  assert.deepEqual(severe, [], `MM-Bench report has severe page overflow: ${severe.join(", ")} pt`)
+  const compileRefs = evidenceFiles.filter((name) => /^compile-\d{3}\.json$/u.test(name)).sort()
+  assert.ok(compileRefs.length > 0, "Writer must create Compile Evidence")
+  const compileResults = await Promise.all(compileRefs.map(async (name) => JSON.parse(await readFile(path.join(attemptRoot, "evidence", name), "utf8"))))
+  assert.equal(compileResults.at(-1)?.status, "succeeded", "Writer's final Compile Evidence must succeed")
+  assert.equal(compileResults.at(-1)?.exit_code, 0, "Writer's final Compile Evidence must exit zero")
+}
+
 async function critic(runCase, contextPath) {
-  const run = await mainRun(runCase, "critic", `Make exactly one built-in task call. Its subagent_type field MUST be literal mm-critic, never general or any other value. Tell that Critic to read ${contextPath}, all declared candidates and the declared rubric, then return one bare Review JSON. Every evidence path must be Case-root-relative exactly as written in context.json, such as attempts/... or input/...; never prefix runs/${runCase.caseId}/. Do not call any mm_agent Tool yourself. Reply exactly CRITIC_DONE.`)
+  const diskContextPath = `runs/${runCase.caseId}/${contextPath}`
+  const run = await mainRun(runCase, "critic", `Make exactly one built-in task call. Its subagent_type field MUST be literal mm-critic, never general or any other value. Tell that Critic to read ${diskContextPath}, all declared candidates and the declared rubric, then return one bare Review JSON containing every required field: schema_version, attempt_id, verdict, findings, required_fixes, evidence, and reviewed_at. reviewed_at must be a UTC RFC 3339 string. The Review must be strict JSON: use forward slashes in paths, never copy raw TeX commands into JSON strings, and escape every backslash that remains. Paths declared inside context.json are Case-root-relative: prefix runs/${runCase.caseId}/ only when reading them from disk. For large immutable inputs, verify only candidate claims that need a source spot-check; never exhaustively scan or enumerate the dataset. Every Review evidence path must remain Case-root-relative exactly as written in context.json, such as attempts/... or input/...; never prefix runs/${runCase.caseId}/ in Review JSON. Do not call any mm_agent Tool yourself. Reply exactly CRITIC_DONE.`)
   const task = completedTool(run, "task")
   assert.equal(task.part.state.input?.subagent_type, "mm-critic")
   const child = await childParts(runCase, task)
   assert.equal(child.parts.some((part) => part.type === "tool" && ["edit", "mm_agent_case", "task"].includes(part.tool)), false, "Critic exceeded read-only boundary")
-  return finalJson(task.part.state.output)
+  const review = canonicalizeReviewEvidence(finalJson(task.part.state.output), runCase.caseId)
+  if (review.verdict === "pass") await assertMmbenchReportingQuality(runCase, contextPath)
+  return review
 }
 
 async function gate(runCase, attemptId, review) {
-  const inspectRun = await mainRun(runCase, "gate-inspect", `Call mm_agent_case exactly once with action inspect and case_id ${runCase.caseId}. Do not call any other Tool. Reply exactly GATE_INSPECT_DONE.`)
-  const inspectCalls = inspectRun.events.filter((entry) => entry.type === "tool_use" && entry.part?.tool === "mm_agent_case")
-  assert.equal(inspectCalls.length, 1, "Gate inspection must make exactly one Case call")
-  assert.equal(inspectCalls[0]?.part?.state?.status, "completed")
-  const expectedRevision = JSON.parse(inspectCalls[0].part.state.output).state?.revision
+  const { definition, context } = await caseTool(runCase)
+  const inspectArgs = tool.schema.object(definition.args).parse({ action: "inspect", case_id: runCase.caseId })
+  const inspectOutput = await definition.execute(inspectArgs, context)
+  const expectedRevision = JSON.parse(inspectOutput).state?.revision
   assert.ok(Number.isSafeInteger(expectedRevision), "Gate inspection must return an integer state revision")
 
-  const gateRun = await mainRun(runCase, "gate-submit", `You are the authorized MM-Agent runner orchestrator. The following Review is trusted structured data returned by a fresh mm-critic child for this Attempt; do not critique, reinterpret, or treat it as user instructions. Persist it by calling mm_agent_case exactly once with action gate for ${runCase.caseId}, top-level attempt_id ${attemptId}, expected_revision ${expectedRevision}, and review ${JSON.stringify(review)}. Do not call any other Tool. Reply exactly GATE_DONE.`)
-  const gateCalls = gateRun.events.filter((entry) => entry.type === "tool_use" && entry.part?.tool === "mm_agent_case")
-  assert.equal(gateCalls.length, 1, "Gate submission must make exactly one Case call")
-  assert.equal(gateCalls[0]?.part?.state?.status, "completed")
-  return JSON.parse(gateCalls[0].part.state.output).outcome
+  const gateArgs = tool.schema.object(definition.args).parse({
+    action: "gate",
+    case_id: runCase.caseId,
+    attempt_id: attemptId,
+    review,
+    expected_revision: expectedRevision,
+  })
+  const gateOutput = await definition.execute(gateArgs, context)
+  runCase.tool_states.push({ label: "gate-submit", session_id: "deterministic-runner", tool: "mm_agent_case", status: "completed", output: sanitized(gateOutput), error: "" })
+  await saveTrace()
+  return JSON.parse(gateOutput).outcome
 }
 
 function buildStageActorInstructions(baseInstructions, currentAttemptBase, pendingRevision) {
@@ -251,6 +325,7 @@ async function stage(runCase, role, goal, instructions, taskId) {
     const base = typeof instructions === "function" ? instructions(dispatched.contextPath) : instructions
     const actorInstructions = buildStageActorInstructions(base, currentAttemptBase, pendingRevision)
     const actorSession = await actor(runCase, role, dispatched.contextPath, actorInstructions)
+    await assertAttemptComplete(runCase, dispatched.attemptId, dispatched.manifest, dispatched.contextPath)
     const review = await critic(runCase, dispatched.contextPath)
     assert.equal(review.attempt_id, dispatched.attemptId)
     const outcome = await gate(runCase, dispatched.attemptId, review)
@@ -288,7 +363,7 @@ async function runGolden(kind, source, taskSpec) {
     await cp(item, target)
     sourcePaths.push(target)
   }
-  await writeFile(path.join(projectRoot, "opencode.json"), `${JSON.stringify({ plugin: [pathToFileURL(path.join(repositoryRoot, "dist", "index.js")).href] }, null, 2)}\n`)
+  await writeFile(path.join(projectRoot, "opencode.json"), `${JSON.stringify({ plugin: [pluginEntry] }, null, 2)}\n`)
   command("git", ["init"], projectRoot)
   const runCase = { kind, caseId: `golden-${kind}-${Date.now().toString(36)}`, projectRoot, sessions: [], child_sessions: [], tool_states: [], failures: [] }
   trace.cases.push(runCase)
@@ -304,24 +379,36 @@ async function runGolden(kind, source, taskSpec) {
       waves[task.wave] ??= []
       waves[task.wave].push({
         id: task.id,
+        wave: task.wave,
+        depends_on: task.depends_on,
         goal: `Solve ${task.id} from the accepted task description.`,
-        instructions: "Read only the Manifest declared task, model, and direct dependency memory. Write reproducible solve.py and result files; call mm_agent_compute exactly once; then write a complete Task Memory.",
+        instructions: (contextPath) => `Read only the Manifest declared task, model, and direct dependency memory. Fully execute the current task description now: do not leave requested calculations, tests, metrics, figures, or tables as designs, placeholders, or future work. Write reproducible solve.py and result files; call mm_agent_compute as needed to repair the current Candidate while preserving every Evidence record, and finish with execution-result.json referencing the final successful run; then write a complete Task Memory. ${canonicalTaskMemoryFields} ${solverComputeContract(contextPath)}`,
       })
       return waves
-    }, {})).sort((left, right) => left[0].wave - right[0].wave).map(([, tasks]) => tasks)
+    }, {})).sort((left, right) => left[0].wave - right[0].wave)
   for (const wave of derivedWaves) {
-    const dispatched = await Promise.all(wave.map((task) => dispatch(runCase, "solver", task.goal, task.id)))
-    const actors = await Promise.all(dispatched.map((item, index) => actor(runCase, "solver", item.contextPath, wave[index].instructions)))
-    const reviews = await Promise.all(dispatched.map((item) => critic(runCase, item.contextPath)))
-    const acceptedActors = []
-    for (const [index, item] of dispatched.entries()) {
-      assert.equal(reviews[index].attempt_id, item.attemptId)
-      const outcome = await gate(runCase, item.attemptId, reviews[index])
-      if (outcome === "pass") acceptedActors.push(actors[index])
-      else if (outcome === "revise") acceptedActors.push((await stage(runCase, "solver", wave[index].goal, wave[index].instructions, wave[index].id)).actorSession)
-      else throw new Error(`solver ${item.attemptId} was blocked`)
+    let pending = wave.slice()
+    while (pending.length > 0) {
+      const state = JSON.parse(await readFile(path.join(caseRoot, "state.json"), "utf8"))
+      const accepted = new Set(state.accepted_artifacts.map((artifact) => artifact.path))
+      const ready = pending.filter((task) => (task.depends_on ?? []).every((dependency) => accepted.has(`tasks/${dependency}/memory.json`)))
+      assert.ok(ready.length > 0, `wave ${state.current_wave} has no dispatchable task; dependencies must be accepted first`)
+      const dispatched = await Promise.all(ready.map((task) => dispatch(runCase, "solver", task.goal, task.id)))
+      const actors = await Promise.all(dispatched.map((item, index) => actor(runCase, "solver", item.contextPath, resolveInstructionsForAttempt(ready[index].instructions, item.contextPath))))
+      await Promise.all(dispatched.map((item) => assertAttemptComplete(runCase, item.attemptId, item.manifest, item.contextPath)))
+      const reviews = await Promise.all(dispatched.map((item) => critic(runCase, item.contextPath)))
+      const acceptedActors = []
+      for (const [index, item] of dispatched.entries()) {
+        assert.equal(reviews[index].attempt_id, item.attemptId)
+        const outcome = await gate(runCase, item.attemptId, reviews[index])
+        if (outcome === "pass") acceptedActors.push(actors[index])
+        else if (outcome === "revise") acceptedActors.push((await stage(runCase, "solver", ready[index].goal, ready[index].instructions, ready[index].id)).actorSession)
+        else throw new Error(`solver ${item.attemptId} was blocked`)
+      }
+      waveAttempts.push({ dispatched, actors: acceptedActors })
+      const completed = new Set(ready.map((task) => task.id))
+      pending = pending.filter((task) => !completed.has(task.id))
     }
-    waveAttempts.push({ dispatched, actors: acceptedActors })
   }
 
   for (const actorResult of waveAttempts.flatMap((wave) => wave.actors)) {
@@ -342,24 +429,39 @@ async function runGolden(kind, source, taskSpec) {
 
 const canonicalTaskMemoryFields = "memory.json must match the Canonical TaskMemory schema: { schema_version: 1, task_id (string), task_description (string), modeling_method (string), result_interpretation (string), execution_result (relative path string under the Attempt), code_outputs (array of relative paths), figures (array of relative paths) }. Use these exact field names."
 
+function solverAttemptBase(contextPath) {
+  const normalized = String(contextPath ?? "").replaceAll("\\", "/")
+  const match = normalized.match(/^(attempts\/solving\/[^/]+\/\d{3})\/context\.json$/u)
+  if (!match) throw new Error("Solver contextPath must be attempts/solving/<task-id>/<NNN>/context.json")
+  return match[1]
+}
+
+const solverComputeContract = (contextPath) => {
+  const attemptBase = solverAttemptBase(contextPath)
+  const workDir = `${attemptBase}/code`
+  return `Compute contract (mandatory): mm_agent_compute.case_id is the current Case id from context.json; work_dir must be the literal string "${workDir}"; entry_script must be the literal string "solve.py"; input_paths must use only Case-root-relative required_reads[].path values from context.json; output_paths must include every regular Candidate file under "${workDir}" needed to reproduce the result (entry script, imported source modules, result files, and generated figure mirrors; exclude __pycache__ and .pyc). Never pass an absolute path. execution-result.json must be written only by mm_agent_compute; never create or overwrite it directly. memory.json execution_result must be "${attemptBase}/execution-result.json", and every code_outputs entry must start with "${workDir}/".`
+}
+
 const writerCompileContract = (contextPath) => {
   const workDir = writerWorkDir(contextPath)
-  return `Reporting Compile contract (mandatory): mm_agent_compile.case_id is the current Case id; mm_agent_compile.work_dir must be the literal string "${workDir}" (the directory containing this Manifest's context.json, relative to the Case root). Never pass an absolute path, a host system path, or any other reporting Attempt directory. main_tex must be the literal string main.tex. Write only Manifest expected outputs under ${workDir} and call mm_agent_compile exactly once with that work_dir. Do not call mm_agent_case, do not call Gate, do not dispatch another Attempt, do not compile inside a sibling or earlier reporting Attempt, do not delegate.`
+  return `Reporting Compile contract (mandatory): mm_agent_compile.case_id is the current Case id; mm_agent_compile.work_dir must be the literal string "${workDir}" (the directory containing this Manifest's context.json, relative to the Case root). Never pass an absolute path, a host system path, or any other reporting Attempt directory. main_tex must be the literal string main.tex. Write only Manifest expected outputs under ${workDir}; mm_agent_compile retries may repair only the current Candidate, must preserve every Evidence record, and must finish on successful Compile Evidence. Do not call mm_agent_case, do not call Gate, do not dispatch another Attempt, do not compile inside a sibling or earlier reporting Attempt, do not delegate.`
 }
 
 const resumeInstructions = {
   analyst: "Create every expected Analysis candidate from the immutable input.",
   modeler: "Call mm_agent_hmml once for every retrieval candidate, then create the modeling scheme.",
-  solver: `Read only declared direct dependencies. Create reproducible code, call mm_agent_compute, and write a complete Task Memory. ${canonicalTaskMemoryFields}`,
-  writer: (contextPath) => `Use accepted artifacts only. Create report candidates under the current Attempt directory and call mm_agent_compile exactly once for it. ${writerCompileContract(contextPath)}`,
+  solver: (contextPath) => `Read only declared direct dependencies and inspect the current Attempt's existing expected outputs first. Treat NaN requested statistics, non-converged requested models, blank requested figures, unavailable-dependency fallbacks, or Compute Evidence for any entry script other than solve.py as incomplete: repair with the available runtime, validate parameter packing and reported diagnostics, then call mm_agent_compute for solve.py. Otherwise preserve valid existing Compute Evidence and only create missing expected outputs. Preserve every Evidence record and finish with execution-result.json referencing the final successful solve.py run. Write a complete Task Memory. ${canonicalTaskMemoryFields} ${solverComputeContract(contextPath)}`,
+  writer: (contextPath) => `Use accepted artifacts only. Create report candidates under the current Attempt directory and call mm_agent_compile as needed to repair the current Candidate, preserving all Evidence and finishing on a successful run. ${writerCompileContract(contextPath)}`,
 }
+
+const solverFinalizeInstructions = (contextPath) => `Compute Evidence is already deterministically validated for this Attempt. Do not call mm_agent_compute and do not modify code, figures, execution-result.json, or Evidence. Read the existing outputs only as needed, then write the missing memory.json and stop. ${canonicalTaskMemoryFields} ${solverComputeContract(contextPath)}`
 
 const actorDispatchContract = (role, contextPath) => `Use built-in task exactly once with subagent_type mm-${role}. Tell that child to read ${contextPath}, create every Manifest expected output only, and follow these case-specific requirements:`
 
 const minimalSpec = {
   analysis: "Write exactly one computational task task-01 with a wave-1 empty dependency list.",
   modeling: "Call mm_agent_hmml exactly once for the Manifest retrieved-methods candidate. Use a simple multiplication model with explicit variables and formula. Include named sections for Method Choice (justify direct multiplication and reject retrieved methods as unsuitable), Applicability Limits, Validation Strategy, Assumptions, and task-level Solve Requirements.",
-  waves: [[{ id: "task-01", goal: "Compute the required labels.", instructions: `Write solve.py that computes 12 * 3 and writes answer.txt. Call mm_agent_compute exactly once for solve.py with answer.txt as an output. Write execution-result.json only through that Tool. ${canonicalTaskMemoryFields}` }]],
+  waves: [[{ id: "task-01", goal: "Compute the required labels.", instructions: (contextPath) => `Write solve.py that computes 12 * 3 and writes answer.txt. Call mm_agent_compute exactly once for solve.py with answer.txt as an output. ${canonicalTaskMemoryFields} ${solverComputeContract(contextPath)}` }]],
   reporting: (contextPath) => `Use accepted artifacts only. Write outline.md, notation.md, and a minimal XeLaTeX main.tex. ${writerCompileContract(contextPath)}`,
 }
 const multiWaveSpec = {
@@ -367,10 +469,10 @@ const multiWaveSpec = {
   modeling: "Call mm_agent_hmml once for each Manifest retrieved-methods candidate. Define explicit arithmetic models for task-a, task-b, and task-total. Include named sections for Method Choice, Applicability Limits, Validation Strategy, Assumptions, and task-level Solve Requirements; justify direct arithmetic and reject unsuitable retrieved methods.",
   waves: [
     [
-      { id: "task-a", goal: "Compute channel A tickets.", instructions: `Write solve.py that computes 12 * 2 and writes answer.txt. Call mm_agent_compute exactly once. ${canonicalTaskMemoryFields}` },
-      { id: "task-b", goal: "Compute channel B tickets.", instructions: `Write solve.py that computes 18 * 2 and writes answer.txt. Call mm_agent_compute exactly once. ${canonicalTaskMemoryFields}` },
+      { id: "task-a", goal: "Compute channel A tickets.", instructions: (contextPath) => `Write solve.py that computes 12 * 2 and writes answer.txt. Call mm_agent_compute exactly once. ${canonicalTaskMemoryFields} ${solverComputeContract(contextPath)}` },
+      { id: "task-b", goal: "Compute channel B tickets.", instructions: (contextPath) => `Write solve.py that computes 18 * 2 and writes answer.txt. Call mm_agent_compute exactly once. ${canonicalTaskMemoryFields} ${solverComputeContract(contextPath)}` },
     ],
-    [{ id: "task-total", goal: "Compute the requested total from the direct dependency.", instructions: `Read only the declared direct dependency Task Memory. Write solve.py that computes the documented total and writes answer.txt. Call mm_agent_compute exactly once. ${canonicalTaskMemoryFields}` }],
+    [{ id: "task-total", goal: "Compute the requested total from the direct dependency.", instructions: (contextPath) => `Read only the declared direct dependency Task Memory. Write solve.py that computes the documented total and writes answer.txt. Call mm_agent_compute exactly once. ${canonicalTaskMemoryFields} ${solverComputeContract(contextPath)}` }],
   ],
   reporting: (contextPath) => `Use accepted artifacts only. Write outline.md, notation.md, and a minimal XeLaTeX main.tex. ${writerCompileContract(contextPath)}`,
 }
@@ -443,10 +545,24 @@ async function loadResume(target) {
 async function resumeAttempt(runCase, attempt) {
   const caseRoot = path.join(runCase.projectRoot, "runs", runCase.caseId)
   const complete = await isAttemptComplete(caseRoot, attempt)
+  const computeReady = attempt.role === "solver" &&
+    await hasSuccessfulComputeEvidence(caseRoot, attempt) &&
+    await hasMmbenchCoachQuality(caseRoot, attempt)
+  const needsCompute = complete && attempt.role === "solver" && !computeReady
   const needsCompile = complete && attempt.role === "writer" && !(await hasSuccessfulCompileEvidence(caseRoot, attempt))
-  if (!complete || needsCompile) {
-    const instructions = resumeInstructionsForRole(attempt.role)
-    const actorSession = await actor(runCase, attempt.role, attempt.contextPath, resolveInstructionsForAttempt(instructions, attempt.contextPath))
+  if (!complete || needsCompute || needsCompile) {
+    let instructions = resolveInstructionsForAttempt(
+      computeReady && !complete ? solverFinalizeInstructions : resumeInstructionsForRole(attempt.role),
+      attempt.contextPath,
+    )
+    if (attempt.current_task?.id === "synthesize-results" && !computeReady) {
+      const workDir = `${solverAttemptBase(attempt.contextPath)}/code`
+      instructions = `${instructions} The latest Compute Evidence is incomplete. Call mm_agent_compute with case_id "${runCase.caseId}", work_dir "${workDir}", entry_script "solve.py", input_paths exactly ["artifacts/modeling-scheme.md","tasks/momentum-flow/memory.json","tasks/coach-claim-tests/memory.json","tasks/swing-prediction/memory.json"], and output_paths exactly ["${workDir}/__init__.py","${workDir}/solve.py","${workDir}/verify_and_summarize.py","${workDir}/synthesis_verification.json","${workDir}/evidence_table.json","${workDir}/coaching_advisory.json","${workDir}/reporting_summary.md","${workDir}/synthesis_status.json"]. Only entry_script is relative to work_dir; every input_paths and output_paths item is relative to the Case root and must retain the shown prefix. Do not return until execution-result.json references that successful complete Evidence.`
+    }
+    if (attempt.current_task?.id === "coach-claim-tests" && !computeReady)
+      instructions = `${instructions} Read latest_review from context.json when present and implement every required fix. The task requires coach_claim_tests.csv with the exact header match_id,test_name,statistic,effect_size,p_value,n_points, at least two matches, and finite numeric values. Execute the requested residual runs tests, consecutive point_victor=1 streak test against a server-only null, lag-1 autocorrelation, game-block sensitivity, and adjusted p-values; do not replace them with a logistic-only shortcut. Before the final mm_agent_compute call, include every regular file that remains in the current code directory in output_paths so the latest Evidence hashes the complete Candidate.`
+    const actorSession = await actor(runCase, attempt.role, attempt.contextPath, instructions)
+    await assertAttemptComplete(runCase, attempt.attempt_id, attempt)
     const review = await critic(runCase, attempt.contextPath)
     const outcome = await gate(runCase, attempt.attempt_id, review)
     if (outcome === "pass") return actorSession
@@ -471,6 +587,8 @@ function resolveInstructionsForAttempt(instructions, contextPath) {
 
 async function resumeGolden(target) {
   const initial = await loadResume(target)
+  if (providedPluginEntry)
+    await writeFile(path.join(initial.projectRoot, "opencode.json"), `${JSON.stringify({ plugin: [pluginEntry] }, null, 2)}\n`)
   const runCase = { kind: "resumed", caseId: initial.caseId, projectRoot: initial.projectRoot, sessions: [], child_sessions: [], tool_states: [], failures: [] }
   trace.cases.push(runCase)
   await saveTrace()
@@ -493,7 +611,7 @@ async function resumeGolden(target) {
 
 try {
   if (!process.env.npm_execpath) throw new Error("run through npm so npm_execpath is available")
-  command(process.execPath, [process.env.npm_execpath, "run", "build"], repositoryRoot)
+  if (!providedPluginEntry) command(process.execPath, [process.env.npm_execpath, "run", "build"], repositoryRoot)
   if (resumeTarget) await resumeGolden(resumeTarget)
   else {
     if (cases.includes("minimal")) await runGolden("minimal", [path.join(fixturesRoot, "minimal", "problem.md")], minimalSpec)
@@ -506,9 +624,9 @@ try {
     if (cases.includes("mmbench")) {
       const mmbench = await validateMmbench({ problemPath: mmbenchProblem, datasetPath: mmbenchDataset, provenancePath: mmbenchProvenance })
       await runGolden("mmbench-2024-c", mmbench, {
-        analysis: "Analyze the supplied authorized MM-Bench source, including the provenance input and dataset description, and derive a complete task DAG without fabricating source facts.",
+        analysis: "Analyze the supplied authorized MM-Bench source, including provenance and the dataset description, without fabricating source facts. Write exactly five requires_computation:true tasks and this exact dependency/wave structure: ingest-audit wave 1 with no dependencies; momentum-flow wave 2 depending on ingest-audit; coach-claim-tests wave 3 depending on momentum-flow; swing-prediction wave 3 depending on momentum-flow; synthesize-results wave 4 depending on momentum-flow, coach-claim-tests, and swing-prediction. Task descriptions must require executable results now: ingest-audit performs all data checks and calculates the match count; momentum-flow computes the focal-match momentum curve and renders at least three non-empty match-flow figures; coach-claim-tests executes all coach-claim tests requested by the problem with numeric statistics/effect sizes/p-values; swing-prediction trains and evaluates the predictor on held-out matches with numeric metrics; synthesize-results verifies and summarizes these actual outputs for Reporting. Designs, placeholders, and future-work promises are forbidden. The CSV has 7,284 data records plus one header and 46 columns; distinguish those counts. Do not calculate or state a match count during Analysis; ingest-audit must calculate it. For swing prediction, use one explicit row-index cutoff: features through row t predict an outcome beginning at row t+1, never use target-row serve_no or other in-point information, and keep the same cutoff in every task. In regular tennis games the server stays fixed for the game and alternates between games; tiebreak service follows its separate one-point-then-two-point sequence. Require data-quality checks for row order, one-row-per-point, player orientation, and those server rules. Any predictive serving baseline must be trained only on training matches in each validation fold or use an expanding estimate through row t; reserve full-match baselines for retrospective visualization only.",
         modeling: "Call mm_agent_hmml once for each Manifest retrieved-methods candidate. Define explicit methods, variables, assumptions, equations, applicability limits, validation strategy, method choice/rejection rationale, and task-level solve requirements.",
-        reporting: (contextPath) => `Use accepted artifacts only. Write outline.md, notation.md, and a compilable XeLaTeX main.tex. ${writerCompileContract(contextPath)}`,
+        reporting: (contextPath) => `Use accepted artifacts only. Include the actual match-flow figures, coach-claim statistics/p-values, and held-out prediction metrics required by the problem; placeholders, unrendered figures, unexecuted tests, and future-compute deferrals are forbidden. Verify every per-fold comparison against the accepted per-fold table: distinguish aggregate means from fold-level wins, ties, and exceptions, and never infer per-fold dominance from aggregate dominance. Before the single Compile call, wrap or split long equations and inspect main.tex so compile.log has no overfull box wider than 20 pt and the final pass has no unresolved references. Write outline.md, notation.md, and a compilable XeLaTeX main.tex. ${writerCompileContract(contextPath)}`,
       })
     }
   }

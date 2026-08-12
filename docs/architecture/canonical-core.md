@@ -168,7 +168,7 @@ Role Session 崩溃后，Orchestrator 可以使用同一 Manifest 恢复该 Atte
 
 任务依赖由语义 Role 明确提出，Core 只验证：
 
-- Task ID 唯一。
+- Task ID 唯一，且匹配 `[a-z0-9][a-z0-9-]{0,63}`，从而可安全进入 `solving/<task-id>` scope 与 Case-relative 路径。
 - 所有依赖均引用存在的 Task。
 - 图无环。
 - 当前 wave 的所有依赖已经 Accepted。

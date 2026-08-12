@@ -215,29 +215,30 @@ export const ContextManifestSchema = versioned(
 );
 export type ContextManifest = z.infer<typeof ContextManifestSchema>;
 
+export const TaskIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/u);
 export const TaskSchema = z.object({
-  id: z.string().min(1),
+  id: TaskIdSchema,
   description: z.string().min(1),
   requires_computation: z.boolean(),
-});
+}).strict();
 export type Task = z.infer<typeof TaskSchema>;
 export const TaskListSchema = versioned(
   z.object({
     schema_version: z.literal(SCHEMA_VERSION),
     tasks: z.array(TaskSchema),
-  }),
+  }).strict(),
 );
 export const TaskGraphSchema = versioned(
   z.object({
     schema_version: z.literal(SCHEMA_VERSION),
     tasks: z.array(
       z.object({
-        id: z.string().min(1),
-        depends_on: z.array(z.string()),
+        id: TaskIdSchema,
+        depends_on: z.array(TaskIdSchema),
         wave: z.number().int().positive(),
-      }),
+      }).strict(),
     ),
-  }),
+  }).strict(),
 );
 export type TaskGraph = z.infer<typeof TaskGraphSchema>;
 export const TaskMemorySchema = versioned(

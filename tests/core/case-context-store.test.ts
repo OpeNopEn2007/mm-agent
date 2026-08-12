@@ -950,11 +950,25 @@ async function writeSuccessfulExecutionEvidence(
   sequence = 1,
 ): Promise<void> {
   const codePath = path.join(attemptRoot, "code", "solve.py");
+  const evidencePath = path.join(
+    attemptRoot,
+    "evidence",
+    `compute-${String(sequence).padStart(3, "0")}-manifest.json`,
+  );
+  await mkdir(path.dirname(evidencePath), { recursive: true });
+  await writeJsonAtomic(evidencePath, {
+    entry_script: {
+      path: `attempts/solving/${taskId}/${String(sequence).padStart(3, "0")}/code/solve.py`,
+      sha256: await hashPath(codePath),
+    },
+    inputs: [],
+    outputs: [],
+  });
   await writeJsonAtomic(path.join(attemptRoot, "execution-result.json"), {
     schema_version: 1,
     kind: "compute",
-    path: `attempts/solving/${taskId}/${String(sequence).padStart(3, "0")}/code/solve.py`,
-    sha256: await hashPath(codePath),
+    path: `attempts/solving/${taskId}/${String(sequence).padStart(3, "0")}/evidence/compute-${String(sequence).padStart(3, "0")}-manifest.json`,
+    sha256: await hashPath(evidencePath),
     created_at: "2026-07-16T00:00:00.000Z",
     status: "succeeded",
     exit_code: 0,
@@ -1683,8 +1697,45 @@ test("analysis gate rejects an empty task DAG", async () => {
   );
 });
 
-test("analysis gate rejects missing dependencies cycles and a DAG without wave one", async () => {
+test("analysis gate rejects undeclared task and graph fields", async () => {
+  for (const target of ["tasks", "graph"] as const) {
+    const runsRoot = await temporaryRunsRoot();
+    const prepared = await prepareAnalysisAttempt(runsRoot);
+    const attemptRoot = path.join(
+      runsRoot,
+      "case-alpha",
+      "attempts",
+      "analysis",
+      "001",
+    );
+    if (target === "tasks") {
+      const tasks = JSON.parse(
+        await readFile(path.join(attemptRoot, "tasks.json"), "utf8"),
+      );
+      tasks.tasks[0].wave = 1;
+      await writeJsonAtomic(path.join(attemptRoot, "tasks.json"), tasks);
+    } else {
+      const graph = JSON.parse(
+        await readFile(path.join(attemptRoot, "task-graph.json"), "utf8"),
+      );
+      graph.tasks[0].description = "undeclared";
+      await writeJsonAtomic(path.join(attemptRoot, "task-graph.json"), graph);
+    }
+    await assert.rejects(
+      prepared.store.gate({
+        caseId: "case-alpha",
+        attemptId: "analysis-001",
+        review: prepared.review,
+        expectedRevision: 0,
+      }),
+      hasCode("SCHEMA_INVALID"),
+    );
+  }
+});
+
+test("analysis gate rejects invalid task IDs missing dependencies cycles and a DAG without wave one", async () => {
   const invalidGraphs = [
+    [{ id: "task_with_underscore", depends_on: [], wave: 1 }],
     [{ id: "task-01", depends_on: ["missing"], wave: 1 }],
     [
       { id: "task-01", depends_on: ["task-02"], wave: 1 },
@@ -1696,7 +1747,7 @@ test("analysis gate rejects missing dependencies cycles and a DAG without wave o
       { id: "task-02", depends_on: [], wave: 2 },
     ],
   ];
-  for (const graph of invalidGraphs) {
+  for (const [index, graph] of invalidGraphs.entries()) {
     const runsRoot = await temporaryRunsRoot();
     const prepared = await prepareAnalysisAttempt(runsRoot);
     const attemptRoot = path.join(
@@ -1725,7 +1776,7 @@ test("analysis gate rejects missing dependencies cycles and a DAG without wave o
         review: prepared.review,
         expectedRevision: 0,
       }),
-      hasCode("DAG_INVALID"),
+      hasCode(index === 0 ? "SCHEMA_INVALID" : "DAG_INVALID"),
     );
   }
 });
@@ -2057,6 +2108,80 @@ test("solving gate rejects unsuccessful Runtime Evidence", async () => {
         solving.attemptId,
         "attempts/solving/task-01/001/execution-result.json",
       ),
+      expectedRevision: 2,
+    }),
+    hasCode("SCHEMA_INVALID"),
+  );
+});
+
+test("solving gate rejects noncanonical or stale successful Compute Evidence", async () => {
+  const runsRoot = await temporaryRunsRoot();
+  const { store } = await advanceToSingleTaskSolving(runsRoot);
+  const solving = await store.dispatch({
+    caseId: "case-alpha",
+    role: "solver",
+    taskId: "task-01",
+    goal: "solve",
+  });
+  const attemptRoot = path.join(runsRoot, "case-alpha", "attempts", "solving", "task-01", "001");
+  const codePath = path.join(attemptRoot, "code", "solve.py");
+  const payloadPath = path.join(attemptRoot, "evidence", "runtime.json");
+  await mkdir(path.dirname(codePath), { recursive: true });
+  await mkdir(path.dirname(payloadPath), { recursive: true });
+  await writeFile(codePath, "print(1)\n", "utf8");
+  await writeJsonAtomic(payloadPath, {
+    entry_script: {
+      path: "attempts/solving/task-01/001/code/solve.py",
+      sha256: await hashPath(codePath),
+    },
+    inputs: [],
+    outputs: [],
+  });
+  await writeJsonAtomic(path.join(attemptRoot, "execution-result.json"), {
+    schema_version: 1,
+    kind: "compute",
+    path: "attempts/solving/task-01/001/evidence/runtime.json",
+    sha256: await hashPath(payloadPath),
+    created_at: "2026-07-16T00:00:00.000Z",
+    status: "succeeded",
+    exit_code: 0,
+  });
+  await writeJsonAtomic(path.join(attemptRoot, "memory.json"), {
+    schema_version: 1,
+    task_id: "task-01",
+    task_description: "solve",
+    modeling_method: "direct",
+    result_interpretation: "done",
+    execution_result: "tasks/task-01/execution-result.json",
+    code_outputs: ["tasks/task-01/code/solve.py"],
+    figures: [],
+  });
+  await assert.rejects(
+    store.gate({
+      caseId: "case-alpha",
+      attemptId: solving.attemptId,
+      review: passReview(solving.attemptId, "attempts/solving/task-01/001/execution-result.json"),
+      expectedRevision: 2,
+    }),
+    hasCode("SCHEMA_INVALID"),
+  );
+  const canonicalPayloadPath = path.join(attemptRoot, "evidence", "compute-001-manifest.json");
+  await rename(payloadPath, canonicalPayloadPath);
+  await writeJsonAtomic(path.join(attemptRoot, "execution-result.json"), {
+    schema_version: 1,
+    kind: "compute",
+    path: "attempts/solving/task-01/001/evidence/compute-001-manifest.json",
+    sha256: await hashPath(canonicalPayloadPath),
+    created_at: "2026-07-16T00:00:00.000Z",
+    status: "succeeded",
+    exit_code: 0,
+  });
+  await writeFile(codePath, "print(2)\n", "utf8");
+  await assert.rejects(
+    store.gate({
+      caseId: "case-alpha",
+      attemptId: solving.attemptId,
+      review: passReview(solving.attemptId, "attempts/solving/task-01/001/execution-result.json"),
       expectedRevision: 2,
     }),
     hasCode("SCHEMA_INVALID"),

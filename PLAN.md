@@ -2,7 +2,7 @@
 
 ## 当前结论
 
-`v1.0.0` 采用 Canonical Core + OpenCode Adapter。架构决策与协议设计已经接受；Step 1 至 Step 6 均已接受。当前边界不进入 Step 7 Golden Case。
+`v1.0.0` 采用 Canonical Core + OpenCode Adapter。Step 1 至 Step 8 的既有验收仍成立：Step 7 由 Gate A minimal、Gate B multi-wave 与 Gate C MM-Bench `2024_C` 真实闭环验收；Step 8 由外部解包 RC 的 A/B/C 完整复验、fresh recovery、CLI lifecycle、项目级发现、MIT/第三方 notices、文档/package 一致性与独立审查验收。首次 NKUMMF 非 Git 独立体验随后证明 RC1 的 Actor 写权限路径不覆盖该现场，因此 RC1 为 No-Go；RC2 已修复该 Adapter 回归并在 NKUMMF 2025 C 上真实通过 Analysis Actor/Critic/Gate。C 题全流程不是当前已接受事实，后续是否补齐附件四模板与外部变量数据并继续 Modeling→Reporting，由用户体验决定。
 
 唯一公开入口是 `/mm-agent`。首个真实目标 Case 是 MM-Bench `2024_C` Wimbledon Momentum；在此之前，各确定性模块必须先在本地最小 fixture 上留下可重复验证的证据。
 
@@ -61,7 +61,7 @@ tests/**                             Core、Tool、Adapter 与端到端证据
 problems/.gitkeep                    默认用户输入目录
 ```
 
-`knowledge/`、`prompts/`、`scripts/`、`servers/` 和 `templates/` 是迁移来源。只有与 v1 协议兼容且有验证证据的资产才能进入运行时；旧入口不得因复用资产而复活。
+`knowledge/`、`runtime/`、`skills/`、`rubrics/`、`schemas/` 和两套 `templates/` 是 v1 活跃资产；`scripts/` 只承载构建与验收工具。旧 prompts、servers 和 Python 入口已删除，不得因复用历史资产而复活。
 
 ## 里程碑结果
 
@@ -73,8 +73,8 @@ problems/.gitkeep                    默认用户输入目录
 | 4 | HMML 模型选择有数据依据，检索结果可追溯且有离线降级路径。 | 已完成：当前 acceptance commit |
 | 5 | 计算与 LaTeX/PDF 编译产生可重放的 Runtime Evidence。 | 已完成：当前 acceptance commit |
 | 6 | 四阶段 Agents、Skills 和 Tools 通过 Canonical Core 跑成真实工作流。 | 已接受：当前 acceptance commit |
-| 7 | 最小 Case 与 MM-Bench 真实 Case 均能从输入闭环到非空 PDF，并可在新会话恢复。 | 待开始 |
-| 8 | 发布包、文档、历史资产和最终验证证据一致。 | 待开始 |
+| 7 | 最小 Case 与 MM-Bench 真实 Case 均能从输入闭环到非空 PDF，并可在新会话恢复。 | 已接受：Gate A/B/C |
+| 8 | 发布包、文档、历史资产和最终验证证据一致。 | 已接受：unpublished local RC |
 
 ### Step 1：OpenCode Plugin Spike
 
@@ -209,24 +209,27 @@ Step 3 完成后，用户运行 `/mm-agent` 即可在进入四阶段正文前得
 - `inspect` 在新进程中从磁盘推导完整 completion evidence。
 - 旧 v0 Python 测试及其 Claude/`.planning/` 假设已删除或归档，不再影响 v1 gate。
 
-### Step 8：发布与交接
+### Step 8：MIT 本机 RC、完整复验与交接
 
 **预期结果**
 
-发布包、安装说明、Canonical Core、Adapter 文档、当前状态和历史边界一致；任何新智能体都能仅依靠仓库文件恢复项目。
+从外部解包后的 `v1.0.0` 本机 RC 可以独立加载、完成 Gate A/B/C 并恢复；README、许可、Canonical Core、Adapter 文档、当前状态和历史边界一致。用户获得一个不修改全局 OpenCode 配置的空白项目级体验环境。
 
 **可观察交付**
 
-- README、架构、协议、roadmap、CHANGELOG、AGENTS/CLAUDE 和 HANDOFF 描述同一真实实现面。
-- package allowlist 只包含发布所需的 Plugin、Skills、Agents/rubrics、runtime、单一 HMML 索引、模板和 schemas。
-- 旧 `templates/report-generator.py`、`servers/hmml-server/`、根 `requirements.txt`、旧脚本和活跃 Claude `.mcp.json` 已删除或归档，并有明确替代证据。
-- 安装、更新、卸载、cache、模型下载、TeX preflight 和故障排查说明可执行。
+- 标准 MIT `LICENSE`、package metadata、README 的二次开发说明和第三方 notices 一致；未明确授权的第三方再分发事项不因本机 RC 被掩盖。
+- README、架构、协议、roadmap、CHANGELOG、AGENTS/CLAUDE 和 HANDOFF 描述同一真实实现面，并给出实际验证过的安装、使用、恢复与故障排查路径。
+- package allowlist 只包含发布所需的 Plugin、Skills、rubrics、runtime、唯一 GTE 索引、两套模板和 schemas；Golden runner、tests、候选模型评测、Case、cache、benchmark 输入和凭据不进入包。
+- 旧 `templates/report-generator.py`、`servers/hmml-server/`、根 `requirements.txt`、旧 Python DAG/HMML/memory 脚本与 prompt 迁移文件已删除。
+- Golden runner 的 fresh、确定性 Tool 与 resume 路径可以显式加载同一个外部 `--plugin-entry`，且 trace 写入不会被 same-wave 并发截断。
+- 同级空白体验项目只使用 `.opencode/plugins/` 与 `.opencode/skills/` 项目级发现，不复制 provider 凭据或题目，不修改全局 OpenCode 配置。
 
 **验收证据**
 
-- `npm test` 与 `npm run build` 通过。
-- `npm run test:runtime` 继续执行真实 OpenCode Adapter gate；Python runtime 测试独立执行 `uv run --project runtime pytest`，不得覆盖 OpenCode runtime script。
-- minimal 与 MM-Bench Golden Case 命令均通过并生成非空 PDF。
+- `npm ci`、focused tests、`npm test`、`npm run build`、`npm run validate-config`、`npm run test:runtime` 与 `uv run --project runtime pytest` 通过。
+- 外部 RC 的 CLI install → update → remove、receipt/hash、四 Skills、冲突保护和用户全局配置 hash 不变均有证据。
+- external RC 使用 OpenCode `1.18.9` 与 MiniMax M3 Thinking 完整通过 minimal、multi-wave 和 MM-Bench `2024_C`；三次 fresh recovery 不重派，所有新 PDF 实际渲染目检。
+- 项目级 OpenCode discovery 发现五个 hidden Agents、六个 Tools 与四个 Skills。
 - `npm pack --dry-run --json`、`git diff --check` 和 package forbidden-path 检查通过。
 - `git diff --no-index AGENTS.md CLAUDE.md` 返回 0。
 - 活跃文件不再把 Pi、旧 Plugin、`${CLAUDE_PLUGIN_ROOT}` 或 `.planning/` 描述为当前入口；搜索排除 `.archived/` 与 `.git/`。
@@ -247,4 +250,4 @@ Step 3 完成后，用户运行 `/mm-agent` 即可在进入四阶段正文前得
 
 ## 当前里程碑
 
-Step 1 至 Step 6 已接受；41 条典型方法查询只保留为 `proposed` smoke regression，正式选型使用 80 条 `ai-adjudicated` 数据集。当前停止，不进入 Step 7 Golden Case。
+Step 1 至 Step 8 已接受。`v1.0.0` 保持 unpublished local RC；本轮不 commit、tag、push 或 npm publish。当前没有预设 Step 9，下一动作是用户在独立体验项目中放入一道题并执行 `/mm-agent`，反馈决定 RC2、正式发布或下一版本计划。

@@ -4,7 +4,7 @@
 
 ## 项目方向
 
-`mm-agent` 是一个以 OpenCode Plugin 为首个 Adapter 的数学建模 Harness。Canonical Core 由 `4ce82cd` 接受，OpenCode Adapter 设计由 `1040e63` 接受；两者分别是宿主无关机制和 v1 Adapter 实现接口的唯一来源。OpenCode Plugin Spike 已由 `315c319` 接受，CaseContextStore 已完成，下一步是 Preflight 与输入整理。它把赛题转化为四阶段 artifacts、可编译 LaTeX 和 PDF 论文：
+`mm-agent` 是一个以 OpenCode Plugin 为首个 Adapter 的数学建模 Harness。Canonical Core 由 `4ce82cd` 接受，OpenCode Adapter 设计由 `1040e63` 接受；两者分别是宿主无关机制和 v1 Adapter 实现接口的唯一来源。Step 1–8、Gate A/B/C 与本机 RC 已留下验收证据；首次独立真实题体验随后暴露正式 `/mm-agent` 用户路径仍重度依赖主模型临场编排。当前下一步是保留五个 hidden Agents、对应 Tools、文件交接和最终 PDF 能力，收敛正式运行面并用独立题目项目重新验证，而不是继续扩张工作流引擎。它把赛题转化为四阶段 artifacts、可编译 LaTeX 和 PDF 论文：
 
 ```text
 赛题输入 -> 四阶段工作流 -> 可编译 LaTeX -> PDF 论文
@@ -82,7 +82,7 @@
 ## 工程规则
 
 - 使用简单、可检查的本地文件，不使用隐藏状态替代 Case 事实。
-- 复用 `knowledge/`、`prompts/`、`scripts/`、`servers/`、`templates/` 和 `tests/` 中与 v1 协议兼容的资产；不复用旧入口。
+- 复用 `knowledge/`、`scripts/`、`templates/` 和 `tests/` 中与 v1 协议兼容的资产；已删除的旧 prompt、server 与 Python 入口不得恢复。
 - 不清理或回滚无关的用户改动。
 - Case 完成前用新鲜命令验证计算、编译和 PDF。
 - 在 Golden Case 跑通前保持实现面窄。

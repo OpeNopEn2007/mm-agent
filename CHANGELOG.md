@@ -2,16 +2,24 @@
 
 本文档记录 mm-agent 项目的历史版本变动。
 
-格式基于 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)，
-版本号遵循 [语义版本控制](https://semver.org/spec/v2.0.0.html)。
+格式基于 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)，版本号遵循 [语义版本控制](https://semver.org/spec/v2.0.0.html)。
 
 ---
 
 ## [Unreleased]
 
 ### 实现
+- RC1 首次 NKUMMF 独立非 Git 项目体验暴露 Actor `edit` allow pattern 仍按仓库内 `runs/...` 生成，而 OpenCode `1.18.9` 在非 Git 项目以盘符根目录作为 worktree，并向 permission evaluator 提交 worktree-relative path。RC2 现根据 Plugin 的 `directory/worktree` 生成精确项目路径，保留 Attempt、`context.json`/`review.json` 和外部目录边界；新增非 Git worktree 回归测试。
+- 收紧 `/mm-agent` 主控委派契约：只向 Actor 传递 Case-relative `contextPath` 并服从 hidden Agent/Manifest，不再临时要求 Actor promotion 或扩展 Canonical Analysis schema。NKUMMF 2025 C 独立现场已真实完成 preflight、intake、Analysis Actor/Critic/Gate，revision 0→1；附件四缺失与附件二/三字节一致均作为输入事实保留，未进入 Modeling。
+- Step 8 将 `1.0.0` 收口为 unpublished local RC：新增标准 MIT License 与第三方 notices，补齐 package description/repository/license，并允许 Golden runner 通过 `--plugin-entry` 在 fresh、确定性 Tool 和 resume 路径统一加载外部解包 Plugin。
+- Golden trace 保存改为串行临时文件替换，避免 multi-wave 并行 Actor/Critic 截断验收 trace；Python 根目录验收增加 pytest 路径配置，使 `uv run --project runtime pytest` 可直接执行。
+- 删除已由 v1 Core/Tools 取代的旧 Python DAG、HMML、memory、report generator、smoke test、server、requirements 与 prompt 迁移入口；npm package 排除候选模型 evaluation 明细，只保留运行时所需的唯一 GTE 索引与两套 TeX 模板。
+- Step 8 外部 RC 使用 OpenCode `1.18.9` 与 `minimax/MiniMax-M3 --variant thinking` 完整通过 Gate A/B/C、三次 fresh recovery、PDF 逐页目检、CLI lifecycle、冲突保护和独立项目级 Plugin/Skill discovery；独立初审的 2 个 Important 已关闭并通过定向复审，Step 1–8 已接受，版本仍未 commit/tag/publish。
+- Gate B Reporting Critic 曾返回含原始 TeX 反斜杠的非法 JSON Unicode escape；runner 收紧 strict Review JSON 契约后从原 Attempt 恢复，仅重跑 Critic/Gate，未重派已接受阶段或 Writer candidate。
 - 增加 Step 7 Golden Case runner、minimal/multi-wave fixtures 与运行期直接依赖断言；runner 通过真实 OpenCode Agent、Tool、Critic、Gate、Compute 和 Compile 路径执行，不用手写 Review 或 stable artifact 复制替代运行期事实。
-- 删除仅依赖旧 `.planning/` 路径的 MMBench Python validation fixture；真实 MM-Bench 仍要求显式提供题目材料与 provenance。
+- Step 7 Gate A minimal、Gate B multi-wave 与新的 MM-Bench `2024_C` Gate C 均已接受；Gate C 完成五任务 DAG、分层置换 coach claim test、held-out swing prediction、实际 match-flow figures、14 页 PDF 视觉检查与无重派 fresh recovery。早期结构完成但内容不合格的 Case 仅保留为失败证据。
+- MM-Bench 准备脚本固定 upstream commit 和 provenance，将题目、CSV 与许可证元数据保存在仓库外；删除仅依赖旧 `.planning/` 路径的 MMBench Python validation fixture。
+- Golden runtime 修复 Actor Case-root 磁盘路径、Critic evidence 规范化、恢复时复用成功 Runtime Evidence、Agent 普通文件工具 allowlist 歧义，以及 Analysis DAG task id 与后续 recipe 不一致；新增 same-wave ready-task 调度、题目产出完整性、全 code hash 覆盖和 PDF overflow 检查。Core 只接受当前 Solver Attempt 的规范 Compute manifest，resume 仅复用与当前 `main.tex`、compile log 和 PDF hash 一致的 Compile Evidence。确定性的 inspect/dispatch/gate 直接通过真实 Plugin `args.parse -> execute -> Core` 执行，模型只承担 Actor/Critic 判断；公共 Tool API 与 Review schema 保持不变。
 - 接受 `315c319 feat: validate OpenCode plugin harness`，完成 `@mm-agent/opencode` 的 ESM Plugin Spike、最小 hidden Agent、只读 context Tool、`mm-agent` Skill 和显式 install/update/remove CLI。
 - installer 使用 receipt hash、Plugin 注册所有权、路径/realpath 边界、junction escape 拒绝和带 rollback 的 staged transaction，保护用户修改和非拥有文件。
 - 真实 OpenCode `1.18.2` runtime gate 覆盖 Plugin/Agent/Skill、slash command、模型驱动 Tool、built-in `task` fresh child linkage、重启和 compaction-off 磁盘恢复。
@@ -36,6 +44,7 @@
 - 真实 OpenCode Actor -> Critic -> Gate host runtime 验证完成。
 
 ### 文档
+- 将根 README 重构为面向首次使用者的项目首页，解释设计原则、OpenCode 中五个 hidden Agents/六个 Tools/四个 Skills、Quick Start、恢复、项目布局、验证边界、二次开发入口和参考资料；明确鼓励在 MIT 条款下 fork 并改造成自己的 Harness。
 - 接受 `4ce82cd` 提交的 Canonical Core（`docs/architecture/canonical-core.md` + `docs/context/artifact-protocol.md`）作为宿主无关机制唯一来源。
 - 重写 `README.md` 与 `docs/architecture/opencode-plugin-harness.md`，按 Core 同步 Context Manifest（`attempt_id`、`scope`、`sequence`、`created_at`、`base_revision`、`required_reads`、`expected_outputs`、`promotions`、`review.rubric`、`review.required_reads`、`latest_review`、`resolves_blocker`）、Gate 输入 `expected_revision`、Case Policy、Rubric 快照、per-task solving budget、Blocker、Stage 转换、Runtime Evidence、promotion 白名单和派生 completion evidence。
 - 同步 `PLAN.md`、`HANDOFF.md`、`AGENTS.md`、`CLAUDE.md`、`IDEA.md`、`docs/README.md`、`docs/roadmap/v1.0.0.md` 与 `.archived/legacy-claude-codex-plugin/README.md` 到 Canonical Core 与 OpenCode Adapter 决策。
@@ -62,10 +71,9 @@
 - 2026-05-16: 创建 `docs/research/claude-code-architecture-refactor.md` 架构重构方案（历史，已通过归档处理）。
 - 2026-05-16: 更新 `docs/research/paper-vs-implementation-gap-analysis.md` 全面差距分析（历史，已通过归档处理）。
 
-### 开发方向
-- OpenCode Plugin Spike、CaseContextStore、Step 3 Preflight/输入整理、Step 4 HMML 检索评测/运行时与 Step 5 Compute/Compile Runtime Evidence 均已通过各自 gate；当前停止在 Step 5，不自动进入 Agents/Skills 编排或 Golden Case。
-- Spike 只验证 Adapter 宿主假设，不代表四阶段、HMML、Compute/Compile 或 Golden Case 已实现。
-- 旧 Pi、Claude/Codex Plugin 方向进入历史维护/归档状态，不再作为后续架构主线。
+### 当前边界
+- Step 1–8 的既有验收仍保留；RC1 在首次 NKUMMF 非 Git 独立现场判定 No-Go，RC2 已关闭 Actor 写入与主控 prompt 漂移并通过 C 题 Analysis 真实回归。该现场同时发现 Critic 的未来 `reviewed_at` 仍可被 Gate 接受，RC2 最终接受前需决定 runtime timestamp 或 future-skew 校验。C 题 Modeling→Reporting 尚未运行，附件四原模板和问题二所需外部变量数据仍是明确输入边界。
+- 旧 Pi、Claude/Codex Plugin 方向保持历史归档，不再作为后续架构主线。
 
 ---
 

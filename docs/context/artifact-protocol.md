@@ -305,6 +305,8 @@ Promotion target 按 scope 固定：
 
 Gate 拒绝当前 scope 白名单之外的 promotion target。
 
+`tasks.json` 与 `task-graph.json` 的 Task ID 必须匹配 `[a-z0-9][a-z0-9-]{0,63}`；两者的 Task ID 集合必须完全相同。
+
 ## Task Memory
 
 每个 accepted Solver 任务在 `tasks/<task-id>/memory.json` 写入紧凑投影：

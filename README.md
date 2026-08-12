@@ -1,741 +1,283 @@
 # mm-agent
 
-`mm-agent` 是一个面向数学建模赛题的本地 Agent Harness。它把赛题、附件和数据转化为一组可检查的阶段产物，最后生成可编译的 LaTeX 和 PDF 论文。
+`mm-agent` 是一个面向数学建模的本地 Agent Harness。你把题目和数据交给 OpenCode，它组织五种角色完成分析、建模、计算、写作和审查，最后留下可审计的 Case artifacts、可编译 LaTeX、编译日志和 PDF 论文。
 
 ```text
-赛题输入
-  -> Problem Analysis
-  -> Mathematical Modeling
-  -> Computational Solving
-  -> Solution Reporting
-  -> LaTeX
-  -> PDF
+题目与数据
+  → Analyst
+  → Modeler + HMML
+  → Solver DAG + Compute
+  → Writer + Compile
+  → Critic / Gate
+  → PDF
 ```
 
-## 当前状态
+当前 v1 版本的唯一宿主是 OpenCode；长期可复用的核心是与宿主无关的 [Canonical Core](docs/architecture/canonical-core.md)。
 
-`v1.0.0` 的 Canonical Core 由 `4ce82cd` 接受，OpenCode Adapter 设计由 `1040e63` 接受。OpenCode Plugin Spike 已由 `315c319` 接受；Step 2 CaseContextStore 已由 `cfda6ea` 接受；Step 3 Preflight 与输入整理已在 `5367dd0` 接受；Step 4 已完成 HMML 独立标签复核、真实双模型评测、唯一 GTE 层级索引、dense 检索和无模型 BM25 降级；Step 5 已完成受控 Python 与 XeLaTeX Runtime Evidence；Step 6 已接受：五个 hidden stage Agents、四份安装 Skills、`mm_agent_case` 与 Actor -> Critic -> Gate 已在真实 OpenCode host runtime 跑通。Step 7 提供 `npm run golden` runner 与 minimal/multi-wave fixtures；真实完成验收仍在进行中。
+## 为什么做这个项目
 
-- Canonical Core：[`docs/architecture/canonical-core.md`](docs/architecture/canonical-core.md) 与 [`docs/context/artifact-protocol.md`](docs/context/artifact-protocol.md) 是宿主无关机制唯一来源。
-- OpenCode Adapter：[`docs/architecture/opencode-plugin-harness.md`](docs/architecture/opencode-plugin-harness.md) 定义 v1 唯一 Adapter 的实现接口。
-- Plugin Spike：`315c319 feat: validate OpenCode plugin harness` 已验证安装生命周期、Plugin/Agent/Tool/Skill、fresh child session、重启和 compaction-off 恢复；它不是完整四阶段实现。
-- `v0.2.0` 是旧 Claude/Codex Plugin 方向的最终快照；Pi CLI Extension 一度出现在 `Unreleased` 文档重置中，也已结束。
-- 旧实现保存在 `.archived/legacy-claude-codex-plugin/`，只用于回溯。
-- 当前目标是交付 Canonical Core 的 OpenCode Adapter 与一个真实赛题到 PDF 的 Golden Case。
-- PDF 不存在或 LaTeX 编译失败时，Case 不得标记为完成。
+复杂建模任务很容易退化成一段看似完整、却无法复算或恢复的聊天。`mm-agent` 把最终论文当作产品，把中间成果当作接口：
 
-当前里程碑结果契约见 [PLAN.md](PLAN.md)。当前交接状态见 [HANDOFF.md](HANDOFF.md)。
+- 阶段事实写进文件，不依赖上一段聊天。
+- Actor 产生 candidate，Critic 审查，只有 Gate 能提升 artifact 和推进状态。
+- Solver 按 DAG 工作，只读取当前任务和直接依赖的 Task Memory。
+- 模型负责理解、选择和表达；Python、TeX 与 Tool 负责可重复的计算、编译和校验。
+- Compute/Compile Evidence 保存路径、状态和 SHA-256，证明结论对应当前文件。
+- timeout、revision budget、compare-and-swap 和 resume 让长流程可以停、查、修、接。
 
-## 产品标准
+所以一次运行不是“五个 Agent 聊完了”，而是一份可以从磁盘检查、恢复和复验的 Case。
 
-MM-Agent 论文定义了四阶段、HMML 检索、Actor-Critic、任务 DAG、任务 memory、计算求解和报告生成。`mm-agent` 将这些方法实现为宿主原生工作流，同时把可复用价值保存在项目自己的文件协议中。
+## Quick Start
 
-系统必须满足以下条件：
+### 前置依赖
 
-- 用户通过 `/mm-agent` 一个入口启动或恢复 Case。
-- 每个阶段生成明确、可验证的 artifact。
-- Subagent 使用 fresh context，不依赖前序聊天历史。
-- 只有已验收的 artifact 才能进入后续上下文。
-- 数值结论来自可重复执行的代码或明确记录的直接推导。
-- 报告阶段生成 LaTeX、编译日志和 PDF。
-- 人类可以检查任一 Case 的状态、尝试、评审和最终结果。
-- 完成证据由 `inspect` 从当前文件实时推导，不在 `state.json` 维护第二份状态。
+- [OpenCode](https://opencode.ai/)——开发时使用版本为 `1.18.x`。
+- Node.js 与 npm——建议使用满足依赖 engine 声明的 Node `^22.22.2`、`^24.15.0` 或 `>=26`；本机 Node `24.8.0` 已通过 RC 全部验收，但 npm 会提示非阻塞的 `ini@7` engine warning。
+- [uv](https://docs.astral.sh/uv/)——`mm-agent` 使用隔离的 Python 3.12 runtime。
+- XeLaTeX——`latexmk` 可选，缺失时会回退到多遍 `xelatex`。
+- 已在 OpenCode 中配置、可支付长流程调用的模型 provider。
 
-## 设计概念
+先确认命令来自你预期的安装位置：
 
-| 概念 | 含义 |
-|------|------|
-| Harness | 驱动四阶段、工具、状态和验收循环的整体系统。 |
-| Canonical Core | 与宿主无关的 Case、artifact、context、review 和 gate 协议。 |
-| Adapter | 将 Canonical Core 接入某个 Agent 宿主的薄层；v1 只实现 OpenCode Adapter。 |
-| Agent | 承担一种语义角色的 fresh subagent，例如 Analyst 或 Solver。 |
-| Skill | 告诉 Agent 应按什么方法完成工作。 |
-| Tool | 执行确定性操作，例如环境检查、DAG 校验、检索、计算和编译。 |
-| Case | 一道赛题从输入快照到最终 PDF 的完整本地运行。 |
-| Case Policy | `open` 时固化的 revision budget、Rubric 引用和其他运行约束。 |
-| Intake | 发现并整理输入的确定性过程，以一次 `open` 调用结束。 |
-| Stage | Problem Analysis、Mathematical Modeling、Computational Solving 或 Solution Reporting。 |
-| Task | 由问题分解产生、位于任务 DAG 中的可求解节点。 |
-| Role | Analyst、Modeler、Solver、Writer 或 Critic 的语义职责，不等同于宿主中的具体身份标识。 |
-| Actor | 负责产生 Candidate 的 Role；Critic 不属于 Actor。 |
-| Orchestrator | 调用 Core、派发 Role 和提交 Review 的控制者，不拥有 Case 状态。 |
-| Artifact | 某个 Stage 或 Task 产生的领域成果。 |
-| Candidate | 尚未通过 Gate 的 Artifact。 |
-| Attempt | 为一个 Stage 或 Task 生成 Candidate 的一次独立尝试。 |
-| Context Manifest | Attempt 的本地输入清单、目标、约束、允许输出、promotion targets 和验收条件。 |
-| Review | Critic 对 Candidate 的结构化语义判断。 |
-| Gate | 验证 Candidate 和 Review、提升 Artifact、推进 Case 状态的唯一机制。 |
-| Accepted Artifact | 通过 Gate、可以成为后续上下文事实的 Artifact。 |
-| Task Memory | 已完成 Task 的紧凑语义投影，供依赖 Task 和报告阶段读取。 |
-| Runtime Evidence | 检索、计算或编译等确定性操作产生的带 provenance 和 hash 的不可变证据。 |
-| Local Runtime | 执行检索、计算和编译的受控本地环境。 |
+```powershell
+opencode --version
+node --version
+uv --version
+xelatex --version
+```
 
-## 设计原则
+### 安装
 
-### 报告是产品
+正式发布后，预期安装方式是：
 
-中间推理和日志用于解释、修复和改进报告。最终产品是可以阅读、评价和提交的 PDF 论文。
+```powershell
+npm install @mm-agent/opencode
+```
 
-### Artifact 是阶段接口
+在 npm publish 前，这条命令不可用。请使用仓库源码或本地 `.tgz` RC：
 
-后续阶段需要的事实必须写入本地 artifact。聊天内容、隐藏推理和 subagent 最终消息都不能成为唯一事实来源。
+```powershell
+npm install E:\path\to\mm-agent-opencode-1.0.0.tgz
+New-Item -ItemType Directory -Force .opencode\plugins, .opencode\skills | Out-Null
+Set-Content .opencode\plugins\mm-agent.js 'export { default } from "../../node_modules/@mm-agent/opencode/dist/index.js"'
+Copy-Item node_modules\@mm-agent\opencode\skills\* .opencode\skills -Recurse -Force
+```
 
-### Fresh Context 由当前事实重建
+这是 OpenCode 原生的项目级发现方式：Plugin 位于 `.opencode/plugins/`，Skills 位于 `.opencode/skills/<name>/SKILL.md`。它不会修改用户全局 OpenCode 配置。
 
-Subagent A 不直接把聊天传给 Subagent B。主 Agent 根据 `state.json`、Role Recipe、任务 DAG 和 accepted artifacts，为每次派发重建一个最小上下文。Context Manifest 是这次重建的可审计产物。
+若从本仓库开发：
 
-### 语义判断与确定性操作分离
+```powershell
+npm ci
+npm run build
+npm pack
+```
 
-Agent 负责问题理解、模型选择、结果解释和文章写作。Tool 负责文件、schema、DAG、进程、hash、编译和状态推进。`gate` 是唯一同时执行 schema 验证、hash 校验、revision compare-and-swap、promotion target 白名单与 stage 推进的位置。
+然后在实际题目项目中安装生成的 `.tgz`，不要让题目项目读取源码仓库内部路径。
 
-### 本地文件优先
+### 跑一道题
 
-Case 上下文使用 Markdown、JSON、代码、CSV、图片和 LaTeX，不使用数据库或独立 memory 服务。文件便于检查、恢复、移动和测试。
-
-### 宿主原生
-
-OpenCode 负责模型会话、built-in tools 和 fresh subagent session。`mm-agent` 不重复建设 LLM runtime、TUI 或聊天系统。
-
-## 总体架构
+在独立题目项目中：
 
 ```text
-User
-  |
-  | /mm-agent
-  v
-OpenCode primary agent
-  |
-  +-- mm-agent Skill ----------------------- workflow policy
-  |
-  +-- OpenCode task tool ------------------- fresh child sessions
-  |     +-- mm-analyst
-  |     +-- mm-modeler
-  |     +-- mm-solver
-  |     +-- mm-writer
-  |     `-- mm-critic
-  |
-  +-- @mm-agent/opencode Plugin
-        +-- config hook -------------------- hidden Agent definitions
-        +-- six custom Tools --------------- deterministic operations
-        +-- CaseContextStore --------------- Canonical Core seam
-        +-- Python runtime ----------------- HMML and scientific compute
-        `-- optional compaction hook ------- resume hint only
+your-project/
+├── .opencode/
+│   ├── plugins/mm-agent.js
+│   └── skills/
+├── problems/
+│   ├── problem.md
+│   └── data.csv
+└── .gitignore
 ```
 
-架构分为四层：
+1. 把题目和附件放入 `problems/`。
+2. 在这个项目目录启动 `opencode`。
+3. 执行 `/mm-agent`。
+4. 检查 preflight 与输入快照，确认后让工作流继续。
+5. 在 `runs/<case-id>/report/report.pdf` 查看论文。
 
-| 层 | 职责 |
-|----|------|
-| Product Method | 四阶段、HMML、Actor-Critic、DAG、Memory 和报告纪律。 |
-| Canonical Core | Case 状态、context manifest、artifact schema、gate 和恢复协议。 |
-| OpenCode Adapter | Plugin、Agents、Skills、Tools、安装和宿主权限。 |
-| Local Runtime | uv Python 环境、科学计算、模型 cache 和外部 TeX 工具链。 |
+中断后仍在同一项目执行 `/mm-agent`。Skill 会先检查已有 Case，并根据 `state.json`、accepted artifacts 和 active Attempt 恢复；不要复制旧聊天来“续跑”。
 
-Adapter 只负责把宿主能力映射到 Canonical Core，不能重新定义 Case schema、状态推进或 Context Manifest。
+## OpenCode 中注册了什么
 
-## Canonical Core 接口
+这些角色不是五个常驻进程。每次 Attempt 都由 OpenCode built-in `task` 创建 fresh child session，完成后以 Case 文件交接。
 
-Adapter 通过四个操作使用 Canonical Core：
+### Hidden Agents
+
+| Agent        | 职责                         | 允许的专用 Tool    |
+| ------------ | ---------------------------- | ------------------ |
+| `mm-analyst` | 理解题目、拆分任务 DAG       | 无                 |
+| `mm-modeler` | 选择方法、建立模型           | `mm_agent_hmml`    |
+| `mm-solver`  | 执行当前 DAG task            | `mm_agent_compute` |
+| `mm-writer`  | 写作并编译论文               | `mm_agent_compile` |
+| `mm-critic`  | 按 Rubric 只读审查 candidate | 无写入 Tool        |
+
+Critic 不写 Candidate、不调用 Gate。它只返回结构化 Review，避免“审查者顺手修掉自己要审的内容”。
+
+### Tools
+
+| Tool               | 作用                                         |
+| ------------------ | -------------------------------------------- |
+| `mm_agent_check`   | 检查 OpenCode、Python、HMML、Case 存储和 TeX |
+| `mm_agent_prepare` | 发现输入并创建或恢复 Case                    |
+| `mm_agent_case`    | `open / dispatch / gate / inspect`           |
+| `mm_agent_hmml`    | 检索数学建模方法知识                         |
+| `mm_agent_compute` | 在受控 Python runtime 中执行和记录计算       |
+| `mm_agent_compile` | 编译 LaTeX 并记录 Compile Evidence           |
+
+`mm_agent_case gate` 是唯一状态推进入口。它校验 Review、revision、hash、promotion 白名单和当前 Attempt，Agent 不能直接改 `state.json` 冒充完成。
+
+### Skills 与宿主 Hook
+
+| Skill        | 作用                       |
+| ------------ | -------------------------- |
+| `mm-agent`   | 唯一用户入口与四阶段工作流 |
+| `mm-hmml`    | 方法检索规则               |
+| `mm-compute` | 计算、输出和 Evidence 规则 |
+| `mm-report`  | 报告与编译规则             |
+
+Plugin 的 config hook 注入 hidden Agents，Tool registry 注册六个 Tool，OpenCode 负责 Skill discovery。compaction hook 只提示 active Case 路径；恢复正确性仍来自磁盘，而不是压缩后的聊天摘要。
 
 ```text
-open(case_id, input_manifest?, case_policy?)
-dispatch(case_id, role, task_id?, base_revision?)
-gate(case_id, attempt_id, review, expected_revision)
-inspect(case_id)
+OpenCode
+├── /mm-agent Skill
+├── built-in task ── fresh hidden Agent
+└── @mm-agent/opencode Plugin
+    ├── Agent definitions
+    ├── six deterministic Tools
+    └── CaseContextStore ── Canonical Core
 ```
 
-- `open` 既能根据 `input_manifest` 与 `case_policy` 固化输入副本、Rubric 快照、`case.json` 与初始 `state.json`，也能省略这些参数并先做 schema 校验以恢复已有 Case。
-- `dispatch` 为 Actor 创建唯一 Attempt 并写入 `context.json`；Critic 不创建第二个 Attempt，它从同一 Manifest 的 `review` section、candidate `expected_outputs` 和 Rubric 重建 Fresh Role Session。
-- `gate` 携带调用方的 `expected_revision`，与 Manifest 的 `base_revision` 是不同概念：`base_revision` 记录 Candidate 基于哪个状态生成（用于审计），`expected_revision` 用于 `gate` 的 compare-and-swap 并防止并发覆盖。
-- `inspect` 是只读返回，由当前文件和完成规则实时推导 completion evidence，不写任何状态。
+## 工作流如何落盘
 
-## OpenCode 机制
+四个阶段固定为：
 
-OpenCode Plugin 提供三类宿主能力：
+1. Problem Analysis
+2. Mathematical Modeling
+3. Computational Solving
+4. Solution Reporting
 
-- `config` hook 将 5 个 hidden Agents 注入 OpenCode 的合并配置。
-- Plugin `tool` registry 注册 6 个 `mm_agent_*` Tools。
-- OpenCode 内置 `task` tool 为每次委派创建独立 child session。
-
-主 Agent 使用 `task` 派发角色和 `context.json` 路径。Subagent 共享项目工作目录，但不继承父会话的完整聊天上下文。
-
-OpenCode 的实验性 compaction hook 只能注入恢复提示：
-
-```text
-active case: <case-id>
-state: runs/<case-id>/state.json
-resume by inspecting local state
-```
-
-系统正确性不依赖该 hook。OpenCode 重启后，再次运行 `/mm-agent` 必须能够从本地 Case 恢复。
-
-## 分发与安装
-
-目标分发物是 npm 包 `@mm-agent/opencode`。包内包含：
-
-- 编译后的 TypeScript Plugin。
-- 安装、更新和卸载 CLI。
-- 4 个 Skills。
-- 5 个 Agent prompt/rubric 资产。
-- Python runtime 定义和 uv lock。
-- HMML 只读知识源及选定模型的预计算索引。
-- 报告模板和安装 receipt schema。
-
-安装器负责：
-
-1. 检测 OpenCode 配置位置。
-2. 在配置中注册 Plugin。
-3. 将 bundled Skills 复制到 OpenCode 能扫描的配置目录。
-4. 写入包含版本、目标路径和文件 hash 的 receipt。
-5. 提示用户重启 OpenCode。
-
-更新和卸载根据 receipt 操作，不能扫描或删除不属于 `mm-agent` 的文件。OCX 和 OpenCode 远程 Skill URL 可以作为辅助渠道，但不是 v1 的主分发路径。
-
-## 唯一用户入口
-
-公开入口只有：
-
-```text
-/mm-agent
-```
-
-OpenCode 会将安装后的 `mm-agent` Skill 自动暴露为 slash command。v1 不设计 `/mm-agent:check`、`/doctor` 或 `/setup` 等额外命令。
-
-入口流程：
-
-```text
-/mm-agent
-  -> 内部 preflight
-  -> 发现输入
-  -> 创建或恢复 Case
-  -> 请求用户确认进入正文工作流
-  -> 自动执行四阶段闭环
-```
-
-如果 preflight 失败，主 Agent 给出完整完善计划。用户回复“完善”后，系统修复可以安全自动处理的部分，并为需要人工操作的项目提供逐步指南。复检通过后，系统再次询问是否开始正文。
-
-## 输入发现
-
-默认输入位置是项目根目录的 `problems/`。用户也可以在请求中使用 `@目录` 或 `@文件` 指定输入。
-
-发现优先级：
-
-1. 用户显式提供的路径。
-2. `problems/` 下的赛题文件、附件和数据。
-3. 两者都不存在时询问用户。
-
-`mm_agent_prepare` 验证发现的输入，构造 input manifest 与 Case Policy，并且只通过 `CaseContextStore.open` 把输入副本、四份 Rubric 快照、`case.json` 和初始 `state.json` 固化到 Case。已有 Case 在省略新 intake 参数时恢复；冲突重复创建返回错误，不覆盖不可变事实。整个过程不修改用户原始题目目录，也不保留可被后续访问的用户原始绝对路径。
-
-## 四阶段工作流
-
-### 1. Problem Analysis
-
-`mm-analyst` 读取原题、附件描述和用户约束，生成：
-
-- `artifacts/problem-understanding.md`
-- `artifacts/tasks.json`
-- `artifacts/task-graph.json`
-
-任务依赖由 Agent 明确给出。Tool 只验证 task schema、引用完整性和 DAG 无环性，不根据关键词猜测依赖。
-
-### 2. Mathematical Modeling
-
-`mm-modeler` 读取已验收的问题分析，并针对各任务调用 HMML 检索。它生成整体建模方案、变量、假设、公式、方法选择和任务求解要求。
-
-主要输出：
-
-- `artifacts/modeling-scheme.md`
-- `tasks/<task-id>/retrieved-methods.json`
-- 每个任务的建模段落或结构化公式 artifact
-
-检索相似度只提供候选方法，不替代 Modeler 对假设、数据条件和公式的判断。
-
-### 3. Computational Solving
-
-`mm-solver` 按 DAG 波次运行。同一波次中没有依赖关系的任务可以并行；后续波次只读取直接依赖任务的已验收 `memory.json`。
-
-每个任务输出：
-
-- `tasks/<task-id>/code/`
-- `tasks/<task-id>/execution-result.json`
-- `tasks/<task-id>/figures/`
-- `tasks/<task-id>/memory.json`
-
-`memory.json` 保存任务描述、建模方法、结果解释、代码输出路径和图表路径。它是依赖上下文的紧凑投影，不复制完整日志。`mm_agent_compute` 写出的执行 manifest 作为 Runtime Evidence，可被同 scope 或下游依赖的 Manifest 引用。
-
-### 4. Solution Reporting
-
-`mm-writer` 先读取 accepted artifact 索引和各任务 memory，再按需读取完整结果。它生成：
-
-- `report/outline.md`
-- `report/notation.md`
-- `report/main.tex`
-- `report/compile.log`
-- `report/report.pdf`
-
-报告阶段必须保留编译与修复轨迹。Report Gate 同时检查 PDF、LaTeX 源文件和编译日志；只有 `report.pdf` 存在且非空，且 `main.tex`、`compile.log` 同时存在时，Case 才能完成。
-
-## Agents
-
-| Agent | 职责 | 主要权限 |
-|-------|------|----------|
-| `mm-analyst` | 解析问题、提取约束、分解任务、提出 DAG。 | 读取输入，写自己的 attempt。 |
-| `mm-modeler` | 检索 HMML、选择方法、建立公式和建模方案。 | 读取 accepted analysis，写自己的 attempt。 |
-| `mm-solver` | 编写并执行代码、解释结果、生成 task memory。 | 读任务依赖，写独立任务目录，调用 compute。 |
-| `mm-writer` | 组装论文、维护符号、调用编译修复循环。 | 读取 accepted artifacts，写 report attempt。 |
-| `mm-critic` | 按阶段 rubric 审查候选 artifact。 | 只读候选和上游约束，返回结构化 review；不创建第二个 Attempt。 |
-
-Subagent 不得更新 `state.json`，也不能派发下一层 Agent。主 Agent 是唯一调度者。
-
-## Skills
-
-| Skill | 内容 |
-|-------|------|
-| `mm-agent` | 唯一入口、preflight、Case 恢复、阶段调度、Critic 循环和完成规则。 |
-| `mm-hmml` | 何时检索、如何解释候选方法、如何避免把相似度当成模型结论。 |
-| `mm-compute` | 可复现代码、输入输出纪律、数值校验、图表和错误修复。 |
-| `mm-report` | 论文结构、符号一致性、artifact 引用、LaTeX 生成和编译修复。 |
-
-Problem Analysis、Modeling 和 Critic 的角色专属规则放在 Agent prompt 和 rubric 中，不为每个阶段额外增加 Skill。
-
-## Tools
-
-| Tool | 确定性职责 |
-|------|------------|
-| `mm_agent_check` | 检查 OpenCode、Plugin、Skills、uv/Python、Case 写权限、模型 cache 和 TeX 模板编译；只报告 HMML 状态，不选择模型或构建最终索引。 |
-| `mm_agent_prepare` | 发现并验证输入，构造 manifest 与 Case Policy，委托 `CaseContextStore.open` 固化不可变 Case。 |
-| `mm_agent_case` | `open`、`dispatch`、`gate`、`inspect`；管理 Case 状态、Context Manifest、Attempt 和 Artifact 提升。 |
-| `mm_agent_hmml` | 校验索引、执行 dense 或 lexical retrieval、记录模式、模型、revision、index hash 和分数。 |
-| `mm_agent_compute` | 在受控工作目录执行 Python、保存 stdout/stderr、timeout 和 Runtime Evidence。 |
-| `mm_agent_compile` | 使用 `latexmk -xelatex` 或多遍 `xelatex` 编译，保留日志和 PDF。 |
-
-`mm_agent_case` 通过 `CaseContextStore` 暴露四个 action：
-
-```ts
-type CaseAction =
-  | { action: "open"; caseId: string; inputManifest?: InputManifest; policy?: CasePolicy }
-  | { action: "dispatch"; caseId: string; role: Role; taskId?: string; baseRevision?: number }
-  | { action: "gate"; caseId: string; attemptId: AttemptId; review: Review; expectedRevision: number }
-  | { action: "inspect"; caseId: string }
-```
-
-`gate` 接收 `expectedRevision`，由 Core 与当前 `state.revision` 做 compare-and-swap；`baseRevision` 仅写入 Manifest 作为审计字段。
-
-## Fresh Subagent Context
-
-### 上下文重建
-
-每次派发执行以下流程：
-
-```text
-mm_agent_case dispatch
-  -> 读取 state.json
-  -> 根据 role/task 选择 context recipe
-  -> 解析直接 DAG 依赖
-  -> 只选择 accepted artifacts
-  -> 创建唯一 attempt 目录
-  -> 写入 context.json
-  -> 返回 context.json 路径
-
-OpenCode task
-  -> 创建 fresh child session
-  -> 告诉 subagent 读取 context.json
-  -> subagent 自己读取大文件并写 candidate
-```
-
-主 Agent 的派发 prompt 只内联角色、目标、用户约束和完成格式。原题、数据、模型、代码和依赖结果通过本地相对路径引用。
-
-### Context Manifest
-
-`attempts/<scope>/<attempt-id>/context.json` 是 Actor Attempt 与 Critic Review 的可审计输入清单：
-
-```json
-{
-  "schema_version": 1,
-  "case_id": "mmb-2024-c",
-  "attempt_id": "solving-task-03-001",
-  "scope": "solving/task-03",
-  "sequence": 1,
-  "created_at": "2026-07-16T00:00:00Z",
-  "base_revision": 8,
-  "role": "solver",
-  "goal": "求解 task-03 并解释结果",
-  "required_reads": [
-    {
-      "path": "artifacts/modeling-scheme.md",
-      "kind": "model",
-      "sha256": "..."
-    },
-    {
-      "path": "tasks/task-01/memory.json",
-      "kind": "dependency",
-      "sha256": "..."
-    }
-  ],
-  "constraints": ["只使用已验收的上游结果"],
-  "allowed_writes": [
-    "attempts/solving/task-03/001/code/",
-    "attempts/solving/task-03/001/execution-result.json",
-    "attempts/solving/task-03/001/figures/",
-    "attempts/solving/task-03/001/memory.json"
-  ],
-  "expected_outputs": [
-    "attempts/solving/task-03/001/code/",
-    "attempts/solving/task-03/001/execution-result.json",
-    "attempts/solving/task-03/001/memory.json"
-  ],
-  "promotions": [
-    {
-      "candidate": "attempts/solving/task-03/001/code/",
-      "target": "tasks/task-03/code/",
-      "required": true
-    },
-    {
-      "candidate": "attempts/solving/task-03/001/execution-result.json",
-      "target": "tasks/task-03/execution-result.json",
-      "required": true
-    },
-    {
-      "candidate": "attempts/solving/task-03/001/memory.json",
-      "target": "tasks/task-03/memory.json",
-      "required": true
-    }
-  ],
-  "acceptance": ["代码可重复执行"],
-  "review": {
-    "rubric": {
-      "path": "input/policy/rubrics/solving.md",
-      "sha256": "..."
-    },
-    "required_reads": [
-      "attempts/solving/task-03/001/code/",
-      "attempts/solving/task-03/001/execution-result.json",
-      "attempts/solving/task-03/001/memory.json"
-    ]
-  },
-  "latest_review": null,
-  "resolves_blocker": null
-}
-```
-
-Manifest 全部使用 Case-root-relative path。`base_revision` 记录 Candidate 基于哪个状态生成；`gate` 的 `expectedRevision` 是另一个独立输入，不来自 Manifest。
-
-### 角色 Context Recipes
-
-| Role | Required Reads | 主要输出 |
-|------|----------------|----------|
-| Analyst | 输入 manifest、原题、附件、用户约束。 | 问题理解、任务分解、任务 DAG。 |
-| Modeler | 输入、accepted problem understanding、HMML 候选。 | 建模方案、变量、假设、公式和任务要求。 |
-| Solver | 当前 task、accepted modeling scheme、直接依赖 task memory。 | 代码、执行结果、图表和 Task Memory。 |
-| Critic | 同一 Attempt Manifest 的 `review` section、candidate `expected_outputs`、Rubric 和必要上游约束。 | `pass`、`revise` 或 `block` Review。 |
-| Writer | accepted artifact index、task memories、报告要求。 | 大纲、符号表、LaTeX 和报告 Candidate。 |
-
-Context 不包含其他 Agent 的完整聊天、无关兄弟任务、全部失败历史或主 Agent 的隐藏推理。
-
-## 本地 Case 布局
+一次 Case 的核心结构如下：
 
 ```text
 runs/<case-id>/
 ├── case.json
 ├── state.json
 ├── input/
-│   ├── manifest.json
-│   ├── policy/
-│   │   └── rubrics/
-│   └── source files copied from the selected input
-├── artifacts/
-│   ├── problem-understanding.md
-│   ├── tasks.json
-│   ├── task-graph.json
-│   └── modeling-scheme.md
-├── tasks/
-│   └── <task-id>/
-│       ├── retrieved-methods.json
-│       ├── code/
-│       ├── figures/
-│       ├── execution-result.json
-│       └── memory.json
+│   ├── files/
+│   └── policy/
+├── artifacts/                  # accepted stage artifacts
+├── tasks/<task-id>/memory.json # accepted Task Memory
 ├── attempts/
-│   └── <scope>/<attempt-id>/
-│       ├── context.json
-│       ├── evidence/
-│       ├── candidate files
-│       └── review.json
-├── report/
-│   ├── outline.md
-│   ├── notation.md
-│   ├── main.tex
-│   ├── compile.log
-│   └── report.pdf
-└── feedback/
-    └── feedback.md
+│   └── <scope>/<sequence>/      # solving 在 scope 下再含 task-id
+│       ├── context.json        # 当前 Attempt Manifest
+│       ├── review.json
+│       └── evidence/
+└── report/
+    ├── main.tex
+    ├── compile.log
+    └── report.pdf
 ```
 
-所有 persisted path 都以 Case 根目录为基准。实现必须解析真实路径后再次确认其仍位于 Case 根目录内，拒绝绝对路径、`..` 路径穿越和符号链接逃逸。
+Candidate 先写入 Attempt；`pass` 后 Gate 才把它提升到稳定 artifact 路径。Review 复用同一 Manifest。Runtime Evidence 记录确定性工具的命令、输入/输出和 hash。`inspect` 从这些磁盘事实推导 completion，不在 `state.json` 再维护一份容易漂移的“完成证据”。
 
-`runs/` 已被 gitignore。Case 文件留在项目本地，不写入项目文档，也不写入 OpenCode 全局配置。
+字段级 schema、路径白名单和 transaction 语义请直接看：
 
-## State、Attempt 与 Gate
+- [Canonical Core](docs/architecture/canonical-core.md)
+- [Artifact Protocol](docs/context/artifact-protocol.md)
+- [OpenCode Adapter](docs/architecture/opencode-plugin-harness.md)
+- [Paper Alignment](docs/architecture/paper-alignment.md)
 
-### `state.json`
-
-`state.json` 是机器拥有的流程状态。Agent 只能读取，不能直接编辑。它至少包含：
-
-- `schema_version`、`case_id`。
-- `stage`：`analysis`、`modeling`、`solving` 或 `reporting`。
-- `status`：`prepared`、`running`、`blocked`、`failed` 或 `completed`。
-- `current_wave`：只在 Solving 使用并从 `1` 开始，其他 Stage 为 `null`。
-- 单调递增的 `revision`。
-- `accepted_artifacts`：accepted artifact index。
-- `revision_budget`：Analysis、Modeling、Solving（按 task-id）和 Reporting 的剩余修订次数。
-- `blockers`：追加式阻塞记录及 `resolved_at`。
-
-`state.json` 不保存 active dispatches；`inspect` 从 `attempts/<scope>/<attempt-id>/` 推导 active attempt（拥有 `context.json` 但尚未拥有有效 `review.json`）。
-
-### Gate 流程
-
-`mm_agent_case gate` 是唯一状态写入入口：
+## 项目布局
 
 ```text
-candidate + critic verdict + expected_revision
-  -> 校验 review schema
-  -> 校验 expected_revision == state.revision
-  -> 校验 required_reads hash 仍匹配输入快照、Runtime Evidence 或 accepted artifact
-  -> 校验 candidate 路径位于 allowed_writes
-  -> 校验 promotions 中每个 target 属于当前 scope 的稳定 artifact 白名单
-  -> 保存 review.json
-
-pass
-  -> 复制或原子替换稳定 artifacts/tasks/report 路径
-  -> 更新 accepted index
-  -> 按完成条件推进 stage / current_wave
-  -> revision + 1
-
-revise
-  -> 保留 attempt
-  -> 剩余 revision budget > 0 时扣减并允许下一 Attempt
-  -> revision budget == 0 时设置 status: "failed"
-
-block
-  -> 追加 blocker
-  -> 保留 stage 与 current_wave
-  -> 设置 status: "blocked"
-  -> 同 wave 不依赖 blocker 的 sibling Task 仍可 gate，但 wave 不能前进
-  -> 同 scope Actor Attempt 可通过 resolves_blocker 解决该 blocker
+src/                    TypeScript Plugin、Tools 与 Canonical Core 实现
+skills/                 四个可安装 Skills
+rubrics/                四阶段 Critic 验收标准
+runtime/                Python 3.12 HMML/Compute runtime
+knowledge/hmml/         HMML catalog 与唯一 GTE 索引
+templates/              CUMCMThesis 与 mcmthesis 模板
+schemas/                Canonical JSON Schemas
+scripts/                构建期和 Golden Case 验证工具
+tests/                  确定性回归与 host/runtime gates
+docs/                   协议、架构、路线图和研究来源
 ```
 
-Gate 输入的 `expected_revision` 用于 compare-and-swap，与 Manifest 的 `base_revision` 是两个独立概念。状态写入使用临时文件和原子替换。每个 dispatch 使用唯一 `attempts/<scope>/<attempt-id>/` 目录。
+源码、Skills、rubrics、schemas 和必要模板属于 Git。用户题目、Case、trace、下载的模型 cache、Python 环境、MM-Bench 输入和 provider 凭据必须留在仓库外。npm 包也不包含 tests、Golden runner、benchmark 输入或模型权重。
 
-### Stage 转换与完成
+## 恢复与常见故障
 
-```text
-analysis   --pass--> modeling
-modeling   --pass--> solving (current_wave=1)
-solving    --all tasks pass--> reporting (current_wave=null)
-reporting  --report gate pass--> completed
+- Provider 认证、余额或服务失败：停止并处理外部原因，不盲目重跑。
+- Python/HMML 失败：先看 `mm_agent_check` 的 evidence；不要读取题目项目的 `.venv` 代替 MM-Agent runtime。
+- TeX 失败：看当前 Writer Attempt 的 Compile Evidence 与 `compile.log`。
+- Windows 外层 timeout：先确认原 OpenCode/runner PID 是否仍活跃，再决定等待或 resume；不得并发启动第二个 runner。
+- 协议失败：沿 Actor completeness → Runtime Evidence → Critic Review → Core Gate → Compile 找第一个失败边界，只修该边界。
+- resume：已接受阶段不会重派；active Attempt 根据当前 Manifest 继续。
+
+## 验证状态
+
+Step 7 已完成：
+
+- Gate A：minimal，验证最小四阶段闭环。
+- Gate B：multi-wave，验证 Solver wave、直接依赖 memory 和串行 Gate。
+- Gate C：MM-Bench `2024_C`，验证真实 figures、coach tests、held-out metrics、编译论文和 fresh recovery。
+
+Step 8 已从外部解包后的 RC 重新执行 A/B/C，并对每个 completed Case 做 fresh recovery、Evidence/hash 核对和 PDF 逐页目检。`1.0.0` 仍是 unpublished local RC，不是 npm publish 或公开再分发承诺；公开发布前仍需解决第三方 notices 中未明确授权的资产。
+
+开发者可运行：
+
+```powershell
+npm ci
+npm test
+npm run build
+npm run validate-config
+npm run test:runtime
+uv run --project runtime pytest
+npm pack --dry-run --json
 ```
 
-Modeling Gate 接受 DAG 时按 `case_policy.solving_per_task` 为每个 Task 建立独立 revision budget。Report Gate 必须验证 `report/main.tex`、`report/compile.log` 与非空 `report/report.pdf` 同时存在。完成证据由 `inspect` 实时从文件推导，不在 `state.json` 维护第二份 `completed` flag。
+> v1 不建设第二宿主、Web UI、自定义 TUI，也不训练或捆绑模型权重。
 
-## Actor-Critic
+## 改造成你自己的 Harness
 
-Actor 先生成 candidate，`mm-critic` 使用 fresh context 独立审查。Critic 返回结构化结果：
+欢迎 fork 本项目，把它改造成面向科研、数据分析、工程设计、竞赛或其他复杂任务的专用 Harness。这个项目的目标不是规定唯一的 Agent 组织方式，而是提供一套可以拆解、替换和继续演化的工程基础。
 
-```json
-{
-  "schema_version": 1,
-  "attempt_id": "solving-task-03-001",
-  "verdict": "pass",
-  "findings": [],
-  "required_fixes": [],
-  "evidence": ["attempts/solving/task-03/001/execution-result.json"],
-  "reviewed_at": "2026-07-16T00:00:00Z"
-}
-```
+你可以：
 
-Critic 复用同一 Attempt Manifest 的 `review` section、candidate `expected_outputs`、Rubric 与必要上游约束，不创建第二个 Attempt。Critic 不得设置 `resolves_blocker`。
+- 替换角色分工、prompt 和 Skills。
+- 增减 Tool，或接入自己的本地业务工具。
+- 调整 Rubric、revision budget 和 Gate 标准。
+- 替换 HMML 知识库、检索器或 embedding 模型。
+- 更换论文模板，甚至换成完全不同的最终产物。
+- 编写第二个 Adapter，同时保留 Canonical Core。
 
-每个需要 Critic 的阶段允许一个初始版本和最多两次修订（来自 `case_policy.revision_budget`）。`gate` 执行 schema、hash、路径、revision 与完成条件验证；Critic 执行语义验证。两者都通过才能推进。
+> 若改变已经落盘的 Case 结构，请增加显式 schema migration；不要让新代码静默猜测旧数据。
 
-## DAG 与并行求解
+## 参考资料与致谢
 
-Modeler 明确输出任务依赖。`mm_agent_case` 验证 task ID、依赖引用和无环性，并计算拓扑波次。
+### 理论来源
 
-```text
-Wave 1: task-01, task-02     parallel
-Wave 2: task-03              reads accepted memory from task-01
-Wave 3: task-04              reads accepted memory from task-02/task-03
-```
+- [MM-Agent: LLM-based Multi-Agent Systems for Mathematical Modeling](https://arxiv.org/abs/2505.14148)
+- [LLM-MM-Agent reference implementation](https://github.com/usail-hkust/LLM-MM-Agent)
+- [Alibaba-NLP/gte-multilingual-base](https://huggingface.co/Alibaba-NLP/gte-multilingual-base)
 
-并行任务只写自己的 attempt 目录。主 Agent 等待一个 wave 完成后串行执行 gate，再启动下一 wave。每个 Task 有独立 `state.revision_budget.solving.<task-id>`。
+### 工程参考
 
-## HMML
-
-活跃知识源位于 `knowledge/hmml/`：
-
-- `hmml.json`
-- `method-index.json`
-- `hmml-embeddings.npy`
-- `embedding-meta.json`
-
-最终索引由 80 条 `ai-adjudicated` 中英文查询的真实离线评测选出：
-
-- GTE：Recall@5 `0.8125`、MRR `0.7660`；BGE-M3：Recall@5 `0.6875`、MRR `0.6985`。
-- GTE 同时是最佳结果，按固定规则选择 `Alibaba-NLP/gte-multilingual-base@f48be033386d222715f74de68ba1d31b51f19f3a`。
-- 索引使用 97 个叶方法、35 个层级节点和 95 个等价方法概念；父级均值与叶方法各占 `0.5`。
-- 逐查询结果、冷启动、模型体积、延迟、下载文件 hash 与复算报告位于 `runtime/evaluation/`。
-
-最终发布只携带一个模型对应的预计算 HMML 索引，不携带模型权重。评测四元组 `(model, hmml-embeddings.npy, embedding-meta.json, method-index.json)` 原子更新。首次完善环境时，用户确认后将固定 revision 的模型下载到 MM-Agent 专用 cache。
-
-模型不可用时，`mm_agent_hmml` 使用本地 BM25/关键词检索并在结果中标记 `retrieval_mode: "bm25"` 的 degraded mode。检索候选只是建模证据，Modeler 仍负责方法选择。
-
-## Python 与 Cache
-
-Plugin 和 CaseContextStore 使用 TypeScript。HMML 和科学计算使用 Python 3.12，由 uv 管理 MM-Agent 自有环境。
-
-系统不得读取用户项目 `.venv` 或把依赖安装进系统 Python。跨平台 cache 使用操作系统约定目录：
-
-- Windows：`%LOCALAPPDATA%/mm-agent/`
-- macOS：`~/Library/Caches/mm-agent/`
-- Linux：`$XDG_CACHE_HOME/mm-agent/` 或 `~/.cache/mm-agent/`
-
-cache 保存 uv 环境、Hugging Face 模型和可重建索引。Case artifacts 始终保存在项目的 `runs/`。
-
-## 计算执行
-
-`mm_agent_compute` 在当前 task 的独立工作目录中执行代码。它记录：
-
-- 精确命令和工作目录。
-- timeout。
-- stdout、stderr 和 exit code。
-- 生成文件列表与 hash。
-- Python 环境和依赖摘要。
-
-Tool 不自动解释结果。Solver 根据 execution manifest 和输出文件生成 `execution-result.json` 与 `memory.json`。执行 manifest 作为 Runtime Evidence，可被同一 Attempt 或下游 Manifest 的 `required_reads` 引用。
-
-Compute 只接受当前 Solver Attempt 的 `code/` 目录和其中的直接入口脚本。它使用 MM-Agent 专用 Python 3.12、移除项目 `.venv`/Conda/user-site 环境，并把完整 manifest 写入同一 Attempt 的 `evidence/`；`execution-result.json` 是指向该 hash-addressed manifest 的 Runtime Evidence 引用。缺少专用 Python 只返回可行动结果，不安装或修改系统环境。
-
-## LaTeX 编译
-
-`mm_agent_compile` 不捆绑 TeX 发行版。Preflight 用真实模板执行编译测试。
-
-编译优先级：
-
-1. `latexmk -xelatex`。
-2. `latexmk` 缺失、失败、超时或未生成非空 PDF 时，使用最多三遍 `xelatex`。
-
-支持目标是 TeX Live、MacTeX 和 MiKTeX 提供的标准 XeLaTeX。编译失败后，Writer 根据结构化错误摘要修复 `main.tex`，同时保留原始 `compile.log`。编译 manifest 作为 Runtime Evidence。未产生非空 `report/report.pdf` 时，compile Tool 不能返回成功。
-
-Compile 只接受当前 Writer Attempt 的 `main.tex`。它清除旧 PDF，保存完整命令输出至 `compile.log`，将新生成的 `main.pdf` 仅在非空时改名为 `report.pdf`，并在 `evidence/` 留下含命令、环境、错误摘要、输入/输出 hash 的 manifest。Reporting Gate 要求同一 Attempt 有 hash 匹配的成功 Compile Evidence，不能只凭一个手工 PDF 完成。
-
-## 失败恢复
-
-- Worker 退出但未产生候选时，`state.json` 不推进，可以重新派发。
-- Critic 拒绝候选时，失败 attempt 保留，下一次只加载最新候选和最新 review。
-- OpenCode 主会话压缩或重启后，`/mm-agent` 调用 `inspect` 恢复当前 Case。
-- 上游 hash 与 manifest 不一致时，依赖 attempt 失效并重新生成。
-- 两个进程使用相同 `expected_revision` 推进同一 Case 时，旧 revision 的 gate 返回冲突，不覆盖新状态。
-
-## 权限和安全
-
-- Hidden Agents 的写权限限制在 `runs/**`。
-- Critic 使用只读权限。
-- Compute 和 Compile 通过自定义 Tool 执行受控进程。
-- persisted paths 必须是 Case-root-relative path，拒绝路径穿越和符号链接逃逸。
-- Plugin receipt 只管理自己安装的文件。
-- 模型下载固定 revision 和文件 hash。
-- Case 留在本地不代表内容不会发送给模型提供商；Agent 读取的文本仍会进入所选模型的请求上下文。
-
-## 测试策略
-
-### Contract Tests
-
-覆盖 Case schema、context recipes、Case-root-relative path、hash、DAG、state revision、attempt 隔离、gate 提升、promotion target 白名单、Case Policy 快照、scope 内 solving budget、blocker 追加与解决、completion evidence 推导以及并发 gate。
-
-### Tool Integration Tests
-
-使用临时项目验证输入整理、Python 执行、HMML degraded mode、TeX 检测和编译日志；每个 manifest 都包含命令/模式、环境、stdout、stderr、exit、timeout 与 output hash。
-
-### OpenCode Plugin Spike
-
-在完整实现前验证：
-
-- npm 安装、更新和卸载。
-- Plugin config hook 注入 Agent。
-- Skills 安装后出现 `/mm-agent`。
-- built-in `task` 创建 fresh session。
-- Windows 路径和重启恢复。
-- compaction 关闭或不可用时，新会话仍可通过本地 Case state 恢复。
-
-### Golden Case
-
-首个真实闭环 Case 计划使用 MM-Bench `2024_C` Wimbledon Momentum。测试 fixture 和数据需先完成来源与许可证检查。
-
-Golden Case 只有在以下条件全部满足时通过：
-
-- 四阶段都留下 accepted artifacts。
-- 计算代码和结果可重新执行。
-- `report/main.tex` 存在。
-- `report/compile.log` 存在。
-- `report/report.pdf` 存在且非空。
-- 新 OpenCode 会话能从 `state.json` 恢复并由 `inspect` 检查完成证据。
-
-## v1 非目标
-
-- Web UI。
-- 自定义 LLM runtime 或 TUI。
-- 训练模型权重。
-- 大规模 benchmark。
-- 同时支持多个 Agent 宿主。
-- 恢复归档中的 Claude/Codex Plugin 或 Pi CLI Extension 入口。
-- 捆绑完整 TeX 发行版或 embedding 模型权重。
-- 用数据库、MCP memory server 或隐藏会话状态替代 Case 文件。
-
-## 目标项目结构
-
-```text
-mm-agent/
-├── README.md              # 完整产品与机制设计入口
-├── IDEA.md                # 项目为什么存在
-├── PLAN.md                # 里程碑结果与验收契约
-├── HANDOFF.md             # 当前交接状态
-├── CHANGELOG.md           # 版本与结构变化
-├── AGENTS.md              # 通用 Agent 项目规则
-├── CLAUDE.md              # 与 AGENTS.md 字节内容一致的 Claude 入口
-├── docs/
-│   ├── context/           # Case、artifact、反馈和项目协议
-│   ├── architecture/      # 实现接口、论文对齐和参考取舍
-│   ├── roadmap/           # 版本验收标准
-│   ├── research/          # 历史调研证据
-│   └── reference/         # 一手资料
-├── knowledge/             # HMML 与写作知识资产
-├── prompts/               # 论文 prompt 迁移来源
-├── scripts/               # 现有 DAG、HMML 和 memory 实验
-├── servers/               # 旧工具服务实验，待按 v1 取舍
-├── templates/             # LaTeX 模板
-├── tests/                 # fixtures 和验证代码
-├── problems/              # 计划中的默认赛题入口
-├── runs/                  # gitignored Case 输出
-└── .archived/             # 非活跃历史资产
-```
-
-Step 1 已创建 npm package、最小 Plugin/Agent/installer 与宿主验证测试；Step 2 已创建 `src/core/` 的 CaseContextStore、持久 schema、安全路径、迁移、Context Recipe、Gate transaction 和 contract tests；Step 3 已交付 preflight/intake；Step 4 已交付可复算 HMML 评测、唯一 GTE 层级索引、可追溯 dense 检索与 BM25 降级；Step 5 已交付 Compute/Compile Runtime Evidence 与 Report Gate 的编译证据校验；Step 6 已接受五角色权限、四份安装 Skill、直接 `mm_agent_case` Adapter 与真实 Actor -> Critic -> Gate host runtime。Golden Case 仍未开始，以 [PLAN.md](PLAN.md) 的里程碑结果为准。
-
-## 文档入口
-
-- [IDEA.md](IDEA.md)：项目动机和工程品味。
-- [PLAN.md](PLAN.md)：里程碑预期结果、完成边界和验收证据。
-- [HANDOFF.md](HANDOFF.md)：当前阶段、dirty state 和下一步动作。
-- [docs/context/project-kernel.md](docs/context/project-kernel.md)：项目 Kernel 与协作原则。
-- [docs/architecture/canonical-core.md](docs/architecture/canonical-core.md)：宿主无关机制唯一来源。
-- [docs/context/artifact-protocol.md](docs/context/artifact-protocol.md)：Case 文件与状态契约。
-- [docs/architecture/opencode-plugin-harness.md](docs/architecture/opencode-plugin-harness.md)：OpenCode Adapter 的实现接口。
-- [docs/architecture/paper-alignment.md](docs/architecture/paper-alignment.md)：论文机制到本地实现的映射。
-- [docs/roadmap/v1.0.0.md](docs/roadmap/v1.0.0.md)：v1 验收标准。
-
-## 参考资料
-
-- [MM-Agent 论文](https://arxiv.org/abs/2505.14148)
-- [LLM-MM-Agent 官方实现](https://github.com/usail-hkust/LLM-MM-Agent)
 - [OpenCode](https://github.com/anomalyco/opencode)
+- [OpenCode Plugins](https://opencode.ai/docs/plugins/)
+- [OpenCode Agent Skills](https://opencode.ai/docs/skills/)
 - [GSD Core](https://github.com/open-gsd/gsd-core)
+
+### 第三方资产
+
+- [CUMCMThesis](https://github.com/latexstudio/CUMCMThesis)
+- [mcmthesis](https://github.com/latexstudio-org/mcmthesis)
+- [Third-Party Notices](THIRD_PARTY_NOTICES.md)
+
+### 项目文档
+
+- [IDEA：项目为什么存在](IDEA.md)
+- [文档导航](docs/README.md)
+- [v1.0.0 Roadmap](docs/roadmap/v1.0.0.md)
+
+> 以上引用说明设计来源或工程参考，不代表任何上游项目对 `mm-agent` 的官方隶属、合作或背书。
