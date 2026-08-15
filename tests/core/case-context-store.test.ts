@@ -16,6 +16,7 @@ import path from "node:path";
 import test from "node:test";
 import { FileCaseContextStore } from "../../src/core/case-context-store.js";
 import { migrateCase } from "../../src/core/migrations.js";
+import { runCompute } from "../../src/tools/compute.js";
 import {
   exists,
   hashPath,
@@ -46,7 +47,7 @@ async function temporaryCaseRoot(): Promise<string> {
 
 const fixtureRoot = path.resolve("tests/fixtures/cases");
 
-function fixtureOpenInput(): OpenInput {
+function fixtureOpenInput(solvingPerTask = 1): OpenInput {
   return {
     sourceKind: "explicit-path",
     files: [
@@ -59,7 +60,7 @@ function fixtureOpenInput(): OpenInput {
       revisionBudget: {
         analysis: 1,
         modeling: 1,
-        solvingPerTask: 1,
+        solvingPerTask,
         reporting: 1,
       },
       rubrics: {
@@ -324,7 +325,11 @@ test("inspect rejects a Context Manifest whose identity does not match its direc
   await assert.rejects(store.inspect("case-alpha"), hasCode("SCHEMA_INVALID"));
 });
 
-async function prepareAnalysisAttempt(runsRoot: string): Promise<{
+async function prepareAnalysisAttempt(
+  runsRoot: string,
+  solvingPerTask = 1,
+  requiresComputation = true,
+): Promise<{
   store: FileCaseContextStore;
   review: Review;
   contextPath: string;
@@ -333,7 +338,7 @@ async function prepareAnalysisAttempt(runsRoot: string): Promise<{
     runsRoot,
     now: () => "2026-07-16T00:00:00.000Z",
   });
-  await store.open("case-alpha", fixtureOpenInput());
+  await store.open("case-alpha", fixtureOpenInput(solvingPerTask));
   const dispatch = await store.dispatch({
     caseId: "case-alpha",
     role: "analyst",
@@ -354,7 +359,11 @@ async function prepareAnalysisAttempt(runsRoot: string): Promise<{
   await writeJsonAtomic(path.join(attemptRoot, "tasks.json"), {
     schema_version: 1,
     tasks: [
-      { id: "task-01", description: "solve", requires_computation: true },
+      {
+        id: "task-01",
+        description: "solve",
+        requires_computation: requiresComputation,
+      },
     ],
   });
   await writeJsonAtomic(path.join(attemptRoot, "task-graph.json"), {
@@ -975,6 +984,86 @@ async function writeSuccessfulExecutionEvidence(
   });
 }
 
+async function writeSynthesisSolverAttemptOutputs(
+  runsRoot: string,
+  taskId: string,
+  sequence: number,
+  legacyEnvelope = false,
+): Promise<{
+  attemptRoot: string;
+  artifactPath: string;
+  evidencePath: string;
+  executionResult: string;
+}> {
+  const sequenceText = String(sequence).padStart(3, "0");
+  const attemptRoot = path.join(
+    runsRoot,
+    "case-alpha",
+    "attempts",
+    "solving",
+    taskId,
+    sequenceText,
+  );
+  const artifactPath = `attempts/solving/${taskId}/${sequenceText}/code/main.tex`;
+  const evidencePath = `attempts/solving/${taskId}/${sequenceText}/evidence/compute-005-evidence.json`;
+  const artifactAbsolute = path.join(
+    runsRoot,
+    "case-alpha",
+    ...artifactPath.split("/"),
+  );
+  const evidenceAbsolute = path.join(
+    runsRoot,
+    "case-alpha",
+    ...evidencePath.split("/"),
+  );
+  await mkdir(path.dirname(artifactAbsolute), { recursive: true });
+  if (legacyEnvelope)
+    await mkdir(path.dirname(evidenceAbsolute), { recursive: true });
+  await writeFile(artifactAbsolute, "\\documentclass{article}\\begin{document}ok\\end{document}\n", "utf8");
+  const artifactHash = await hashPath(artifactAbsolute);
+  const artifactSize = (await lstat(artifactAbsolute)).size;
+  if (legacyEnvelope)
+    await writeJsonAtomic(evidenceAbsolute, {
+      schema_version: 1,
+      kind: "synthesis",
+      created_at: "2026-07-16T00:00:00.000Z",
+      status: "succeeded",
+      exit_code: 0,
+      sha256: artifactHash,
+      size_bytes: artifactSize,
+      artifact_path: artifactPath,
+      verify_evidence: {
+        notes: "ignored by Core synthesis validation",
+      },
+    });
+  await writeJsonAtomic(path.join(attemptRoot, "execution-result.json"), {
+    schema_version: 1,
+    kind: "synthesis",
+    path: legacyEnvelope ? evidencePath : artifactPath,
+    sha256: artifactHash,
+    ...(legacyEnvelope ? {} : { size_bytes: artifactSize }),
+    created_at: "2026-07-16T00:00:00.000Z",
+    status: "succeeded",
+    exit_code: 0,
+  });
+  await writeJsonAtomic(path.join(attemptRoot, "memory.json"), {
+    schema_version: 1,
+    task_id: taskId,
+    task_description: taskId,
+    modeling_method: "direct",
+    result_interpretation: "done",
+    execution_result: `tasks/${taskId}/execution-result.json`,
+    code_outputs: [`tasks/${taskId}/code/main.tex`],
+    figures: [],
+  });
+  return {
+    attemptRoot,
+    artifactPath,
+    evidencePath,
+    executionResult: `attempts/solving/${taskId}/${sequenceText}/execution-result.json`,
+  };
+}
+
 async function writeSolverAttemptOutputs(
   runsRoot: string,
   taskId: string,
@@ -1040,10 +1129,18 @@ async function writeModelingAttemptOutputs(
     );
 }
 
-async function advanceToSingleTaskSolving(runsRoot: string): Promise<{
+async function advanceToSingleTaskSolving(
+  runsRoot: string,
+  solvingPerTask = 1,
+  requiresComputation = true,
+): Promise<{
   store: FileCaseContextStore;
 }> {
-  const prepared = await prepareAnalysisAttempt(runsRoot);
+  const prepared = await prepareAnalysisAttempt(
+    runsRoot,
+    solvingPerTask,
+    requiresComputation,
+  );
   await prepared.store.gate({
     caseId: "case-alpha",
     attemptId: "analysis-001",
@@ -2015,6 +2112,291 @@ test("a crashed Attempt can be blocked only with valid Runtime Evidence", async 
     expectedRevision: 0,
   });
   assert.equal(blocked.snapshot.state.status, "blocked");
+});
+
+test("a failed Compute execution-result can block an incomplete Solver Attempt", async () => {
+  const runsRoot = await temporaryRunsRoot();
+  const { store } = await advanceToSingleTaskSolving(runsRoot);
+  const solving = await store.dispatch({
+    caseId: "case-alpha",
+    role: "solver",
+    taskId: "task-01",
+    goal: "solve",
+  });
+  const projectRoot = path.dirname(runsRoot);
+  const cacheRoot = path.join(projectRoot, "cache");
+  const workDir = "attempts/solving/task-01/001/code";
+  const python = process.platform === "win32"
+    ? path.join(cacheRoot, "python", "Scripts", "python.exe")
+    : path.join(cacheRoot, "python", "bin", "python");
+  await mkdir(path.dirname(python), { recursive: true });
+  await writeFile(python, "fixture", "utf8");
+  const codeRoot = path.join(runsRoot, "case-alpha", ...workDir.split("/"));
+  await mkdir(codeRoot, { recursive: true });
+  await writeFile(path.join(codeRoot, "solve.py"), "raise RuntimeError('boom')\n", "utf8");
+
+  const compute = await runCompute({
+    projectRoot,
+    cacheRoot,
+    caseId: "case-alpha",
+    workDir,
+    entryScript: "solve.py",
+    now: () => "2026-07-16T00:00:00.000Z",
+    commandRunner: async () => ({
+      executable: "python",
+      args: [],
+      exitCode: 7,
+      stdout: "",
+      stderr: "boom\n",
+      timedOut: false,
+    }),
+  });
+  assert.equal(compute.ok, false);
+
+  const blocked = await store.gate({
+    caseId: "case-alpha",
+    attemptId: solving.attemptId,
+    review: {
+      ...passReview(
+        solving.attemptId,
+        "attempts/solving/task-01/001/execution-result.json",
+      ),
+      verdict: "block",
+      required_fixes: ["the Python runtime failed"],
+    },
+    expectedRevision: 2,
+  });
+  assert.equal(blocked.outcome, "block");
+  assert.equal(blocked.snapshot.state.status, "blocked");
+});
+
+test("revise skips candidate Runtime Evidence file validation and allows a retry", async () => {
+  const runsRoot = await temporaryRunsRoot();
+  const { store } = await advanceToSingleTaskSolving(runsRoot, 2);
+  const solving = await store.dispatch({
+    caseId: "case-alpha",
+    role: "solver",
+    taskId: "task-01",
+    goal: "solve",
+  });
+  const executionResult = await writeSolverAttemptOutputs(
+    runsRoot,
+    "task-01",
+    1,
+  );
+  const missingPath = "attempts/solving/task-01/001/code/solve.py";
+  await rm(path.join(runsRoot, "case-alpha", ...missingPath.split("/")));
+
+  const revised = await store.gate({
+    caseId: "case-alpha",
+    attemptId: solving.attemptId,
+    review: {
+      ...passReview(solving.attemptId, executionResult),
+      verdict: "revise",
+      required_fixes: ["repair the Compute output"],
+    },
+    expectedRevision: 2,
+  });
+  assert.equal(revised.outcome, "revise");
+  assert.equal(revised.snapshot.state.revision, 3);
+  assert.equal(revised.snapshot.state.revision_budget.solving["task-01"], 1);
+
+  const retry = await store.dispatch({
+    caseId: "case-alpha",
+    role: "solver",
+    taskId: "task-01",
+    goal: "retry",
+  });
+  assert.equal(retry.manifest.sequence, 2);
+});
+
+test("pass rejects a Runtime Evidence reference to a deleted file without advancing state", async () => {
+  const runsRoot = await temporaryRunsRoot();
+  const { store } = await advanceToSingleTaskSolving(runsRoot, 2);
+  const solving = await store.dispatch({
+    caseId: "case-alpha",
+    role: "solver",
+    taskId: "task-01",
+    goal: "solve",
+  });
+  const executionResult = await writeSolverAttemptOutputs(
+    runsRoot,
+    "task-01",
+    1,
+  );
+  const missingPath = "attempts/solving/task-01/001/code/solve.py";
+  await rm(path.join(runsRoot, "case-alpha", ...missingPath.split("/")));
+
+  await assert.rejects(
+    store.gate({
+      caseId: "case-alpha",
+      attemptId: solving.attemptId,
+      review: passReview(solving.attemptId, executionResult),
+      expectedRevision: 2,
+    }),
+    (error: unknown) =>
+      error instanceof CaseProtocolError &&
+      error.code === "SCHEMA_INVALID" &&
+      error.message.includes(missingPath),
+  );
+  const unchanged = await store.inspect("case-alpha");
+  assert.equal(unchanged.state.revision, 2);
+  assert.equal(unchanged.state.revision_budget.solving["task-01"], 2);
+  assert.equal(unchanged.activeAttempts.length, 1);
+});
+
+test("non-computation Solver accepts scoped synthesis evidence and promotes the artifact", async () => {
+  const runsRoot = await temporaryRunsRoot();
+  const { store } = await advanceToSingleTaskSolving(runsRoot, 1, false);
+  const solving = await store.dispatch({
+    caseId: "case-alpha",
+    role: "solver",
+    taskId: "task-01",
+    goal: "synthesize",
+  });
+  const outputs = await writeSynthesisSolverAttemptOutputs(
+    runsRoot,
+    "task-01",
+    1,
+  );
+
+  const result = await store.gate({
+    caseId: "case-alpha",
+    attemptId: solving.attemptId,
+    review: passReview(solving.attemptId, outputs.executionResult),
+    expectedRevision: 2,
+  });
+  assert.equal(result.outcome, "pass");
+  assert.ok(
+    result.promoted.some(
+      (artifact) => artifact.path === "tasks/task-01/execution-result.json",
+    ),
+  );
+  assert.equal(result.snapshot.state.revision, 3);
+  assert.equal(result.snapshot.activeAttempts.length, 0);
+});
+
+test("non-computation Solver keeps accepting the legacy synthesis evidence envelope", async () => {
+  const runsRoot = await temporaryRunsRoot();
+  const { store } = await advanceToSingleTaskSolving(runsRoot, 1, false);
+  const solving = await store.dispatch({
+    caseId: "case-alpha",
+    role: "solver",
+    taskId: "task-01",
+    goal: "synthesize",
+  });
+  const outputs = await writeSynthesisSolverAttemptOutputs(
+    runsRoot,
+    "task-01",
+    1,
+    true,
+  );
+  const result = await store.gate({
+    caseId: "case-alpha",
+    attemptId: solving.attemptId,
+    review: passReview(solving.attemptId, outputs.executionResult),
+    expectedRevision: 2,
+  });
+  assert.equal(result.outcome, "pass");
+  assert.equal(result.snapshot.activeAttempts.length, 0);
+});
+
+test("synthesis evidence rejects stale or escaped artifacts and compute-required synthesis", async () => {
+  const tamperedRoot = await temporaryRunsRoot();
+  const tampered = await advanceToSingleTaskSolving(tamperedRoot, 1, false);
+  const tamperedAttempt = await tampered.store.dispatch({
+    caseId: "case-alpha",
+    role: "solver",
+    taskId: "task-01",
+    goal: "synthesize",
+  });
+  const tamperedOutputs = await writeSynthesisSolverAttemptOutputs(
+    tamperedRoot,
+    "task-01",
+    1,
+  );
+  await writeFile(
+    path.join(tamperedOutputs.attemptRoot, "code", "main.tex"),
+    "tampered\n",
+    "utf8",
+  );
+  await assert.rejects(
+    tampered.store.gate({
+      caseId: "case-alpha",
+      attemptId: tamperedAttempt.attemptId,
+      review: passReview(tamperedAttempt.attemptId, tamperedOutputs.executionResult),
+      expectedRevision: 2,
+    }),
+    (error: unknown) =>
+      error instanceof CaseProtocolError &&
+      error.code === "SCHEMA_INVALID" &&
+      error.message.includes(tamperedOutputs.artifactPath),
+  );
+  const tamperedState = await tampered.store.inspect("case-alpha");
+  assert.equal(tamperedState.state.revision, 2);
+  assert.equal(tamperedState.activeAttempts.length, 1);
+
+  const escapedRoot = await temporaryRunsRoot();
+  const escaped = await advanceToSingleTaskSolving(escapedRoot, 1, false);
+  const escapedAttempt = await escaped.store.dispatch({
+    caseId: "case-alpha",
+    role: "solver",
+    taskId: "task-01",
+    goal: "synthesize",
+  });
+  const escapedOutputs = await writeSynthesisSolverAttemptOutputs(
+    escapedRoot,
+    "task-01",
+    1,
+  );
+  const escapedExecutionAbsolute = path.join(
+    escapedRoot,
+    "case-alpha",
+    ...escapedOutputs.executionResult.split("/"),
+  );
+  const escapedResult = JSON.parse(
+    await readFile(escapedExecutionAbsolute, "utf8"),
+  ) as Record<string, unknown>;
+  escapedResult.path = "attempts/solving/task-01/999/code/main.tex";
+  await writeJsonAtomic(escapedExecutionAbsolute, escapedResult);
+  await assert.rejects(
+    escaped.store.gate({
+      caseId: "case-alpha",
+      attemptId: escapedAttempt.attemptId,
+      review: passReview(escapedAttempt.attemptId, escapedOutputs.executionResult),
+      expectedRevision: 2,
+    }),
+    hasCode("SCHEMA_INVALID"),
+  );
+  const escapedState = await escaped.store.inspect("case-alpha");
+  assert.equal(escapedState.state.revision, 2);
+  assert.equal(escapedState.activeAttempts.length, 1);
+
+  const computeRoot = await temporaryRunsRoot();
+  const compute = await advanceToSingleTaskSolving(computeRoot);
+  const computeAttempt = await compute.store.dispatch({
+    caseId: "case-alpha",
+    role: "solver",
+    taskId: "task-01",
+    goal: "solve",
+  });
+  const computeOutputs = await writeSynthesisSolverAttemptOutputs(
+    computeRoot,
+    "task-01",
+    1,
+  );
+  await assert.rejects(
+    compute.store.gate({
+      caseId: "case-alpha",
+      attemptId: computeAttempt.attemptId,
+      review: passReview(computeAttempt.attemptId, computeOutputs.executionResult),
+      expectedRevision: 2,
+    }),
+    hasCode("SCHEMA_INVALID"),
+  );
+  const computeState = await compute.store.inspect("case-alpha");
+  assert.equal(computeState.state.revision, 2);
+  assert.equal(computeState.activeAttempts.length, 1);
 });
 
 test("solving gate validates the Task Memory candidate schema", async () => {

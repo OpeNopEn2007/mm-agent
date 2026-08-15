@@ -26,7 +26,7 @@ Canonical Core 不负责模型提供商、聊天界面、宿主会话承载、�
 | Task | 由问题分解产生、位于任务 DAG 中的可求解节点。 |
 | Role | Analyst、Modeler、Solver、Writer 或 Critic 的语义职责，不等同于宿主中的具体身份标识。 |
 | Actor | 负责产生 Candidate 的 Role；Critic 不属于 Actor。 |
-| Orchestrator | 调用 Core、派发 Role 和提交 Review 的控制者，不拥有 Case 状态。 |
+| Orchestrator | 调用 Core、派发 Role 和提交 Review 的控制者，不拥有 Case 状态；OpenCode Adapter 的正式实现为薄 Flow。 |
 | Artifact | 某个 Stage 或 Task 产生的领域成果。 |
 | Candidate | 尚未通过 Gate 的 Artifact。 |
 | Attempt | 为一个 Stage 或 Task 生成 Candidate 的一次独立尝试。 |
@@ -73,7 +73,7 @@ inspect(case_id)
 
 ### `open`
 
-创建新 Case 或读取现有 Case。新 Case 必须提供 input manifest 和 Case Policy，`open` 负责固化输入、Rubric、`case.json` 和初始 `state.json`；现有 Case 省略这些参数，并先通过 schema 校验。Intake 负责发现和整理输入，但不独立写 Case 状态。
+创建新 Case 或读取现有 Case。新 Case 必须提供 input manifest 和 Case Policy，`open` 负责固化输入、Rubric、`case.json` 和初始 `state.json`；现有 Case 的恢复调用只传 `case_id`，并先通过 schema 校验，持久化的 input manifest、policy、state revision 和 revision budget 是权威事实，不能用新的 intake 参数覆盖。Intake 负责发现和整理输入，但不独立写 Case 状态。
 
 ### `dispatch`
 
@@ -81,11 +81,13 @@ inspect(case_id)
 
 ### `gate`
 
-验证调用方提供的 `expected_revision`、Context Manifest 的 read set、Candidate、Review 和 Artifact Schema。`expected_revision` 用于当前状态写入的 compare-and-swap；Manifest 的 `base_revision` 只记录 Candidate 基于哪个状态创建。只有 `pass` 可以提升 Artifact 和推进 Stage；`revise` 创建后续修订条件；`block` 记录阻塞原因。
+验证调用方提供的 `expected_revision`、Context Manifest 的 read set、Candidate、Review 和 Artifact Schema。`expected_revision` 用于当前状态写入的 compare-and-swap；Manifest 的 `base_revision` 只记录 Candidate 基于哪个状态创建。每个 verdict 在任何状态变更前都必须完成 Candidate、Runtime Evidence、路径、hash 和 expected output 的严格校验：`revise` 只有校验成功后才创建下一 Attempt，失败返回 `SCHEMA_INVALID` 且不创建 Attempt 或改变 state；`pass` 同样严格，缺失 expected output 或 promotion 文件返回 `SCHEMA_INVALID`，不提升 Artifact、不改变 state。只有 `pass` 可以提升 Artifact 和推进 Stage；`block` 记录阻塞原因。
 
 ### `inspect`
 
 只读返回 Case 状态、Accepted Artifact Index、从 attempt 目录推导的 active attempts、blockers 和完成证据。完成证据由当前文件和完成规则实时计算，不保存为第二份状态。`inspect` 不能修复或推进状态。
+
+OpenCode 的正式运行面不把这四个 Core 操作直接注册为模型 Tool。`mm_agent_case` 只作为 Flow、Golden runner 和兼容测试的内部 seam；模型只看到 `mm_agent_flow` 的 `advance` / `submit_review`。Flow 负责把 Core 的机器字段和状态操作从模型接口中隐藏。
 
 ## 状态所有权
 
@@ -98,7 +100,7 @@ inspect(case_id)
 - `revision_budget`：Analysis、Modeling、每个 Solving Task 和 Reporting 的剩余修订次数。
 - `blockers`：追加式阻塞记录及其解决状态。
 
-初始 state 的 `revision` 为 `0`。每次成功 Gate 都增加 `revision`。Gate 必须比较调用方的 `expected_revision` 与当前 revision，拒绝并发覆盖；随后逐项验证 Manifest 中的 required read hash 仍与输入快照、Runtime Evidence 或 Accepted Artifact Index 一致。这样，同一 wave 基于相同 `base_revision` 生成的独立 Task 可以依次 Gate，而相关上游变化仍会使 Candidate 失效。
+初始 state 的 `revision` 为 `0`。每次成功 Gate 都增加 `revision`。Gate 必须比较调用方的 `expected_revision` 与当前 revision，拒绝并发覆盖；随后逐项验证 Manifest 中的 required read hash 仍与输入快照、Runtime Evidence 或 Accepted Artifact Index 一致。这样，同一 wave 基于相同 `base_revision` 生成的独立 Task 可以依次 Gate，而相关上游变化仍会使 Candidate 失效。正式 `/mm-agent` 首条纵向链不启用该并发能力，而是按 DAG 可执行顺序串行派发 Solver task。
 
 状态写入使用临时文件和原子替换。Candidate、Review 和日志不能通过修改文件名或目录位置绕过 Gate。
 
@@ -160,20 +162,22 @@ Review 必须包含：
 
 Critic 负责语义判断。Gate 负责 schema、文件、hash、路径、revision 和完成条件。两者都通过后，Candidate 才能提升。
 
+正式 Flow 在 Gate 前进一步执行 Review evidence allowlist：evidence 必须是当前 Manifest 声明的 candidate、review required reads、immutable input/accepted upstream、Rubric，或当前 Attempt 下通过 schema 与 hash 校验的 Runtime Evidence。仅“Case 内存在”不构成合法 evidence；绝对路径、路径穿越、未声明 `tmp/`、其他 Attempt/Case、未声明 stable 文件和自然语言描述均拒绝。Critic 对需要计算的 Solver 读取 `execution-result.json` 引用的 raw compute payload 做语义核验；`requires_computation: false` 的 direct synthesis 分支只校验 execution-result 的 `path`/hash，不把 artifact 当作 raw payload 解析。Review evidence 只引用声明的 `execution-result.json`；不得引用 manifest、context、目录、`runs/<case-id>/` 前缀或自然语言。
+
 `attempts/<scope>/<attempt-id>/` 中的 scope 只能是 `analysis`、`modeling`、`solving/<task-id>` 或 `reporting`。Attempt 的 Review 写入后即结束；`inspect` 通过是否存在有效 Review 推导 active attempts，不在 `state.json` 维护第二份列表。同一 scope 存在 active Attempt 时，`dispatch` 拒绝创建第二个 Attempt。
 
 Role Session 崩溃后，Orchestrator 可以使用同一 Manifest 恢复该 Attempt，或提交带 Runtime Evidence 的 `block` Review 使 Gate 关闭它。系统不按 wall-clock TTL 猜测 Attempt 已失效。
 
 ## DAG 与 Task Memory
 
-任务依赖由语义 Role 明确提出，Core 只验证：
+Analyst 产出的 DAG 只描述 Modeling 之后由 `mm-solver` 执行的问题域求解任务；固定 Analysis、Modeling、Reporting 阶段以及 Writer、Critic、Gate、Flow 的编排属于 Harness，不得伪装成 DAG Task。任务依赖由语义 Role 明确提出，Core 只验证：
 
 - Task ID 唯一，且匹配 `[a-z0-9][a-z0-9-]{0,63}`，从而可安全进入 `solving/<task-id>` scope 与 Case-relative 路径。
 - 所有依赖均引用存在的 Task。
 - 图无环。
 - 当前 wave 的所有依赖已经 Accepted。
 
-同一 wave 的 Task 可以并行产生 Candidate，但 Gate 必须以可检测冲突的方式串行推进 state。
+Core 保留同一 wave 的 Task 并行产生 Candidate 和串行 Gate 的兼容协议；正式 `/mm-agent` 首条纵向链按 DAG 可执行顺序串行运行，并发不是正式用户路径的前置验收条件。
 
 Task Memory 保存依赖方真正需要的紧凑结果：任务描述、建模方法、结果解释，以及代码、执行结果和图表的路径。完整代码和日志留在相邻 Artifact 中，按需读取。
 
@@ -205,7 +209,7 @@ Critic 判断仍可能出错。用户或后续监督发现 Accepted Artifact 错
 
 ### Computational Solving
 
-必须记录可重复执行的代码和执行证据，或记录有明确理由的直接推导。每个 Accepted Task 产生 Task Memory。
+需要计算的 Task 必须记录可重复执行的代码和成功 Compute Evidence；`requires_computation: false` 的 Solver Task 可走正式 synthesis 分支：`execution-result.json` 本身为 `kind: "synthesis"`、`status: "succeeded"`、`exit_code: 0`，其 `path` 直接指向当前 Attempt `allowed_writes` 内的 candidate artifact，并以 `sha256`（可选 `size_bytes`）绑定该 artifact，不再要求手写 `evidence/*.json` payload。每个 Accepted Task 产生 Task Memory。
 
 ### Solution Reporting
 
@@ -220,7 +224,7 @@ Gate 在每次 `pass` 后检查当前 Stage 的必要 Artifact：
 3. 当前 Solving wave 的所有 Task Accepted 后，`current_wave` 增加；所有 Task Accepted 后，`stage` 进入 `reporting`，`current_wave` 设为 `null`。
 4. Reporting 的必要 Artifact 和最终完成条件全部通过后，`status` 设为 `completed`。
 
-`block` 将 `status` 设为 `blocked`，但保留当前 `stage` 和 `current_wave`。Blocker 是追加式记录。后续同 scope Actor Attempt 可以通过 `resolves_blocker` 引用一个未解决 blocker ID；该 Attempt 成功 Gate 后写入 `resolved_at`，没有未解决 blocker 时将 `status` 恢复为 `running`。Case blocked 时，不依赖该 blocker 的同 wave sibling Task 仍可 Gate，但 wave 不能在 blocker 解决前推进。
+`block` 将 `status` 设为 `blocked`，但保留当前 `stage` 和 `current_wave`。Blocker 是追加式记录。后续同 scope Actor Attempt 可以通过 `resolves_blocker` 引用一个未解决 blocker ID；该 Attempt 成功 Gate 后写入 `resolved_at`，没有未解决 blocker 时将 `status` 恢复为 `running`。Case blocked 时，不依赖该 blocker 的同 wave sibling Task 仍可 Gate，但 wave 不能在 blocker 解决前推进。正式运行面不自动回滚已接受阶段；若 blocker 表明 immutable input 缺失或 accepted upstream 错误，修复需要新 Case，或未来显式 reopen/migration 机制。
 
 第一次成功 Gate 后，未完成且未阻塞的 Case 将 `status` 从 `prepared` 改为 `running`。`failed` 表示修订预算耗尽或存在不可恢复的输入/运行错误；它只能通过显式创建新 Case 或协议迁移重新开始。
 
@@ -256,6 +260,8 @@ Adapter 必须提供：
 - 对 Core 四个操作的调用方式。
 - 结构化 Review 回传。
 - 重启后从本地 state 恢复的入口。
+
+OpenCode Adapter 还必须将 `handoff.json` 作为派生交接投影：它由 Flow 从 `state.json`、active Attempt、accepted artifacts 和 DAG 重建，仅用于恢复和检查，不能替代 Core 状态或 Gate 事实。旧 `schema_version: 1` Case 可以懒生成该投影而不改写持久文件。
 
 Adapter 不得：
 

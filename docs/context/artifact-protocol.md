@@ -25,6 +25,7 @@ Actor、Critic 和 Orchestrator 都不能直接修改 `state.json` 或 stable ar
 runs/<case-id>/
 ├── case.json
 ├── state.json
+├── handoff.json                 # Flow 派生的恢复投影，不是权威状态
 ├── input/
 │   ├── manifest.json
 │   ├── policy/
@@ -103,6 +104,27 @@ runs/<case-id>/
 ```
 
 `input/manifest.json` 对每个源文件记录来源标签、Case 内副本路径、大小和 SHA-256。来源标签只用于展示，不能作为后续文件访问路径。源文件不存在或 hash 变化不改变已创建 Case 的输入副本。`policy` 固化本次运行的预算和 Rubric 快照，Adapter 不能在 Case 创建后替换它。
+
+## `handoff.json`
+
+`handoff.json` 是正式 Flow 从 `state.json`、active Attempt 的 `context.json`、accepted artifacts、Task DAG 和 Runtime Evidence 派生的交接投影。它服务恢复和人类检查，不是第二套状态机，也不能作为 promotion、Gate 或 completion 的依据。Flow 每次 `advance`、`submit_review` 和恢复都可以原子覆盖它；旧的 `schema_version: 1` Case 在首次恢复时懒生成该文件，不改写 `case.json`、`state.json` 或既有 Attempt。
+
+```json
+{
+  "schema_version": 1,
+  "case_id": "mmb-2024-c",
+  "status": "awaiting_actor",
+  "current_agent": "mm-modeler",
+  "next_agent": "mm-critic",
+  "attempt_id": "modeling-001",
+  "context_path": "attempts/modeling/001/context.json",
+  "required_reads": [],
+  "expected_outputs": [],
+  "updated_at": "2026-07-16T00:00:00Z"
+}
+```
+
+新会话仍以权威 Case 文件为准：恢复调用只传 `case_id`，持久化的 input manifest、policy、state revision 和 revision budget 不接受新参数覆盖；输出不完整时恢复同一 Actor/Manifest，输出完整但没有 Review 时派同一 Attempt 的 fresh Critic，没有 active Attempt 时才 dispatch 下一 Actor。Case completed 只返回最终报告，不重派 Agent。
 
 ## `state.json`
 
@@ -266,22 +288,34 @@ Critic 使用结构化 verdict：
 
 同一 scope 存在未写入有效 Review 的 Attempt 时，`dispatch` 拒绝创建第二个 Attempt。Role Session 崩溃后，Orchestrator 可以恢复该 Attempt，或提交引用 Runtime Evidence 的 `block` Review。Core 不使用 TTL 自动删除 Attempt。
 
+### Review Evidence allowlist
+
+Flow 在调用 Gate 前把 Critic 的每条 evidence 规范化为 Case-relative path，并要求它属于当前交接声明的合法集合：
+
+1. 当前 Manifest 的 candidate / `review.required_reads`；目录声明允许其真实后代文件。
+2. Manifest `required_reads` 中的 immutable input 或 accepted upstream artifact。
+3. 当前 Manifest 的 Rubric。
+4. 当前 Attempt 的 Runtime Evidence（包括 candidate `execution-result.json`）以及通过 schema 和 SHA-256 校验的引用文件；正式 synthesis producer 不要求手写 `evidence/*.json` payload，旧版 envelope 在兼容校验通过时仍可读取。
+
+Evidence 必须非空；`pass` 至少引用一个 candidate，`block` 在没有 candidate 时必须引用有效失败 Runtime Evidence。Critic 对需要计算的 Solver 可读取 `execution-result.json` 引用的 raw compute payload 做语义核验；`requires_computation: false` 的 direct synthesis 分支只校验 execution-result 的 `path`/hash，不把 artifact 当作 raw payload 解析。正式 producer 的 evidence 只引用声明的 `execution-result.json`；旧版 Runtime Evidence envelope 仍可在 schema/hash 兼容校验通过时读取。manifest、context、目录、`runs/<case-id>/` 前缀和自然语言均不合法。绝对路径、`..` 穿越、未声明的 `tmp/`、其他 Attempt、其他 Case、任意未声明 stable 文件和自然语言描述全部拒绝。仅“Case 内存在”不构成合法 evidence。
+
 ## Artifact 提升
 
-`gate` 必须按以下顺序执行：
+`gate` 必须按以下顺序执行；任何 Candidate、Runtime Evidence、expected output、promotion、路径或 hash 校验失败都返回 `SCHEMA_INVALID`，不写 Review、不创建新 Attempt、不提升 Artifact、不改变 state：
 
 1. 读取并验证 `state.json`、manifest、review 和 candidate schema。
 2. 确认调用方的 `expected_revision` 等于当前 state revision。
 3. 逐项确认 manifest 的 required read path 与 hash 仍匹配输入快照、Runtime Evidence 或 Accepted Artifact Index。
-4. 确认 candidate 均位于 `allowed_writes` 中，`required: true` 的 promotion candidate 存在且 hash 可计算；每个 promotion target 都属于当前 scope 的 stable artifact 路径。
-5. 将 review 写入 attempt。
-6. 对 `pass`，复制或原子替换 stable artifact，并将 path 与 hash 写入 accepted index。
-7. 对 `revise`，保留 attempt；剩余 revision budget 大于 `0` 时扣减并允许下一 Attempt，已经为 `0` 时设置 `status: "failed"`。
-8. 对 `block`，追加 blocker，保留当前 stage 和 wave，并设置 `status: "blocked"`。
-9. 检查 Stage 推进、blocker 解决和最终完成条件。
-10. 将 revision 增加 `1`，使用临时文件和原子替换写入更新后的 `state.json`。
+4. 确认 candidate 均位于 `allowed_writes` 中，所有 expected output 存在且 hash 可计算；每个 promotion target 都属于当前 scope 的 stable artifact 路径。
+5. 确认 evidence allowlist、Runtime Evidence schema/hash 和本次 verdict 的严格语义条件。
+6. 将 review 写入 attempt。
+7. 对 `pass`，复制或原子替换 stable artifact，并将 path 与 hash 写入 accepted index；缺失 expected/promotion 文件保持 `SCHEMA_INVALID`，不推进状态。
+8. 对 `revise`，保留已验证的 attempt；剩余 revision budget 大于 `0` 时扣减并创建下一 Attempt，已经为 `0` 时设置 `status: "failed"`。
+9. 对 `block`，追加 blocker，保留当前 stage 和 wave，并设置 `status: "blocked"`。
+10. 检查 Stage 推进、blocker 解决和最终完成条件。
+11. 将 revision 增加 `1`，使用临时文件和原子替换写入更新后的 `state.json`。
 
-错误 `expected_revision` 的 gate 必须失败，不得覆盖新状态。Context Manifest 的 `base_revision` 仅用于审计，不要求在 gate 时仍等于当前 revision。并行 Solver 可以基于相同 base revision 创建 attempt；Orchestrator 串行 gate 时每次使用最新 expected revision，而 Gate 依靠 required read hash 判断 Candidate 是否仍有效。
+错误 `expected_revision` 的 gate 必须失败，不得覆盖新状态。Context Manifest 的 `base_revision` 仅用于审计，不要求在 gate 时仍等于当前 revision。Core 保留同一 wave 并行 Attempt 的兼容能力，但正式 `/mm-agent` 首条纵向链按 DAG 可执行顺序串行运行；并发不是正式用户路径的前置验收条件。
 
 Stage 推进规则：
 
@@ -292,7 +326,7 @@ Stage 推进规则：
 
 第一次成功 gate 后，未完成且未阻塞的 Case 从 `prepared` 进入 `running`。`failed` 表示修订预算耗尽或不可恢复的输入/运行错误，不能通过普通 dispatch 继续。
 
-Case blocked 时，不依赖 blocker 的同 wave sibling Task 仍可 Gate；wave 不能在 blocker 解决前推进。`resolves_blocker` 必须引用同 scope 的一个未解决 blocker，Critic Session 不能设置它，一个 blocker 只能由第一个成功 Gate 的 Actor Attempt 解决。
+Case blocked 时，不依赖 blocker 的同 wave sibling Task 仍可 Gate；wave 不能在 blocker 解决前推进。`resolves_blocker` 必须引用同 scope 的一个未解决 blocker，Critic Session 不能设置它，一个 blocker 只能由第一个成功 Gate 的 Actor Attempt 解决。正式 `/mm-agent` 不自动回滚已接受阶段；若 blocker 暴露 immutable input 缺失或 accepted upstream 错误，用户应补充事实并创建新 Case，或等待未来显式 reopen/migration 机制，不能让模型原地改写 stable artifact。
 
 Promotion target 按 scope 固定：
 
@@ -305,11 +339,15 @@ Promotion target 按 scope 固定：
 
 Gate 拒绝当前 scope 白名单之外的 promotion target。
 
-`tasks.json` 与 `task-graph.json` 的 Task ID 必须匹配 `[a-z0-9][a-z0-9-]{0,63}`；两者的 Task ID 集合必须完全相同。
+`tasks.json` 与 `task-graph.json` 的 Task ID 必须匹配 `[a-z0-9][a-z0-9-]{0,63}`；两者的 Task ID 集合必须完全相同。DAG 只列出 Modeling 后由 `mm-solver` 执行的问题域求解任务，不把阶段或 Flow/Writer/Critic 编排伪装成 Task。
+
+### 非计算 Solver 的 synthesis Evidence
+
+当 Task 的 `requires_computation` 为 `false` 时，Solver 仍必须写入当前 Attempt `allowed_writes` 内的 candidate artifact，并将同一 Attempt 的 `execution-result.json` 作为正式 Runtime Evidence：其 `kind` 为 `synthesis`、`status` 为 `succeeded`、`exit_code` 为 `0`，`path` 直接指向该 candidate，`sha256` 等于 candidate hash，可带 `size_bytes`。该分支不要求手写 `evidence/*.json` payload；Gate 以 execution-result、路径和 hash 校验 synthesis 合法性。
 
 ## Task Memory
 
-每个 accepted Solver 任务在 `tasks/<task-id>/memory.json` 写入紧凑投影：
+每个 accepted Solver 任务在 `tasks/<task-id>/memory.json` 写入紧凑投影（无论是成功 Compute 还是合法 synthesis）：
 
 ```json
 {
@@ -340,7 +378,7 @@ Gate 拒绝当前 scope 白名单之外的 promotion target。
 Case 只有在以下条件全部成立时才能设置 `status: "completed"`：
 
 - 四阶段的必需 stable artifact 均在 accepted index 中。
-- 每个需要计算的任务有成功 execution manifest 或有理由的直接洞察 artifact。
+- 每个需要计算的任务有成功 Compute execution manifest；`requires_computation: false` 的任务有成功 synthesis `execution-result.json`，其 candidate 路径和 hash 通过 Gate 校验。
 - `report/main.tex` 存在。
 - `report/compile.log` 存在。
 - `report/report.pdf` 存在且非空。

@@ -8,7 +8,7 @@ import { runCaseAction } from "../src/tools/case.js"
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..")
 
-test("Step 6 core fixture: mm_agent_case directly exposes open dispatch gate inspect", async (t) => {
+test("Core fixture: internal runCaseAction preserves open dispatch gate inspect", async (t) => {
   const projectRoot = await mkdtemp(path.join(os.tmpdir(), "mm-agent-step6-case-"))
   t.after(() => rm(projectRoot, { recursive: true, force: true }))
   const source = path.join(projectRoot, "problem.md")
@@ -58,7 +58,7 @@ test("Step 6 core fixture: mm_agent_case directly exposes open dispatch gate ins
   assert.deepEqual(inspected.activeAttempts, [])
 })
 
-test("Step 6 core fixture: mm_agent_case passes unknown review versions to Core rejection", async (t) => {
+test("Core fixture: internal runCaseAction passes unknown review versions to Core rejection", async (t) => {
   const projectRoot = await mkdtemp(path.join(os.tmpdir(), "mm-agent-step6-version-"))
   t.after(() => rm(projectRoot, { recursive: true, force: true }))
   const source = path.join(projectRoot, "problem.md")

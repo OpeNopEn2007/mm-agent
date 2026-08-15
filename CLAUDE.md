@@ -4,7 +4,7 @@
 
 ## 项目方向
 
-`mm-agent` 是一个以 OpenCode Plugin 为首个 Adapter 的数学建模 Harness。Canonical Core 由 `4ce82cd` 接受，OpenCode Adapter 设计由 `1040e63` 接受；两者分别是宿主无关机制和 v1 Adapter 实现接口的唯一来源。Step 1–8、Gate A/B/C 与本机 RC 已留下验收证据；首次独立真实题体验随后暴露正式 `/mm-agent` 用户路径仍重度依赖主模型临场编排。当前下一步是保留五个 hidden Agents、对应 Tools、文件交接和最终 PDF 能力，收敛正式运行面并用独立题目项目重新验证，而不是继续扩张工作流引擎。它把赛题转化为四阶段 artifacts、可编译 LaTeX 和 PDF 论文：
+`mm-agent` 是一个以 OpenCode Plugin 为首个 Adapter 的数学建模 Harness。Canonical Core 与 OpenCode Adapter 文档分别是宿主无关机制和 v1 Adapter 接口的唯一来源。正式运行面由一个薄 Flow、五个 hidden Agents、角色专用 Tools、Case 文件交接和最终 PDF 组成；Golden runner 仅用于开发期验收，不是产品 runtime。它把赛题转化为四阶段 artifacts、可编译 LaTeX 和 PDF 论文：
 
 ```text
 赛题输入 -> 四阶段工作流 -> 可编译 LaTeX -> PDF 论文
@@ -51,8 +51,11 @@
 - `state.json`、accepted artifact、attempt `context.json` 和 review 是 Case 的持久事实。
 - 每次 subagent 使用 fresh context，由主 Agent 根据 state、DAG 和 accepted artifacts 重建。
 - Subagent 不直接传递完整聊天，也不得直接修改 `state.json`。
-- 只有 `mm_agent_case gate` 能提升 candidate artifact 并推进 Case 状态；`gate` 使用 `expected_revision` 做 compare-and-swap。
+- 只有 Core `gate` 能提升 candidate artifact 并推进 Case 状态；`gate` 使用 `expected_revision` 做 compare-and-swap。`mm_agent_case` 是 Flow/Golden/兼容测试的内部 seam，不是模型可见 Tool。
 - Critic 复用同一 Attempt Manifest，不创建第二个 Attempt。
+- 正式 Flow 每次运行从权威 Case 文件派生 `handoff.json`，只作交接和恢复投影；旧 `schema_version: 1` Case 可懒生成，不改写持久文件。
+- Review evidence 必须属于当前 Manifest 声明的 candidate/read/rubric 或经 schema/hash 校验的当前 Attempt Runtime Evidence；仅 Case 内存在不够。
+- `blocked` 不自动回滚 accepted artifact；缺输入或上游错误需新 Case，或未来显式 reopen/migration 机制。
 - 不要把 Case 日志、PDF、临时 memory 或用户数据写进项目文档。
 
 ## OpenCode 规则
@@ -61,8 +64,10 @@
 - OpenCode Plugin 负责 hidden Agents 和确定性 Tools；OpenCode built-in `task` 负责 fresh child session。
 - 活跃 Skills 为 `mm-agent`、`mm-hmml`、`mm-compute`、`mm-report`。
 - 活跃 Agents 为 `mm-analyst`、`mm-modeler`、`mm-solver`、`mm-writer`、`mm-critic`。
-- 活跃 Tools 为 `mm_agent_check`、`mm_agent_prepare`、`mm_agent_case`、`mm_agent_hmml`、`mm_agent_compute`、`mm_agent_compile`。
+- 模型可见 Tools 为 `mm_agent_check`、`mm_agent_prepare`、`mm_agent_flow`、`mm_agent_hmml`、`mm_agent_compute`、`mm_agent_compile`；`mm_agent_flow` 仅提供 `advance` / `submit_review`。Plugin API 不能直接调用 built-in `task`，Skill 机械发出一次 Task，由 `tool.execute.before` 原地校正 Agent/description/prompt，并清除 `task_id`、`background`、`command` 以保证 fresh foreground child。
 - TypeScript 负责 Plugin 和 Case 协议；Python 3.12 + uv 负责 HMML 和科学计算；TeX 是系统依赖。
+- 首条正式链中的 Solver task 按 DAG 可执行顺序串行运行；DAG/wave 语义保留，但不以 same-wave 并发作为用户路径前置条件。
+- 恢复正确性只依赖 Case 磁盘事实，不依赖 compaction hint 或压缩聊天摘要。
 - 不读取用户项目 `.venv`，也不把模型 cache、Python 环境或运行产物提交到仓库。
 
 ## 文档纪律
@@ -85,7 +90,7 @@
 - 复用 `knowledge/`、`scripts/`、`templates/` 和 `tests/` 中与 v1 协议兼容的资产；已删除的旧 prompt、server 与 Python 入口不得恢复。
 - 不清理或回滚无关的用户改动。
 - Case 完成前用新鲜命令验证计算、编译和 PDF。
-- 在 Golden Case 跑通前保持实现面窄。
+- 在正式 `/mm-agent` 首条纵向链和独立验收完成前保持实现面窄；Golden runner 只作开发期工具，不进入 npm 包。
 - 除非用户要求或里程碑需要，否则不要提交 commit。
 - 根 `PLAN.md` 是结果契约：描述里程碑结束时必须成立的事实、交付边界和验收证据，不规定逐步执行过程。
 - 本项目不使用 Superpowers 作为执行框架，也不强制 TDD、RED/GREEN、mutation 或逐微任务全量回归。执行模型根据风险选择实现与测试顺序。

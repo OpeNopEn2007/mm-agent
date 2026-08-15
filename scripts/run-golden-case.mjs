@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict"
-import { tool } from "@opencode-ai/plugin"
 import { spawnSync } from "node:child_process"
 import { cp, mkdir, mkdtemp, readFile, readdir, rename, stat, writeFile } from "node:fs/promises"
 import os from "node:os"
@@ -146,34 +145,33 @@ async function childParts(runCase, taskEvent) {
   return { child, parts }
 }
 
-async function caseTool(runCase) {
-  const { default: mmAgentPlugin } = await import(pluginEntry)
-  const hooks = await mmAgentPlugin({ directory: runCase.projectRoot, worktree: runCase.projectRoot })
-  const definition = hooks.tool?.mm_agent_case
-  assert.ok(definition, "Plugin must expose mm_agent_case")
-  return { definition, context: { directory: runCase.projectRoot, worktree: runCase.projectRoot } }
+let runCaseAction
+let pluginEntryLoaded
+async function runInternalCaseAction(runCase, input) {
+  // Golden is development-only: load the selected Plugin entry for parity, then
+  // call the Core adapter directly without recreating a public Tool definition.
+  pluginEntryLoaded ??= import(pluginEntry)
+  await pluginEntryLoaded
+  runCaseAction ??= (await import("../dist/tools/case.js")).runCaseAction
+  return runCaseAction(runCase.projectRoot, input)
 }
 
 async function dispatch(runCase, role, goal, taskId) {
   const label = `dispatch-${role}${taskId ? `-${taskId}` : ""}`
-  const { definition, context } = await caseTool(runCase)
-  const inspectArgs = tool.schema.object(definition.args).parse({ action: "inspect", case_id: runCase.caseId })
-  const inspectOutput = await definition.execute(inspectArgs, context)
-  const baseRevision = JSON.parse(inspectOutput).state?.revision
+  const inspectOutput = await runInternalCaseAction(runCase, { action: "inspect", caseId: runCase.caseId })
+  const baseRevision = inspectOutput.state?.revision
   assert.ok(Number.isSafeInteger(baseRevision), `${label}: inspection must return an integer state revision`)
 
-  const args = tool.schema.object(definition.args).parse({
+  const output = await runInternalCaseAction(runCase, {
     action: "dispatch",
-    case_id: runCase.caseId,
+    caseId: runCase.caseId,
     role,
-    ...(taskId ? { task_id: taskId } : {}),
-    base_revision: baseRevision,
+    ...(taskId ? { taskId } : {}),
+    baseRevision,
     goal,
   })
-  const raw = await definition.execute(args, context)
-  runCase.tool_states.push({ label, session_id: "deterministic-runner", tool: "mm_agent_case", status: "completed", output: sanitized(raw), error: "" })
+  runCase.tool_states.push({ label, session_id: "deterministic-runner", tool: "runCaseAction", status: "completed", output: sanitized(JSON.stringify(output)), error: "" })
   await saveTrace()
-  const output = JSON.parse(raw)
   assert.match(output.contextPath ?? "", /^attempts\//u)
   return output
 }
@@ -206,9 +204,9 @@ function rebaseRequiredFixes(fixes, fromBase, toBase) {
 function actorToolAllowlist(role) {
   switch (role) {
     case "analyst": return { allow: [], forbid: "any" }
-    case "modeler": return { allow: ["mm_agent_hmml"], forbid: ["mm_agent_compute", "mm_agent_compile", "mm_agent_case"] }
-    case "solver": return { allow: ["mm_agent_compute"], forbid: ["mm_agent_hmml", "mm_agent_compile", "mm_agent_case"] }
-    case "writer": return { allow: ["mm_agent_compile"], forbid: ["mm_agent_hmml", "mm_agent_compute", "mm_agent_case"] }
+    case "modeler": return { allow: ["mm_agent_hmml"], forbid: ["mm_agent_compute", "mm_agent_compile", "mm_agent_flow"] }
+    case "solver": return { allow: ["mm_agent_compute"], forbid: ["mm_agent_hmml", "mm_agent_compile", "mm_agent_flow"] }
+    case "writer": return { allow: ["mm_agent_compile"], forbid: ["mm_agent_hmml", "mm_agent_compute", "mm_agent_flow"] }
     default: throw new Error(`unknown actor role: ${role}`)
   }
 }
@@ -218,12 +216,12 @@ function actorChildInstructions(role, caseId, contextPath, instructions) {
   const diskContextPath = `runs/${caseId}/${contextPath}`
   const caseRoot = `runs/${caseId}/`
   const allowClause = allowlist.forbid === "any"
-    ? "The child must not call any mm_agent Tool, including mm_agent_hmml, mm_agent_compute, mm_agent_compile, or mm_agent_case; ordinary filesystem tools remain available for Manifest work."
+    ? "The child must not call any mm_agent Tool, including mm_agent_hmml, mm_agent_compute, mm_agent_compile, or mm_agent_flow; ordinary filesystem tools remain available for Manifest work."
     : `Among mm_agent Tools, the child may call only ${allowlist.allow.join(" and ")} and must not call ${allowlist.forbid.join(", ")}; it must not call any other mm_agent Tool. Ordinary filesystem read, write, and shell tools remain available for Manifest work.`
   const roleClause = role === "writer"
     ? ` The child must write only this Manifest's expected outputs and call mm_agent_compile using the Case-root-relative contract below; it may retry while repairing the current Candidate, must preserve every Evidence record, and must finish on successful Compile Evidence.`
     : ` The child must write only this Manifest's expected outputs.`
-  const guardClause = ` The child must never call mm_agent_case, must never call Gate, must never call built-in task, must never nest delegation, and must never call any mm_agent Tool outside its role allowlist.`
+  const guardClause = ` The child must never call mm_agent_flow, must never call Gate, must never call built-in task, must never nest delegation, and must never call any mm_agent Tool outside its role allowlist.`
   return `${actorDispatchContract(role, diskContextPath)} The Case root is exactly ${caseRoot}; resolve every Manifest path p as ${caseRoot} + p, never relative to the context.json directory or the project root. ${allowClause}${roleClause}${guardClause} ${instructions} Reply exactly ACTOR_DONE.`
 }
 
@@ -274,30 +272,27 @@ async function critic(runCase, contextPath) {
   const task = completedTool(run, "task")
   assert.equal(task.part.state.input?.subagent_type, "mm-critic")
   const child = await childParts(runCase, task)
-  assert.equal(child.parts.some((part) => part.type === "tool" && ["edit", "mm_agent_case", "task"].includes(part.tool)), false, "Critic exceeded read-only boundary")
+  assert.equal(child.parts.some((part) => part.type === "tool" && ["edit", "mm_agent_flow", "task"].includes(part.tool)), false, "Critic exceeded read-only boundary")
   const review = canonicalizeReviewEvidence(finalJson(task.part.state.output), runCase.caseId)
   if (review.verdict === "pass") await assertMmbenchReportingQuality(runCase, contextPath)
   return review
 }
 
 async function gate(runCase, attemptId, review) {
-  const { definition, context } = await caseTool(runCase)
-  const inspectArgs = tool.schema.object(definition.args).parse({ action: "inspect", case_id: runCase.caseId })
-  const inspectOutput = await definition.execute(inspectArgs, context)
-  const expectedRevision = JSON.parse(inspectOutput).state?.revision
+  const inspectOutput = await runInternalCaseAction(runCase, { action: "inspect", caseId: runCase.caseId })
+  const expectedRevision = inspectOutput.state?.revision
   assert.ok(Number.isSafeInteger(expectedRevision), "Gate inspection must return an integer state revision")
 
-  const gateArgs = tool.schema.object(definition.args).parse({
+  const gateOutput = await runInternalCaseAction(runCase, {
     action: "gate",
-    case_id: runCase.caseId,
-    attempt_id: attemptId,
+    caseId: runCase.caseId,
+    attemptId,
     review,
-    expected_revision: expectedRevision,
+    expectedRevision,
   })
-  const gateOutput = await definition.execute(gateArgs, context)
-  runCase.tool_states.push({ label: "gate-submit", session_id: "deterministic-runner", tool: "mm_agent_case", status: "completed", output: sanitized(gateOutput), error: "" })
+  runCase.tool_states.push({ label: "gate-submit", session_id: "deterministic-runner", tool: "runCaseAction", status: "completed", output: sanitized(JSON.stringify(gateOutput)), error: "" })
   await saveTrace()
-  return JSON.parse(gateOutput).outcome
+  return gateOutput.outcome
 }
 
 function buildStageActorInstructions(baseInstructions, currentAttemptBase, pendingRevision) {
@@ -347,8 +342,7 @@ async function prepare(runCase, sourcePath) {
 }
 
 async function inspectCompletion(runCase) {
-  const run = await mainRun(runCase, "fresh-inspect", `Call mm_agent_case exactly once with action inspect and case_id ${runCase.caseId}. Do not call any other Tool. Reply exactly INSPECT_DONE.`)
-  const snapshot = JSON.parse(completedTool(run, "mm_agent_case").part.state.output)
+  const snapshot = await runInternalCaseAction(runCase, { action: "inspect", caseId: runCase.caseId })
   assert.equal(snapshot.state.status, "completed")
   assert.equal(snapshot.completion?.complete, true)
   return snapshot
@@ -444,7 +438,7 @@ const solverComputeContract = (contextPath) => {
 
 const writerCompileContract = (contextPath) => {
   const workDir = writerWorkDir(contextPath)
-  return `Reporting Compile contract (mandatory): mm_agent_compile.case_id is the current Case id; mm_agent_compile.work_dir must be the literal string "${workDir}" (the directory containing this Manifest's context.json, relative to the Case root). Never pass an absolute path, a host system path, or any other reporting Attempt directory. main_tex must be the literal string main.tex. Write only Manifest expected outputs under ${workDir}; mm_agent_compile retries may repair only the current Candidate, must preserve every Evidence record, and must finish on successful Compile Evidence. Do not call mm_agent_case, do not call Gate, do not dispatch another Attempt, do not compile inside a sibling or earlier reporting Attempt, do not delegate.`
+  return `Reporting Compile contract (mandatory): mm_agent_compile.case_id is the current Case id; mm_agent_compile.work_dir must be the literal string "${workDir}" (the directory containing this Manifest's context.json, relative to the Case root). Never pass an absolute path, a host system path, or any other reporting Attempt directory. main_tex must be the literal string main.tex. Write only Manifest expected outputs under ${workDir}; mm_agent_compile retries may repair only the current Candidate, must preserve every Evidence record, and must finish on successful Compile Evidence. Do not call mm_agent_flow, do not call Gate, do not dispatch another Attempt, do not compile inside a sibling or earlier reporting Attempt, do not delegate.`
 }
 
 const resumeInstructions = {
@@ -592,8 +586,8 @@ async function resumeGolden(target) {
   const runCase = { kind: "resumed", caseId: initial.caseId, projectRoot: initial.projectRoot, sessions: [], child_sessions: [], tool_states: [], failures: [] }
   trace.cases.push(runCase)
   await saveTrace()
-  // This first host call is intentionally read-only; it confirms disk facts in a fresh OpenCode session.
-  await mainRun(runCase, "resume-inspect", `Call mm_agent_case exactly once with action inspect and case_id ${runCase.caseId}. Do not call any other Tool. Reply exactly RESUME_INSPECT_DONE.`)
+  // Re-read disk facts through the development-only Core adapter before planning recovery.
+  await runInternalCaseAction(runCase, { action: "inspect", caseId: runCase.caseId })
   for (;;) {
     const current = await loadResume(runCase.projectRoot)
     const plan = planGoldenResume(current)

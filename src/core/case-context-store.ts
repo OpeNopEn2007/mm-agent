@@ -724,6 +724,8 @@ export class FileCaseContextStore implements CaseContextStore {
             `candidate is outside allowed_writes: ${promotion.candidate}`,
           );
       }
+      if (review.verdict === "revise")
+        return this.applyNonPass(root, snapshot.state, manifest, review);
       const missingExpected: string[] = [];
       for (const expected of manifest.expected_outputs) {
         try {
@@ -818,43 +820,88 @@ export class FileCaseContextStore implements CaseContextStore {
           executionCandidate.candidateAbsolute,
           RuntimeEvidenceSchema,
         );
-        const attemptPrefix = `attempts/${manifest.scope}/${String(manifest.sequence).padStart(3, "0")}/`;
-        const evidenceName = evidence.path.slice(`${attemptPrefix}evidence/`.length);
-        if (
-          evidence.kind !== "compute" ||
-          evidence.status !== "succeeded" ||
-          evidence.exit_code !== 0 ||
-          !evidence.path.startsWith(`${attemptPrefix}evidence/`) ||
-          !/^compute-\d{3}-manifest\.json$/u.test(evidenceName)
-        )
-          throw new CaseProtocolError(
-            "SCHEMA_INVALID",
-            "solver execution evidence is not a successful scoped computation",
+        if (manifest.current_task?.requires_computation === false)
+          await this.validateSynthesisRuntimeEvidence(
+            root,
+            manifest,
+            evidence,
+            executionCandidate.candidateAbsolute,
           );
-        const evidencePayload = await resolveInsideCase(
-          root,
-          evidence.path,
-          "existing",
-        );
-        if ((await hashPath(evidencePayload)) !== evidence.sha256)
-          throw new CaseProtocolError(
-            "SCHEMA_INVALID",
-            "solver execution evidence payload hash does not match",
-          );
-        const payload = JSON.parse(await readFile(evidencePayload, "utf8")) as {
-          entry_script?: { path?: unknown; sha256?: unknown };
-          inputs?: Array<{ path?: unknown; sha256?: unknown }>;
-          outputs?: Array<{ path?: unknown; sha256?: unknown }>;
-        };
-        const files = [payload.entry_script, ...(payload.inputs ?? []), ...(payload.outputs ?? [])];
-        if (files.length === 0)
-          throw new CaseProtocolError("SCHEMA_INVALID", "solver Compute Evidence has no hashed files");
-        for (const file of files) {
-          if (typeof file?.path !== "string" || typeof file.sha256 !== "string")
-            throw new CaseProtocolError("SCHEMA_INVALID", "solver Compute Evidence contains an invalid file reference");
-          const current = await resolveInsideCase(root, file.path, "existing");
-          if ((await hashPath(current)) !== file.sha256)
-            throw new CaseProtocolError("SCHEMA_INVALID", `solver Compute Evidence hash is stale for ${file.path}`);
+        else {
+          const attemptPrefix = `attempts/${manifest.scope}/${String(manifest.sequence).padStart(3, "0")}/`;
+          const evidenceName = evidence.path.slice(`${attemptPrefix}evidence/`.length);
+          if (
+            evidence.kind !== "compute" ||
+            evidence.status !== "succeeded" ||
+            evidence.exit_code !== 0 ||
+            !evidence.path.startsWith(`${attemptPrefix}evidence/`) ||
+            !/^compute-\d{3}-manifest\.json$/u.test(evidenceName)
+          )
+            throw new CaseProtocolError(
+              "SCHEMA_INVALID",
+              "solver execution evidence is not a successful scoped computation",
+            );
+          let evidencePayload: string;
+          try {
+            evidencePayload = await resolveInsideCase(
+              root,
+              evidence.path,
+              "existing",
+            );
+            if ((await hashPath(evidencePayload)) !== evidence.sha256)
+              throw new CaseProtocolError(
+                "SCHEMA_INVALID",
+                "solver execution evidence payload hash does not match",
+              );
+          } catch (error) {
+            const code = (error as NodeJS.ErrnoException).code;
+            if (code === "ENOENT" || code === "ENOTDIR")
+              throw new CaseProtocolError(
+                "SCHEMA_INVALID",
+                `solver execution evidence payload is unavailable: ${evidence.path}`,
+                error,
+              );
+            throw error;
+          }
+          let payloadText: string;
+          try {
+            payloadText = await readFile(evidencePayload, "utf8");
+          } catch (error) {
+            const code = (error as NodeJS.ErrnoException).code;
+            if (code === "ENOENT" || code === "ENOTDIR")
+              throw new CaseProtocolError(
+                "SCHEMA_INVALID",
+                `solver execution evidence payload is unavailable: ${evidence.path}`,
+                error,
+              );
+            throw error;
+          }
+          const payload = JSON.parse(payloadText) as {
+            entry_script?: { path?: unknown; sha256?: unknown };
+            inputs?: Array<{ path?: unknown; sha256?: unknown }>;
+            outputs?: Array<{ path?: unknown; sha256?: unknown }>;
+          };
+          const files = [payload.entry_script, ...(payload.inputs ?? []), ...(payload.outputs ?? [])];
+          if (files.length === 0)
+            throw new CaseProtocolError("SCHEMA_INVALID", "solver Compute Evidence has no hashed files");
+          for (const file of files) {
+            if (typeof file?.path !== "string" || typeof file.sha256 !== "string")
+              throw new CaseProtocolError("SCHEMA_INVALID", "solver Compute Evidence contains an invalid file reference");
+            try {
+              const current = await resolveInsideCase(root, file.path, "existing");
+              if ((await hashPath(current)) !== file.sha256)
+                throw new CaseProtocolError("SCHEMA_INVALID", `solver Compute Evidence hash is stale for ${file.path}`);
+            } catch (error) {
+              const code = (error as NodeJS.ErrnoException).code;
+              if (code === "ENOENT" || code === "ENOTDIR")
+                throw new CaseProtocolError(
+                  "SCHEMA_INVALID",
+                  `solver Compute Evidence file is unavailable: ${file.path}`,
+                  error,
+                );
+              throw error;
+            }
+          }
         }
       }
       if (review.verdict === "pass" && scope === "reporting")
@@ -1791,8 +1838,11 @@ export class FileCaseContextStore implements CaseContextStore {
     review: Review,
   ): Promise<void> {
     const attemptPrefix = `attempts/${manifest.scope}/${String(manifest.sequence).padStart(3, "0")}/evidence/`;
+    const executionResultPath = manifest.expected_outputs.find((item) =>
+      item.endsWith("/execution-result.json"),
+    );
     for (const evidencePath of review.evidence.filter((item) =>
-      item.startsWith(attemptPrefix),
+      item.startsWith(attemptPrefix) || item === executionResultPath,
     )) {
       try {
         const evidence = await readJson(
@@ -1815,6 +1865,193 @@ export class FileCaseContextStore implements CaseContextStore {
       "REVIEW_INVALID",
       "block Review for missing candidates requires valid failed Runtime Evidence",
     );
+  }
+  private async validateSynthesisRuntimeEvidence(
+    root: string,
+    manifest: ContextManifest,
+    evidence: z.infer<typeof RuntimeEvidenceSchema>,
+    executionResultAbsolute: string,
+  ): Promise<void> {
+    const attemptPrefix = `attempts/${manifest.scope}/${String(manifest.sequence).padStart(3, "0")}/`;
+    const evidencePrefix = `${attemptPrefix}evidence/`;
+    const invalid = (message: string, relative: string): never => {
+      throw new CaseProtocolError("SCHEMA_INVALID", `${message}: ${relative}`);
+    };
+    const isRecord = (value: unknown): value is Record<string, unknown> =>
+      value !== null && typeof value === "object" && !Array.isArray(value);
+    const resolveRegularFile = async (
+      relative: string,
+      label: string,
+    ): Promise<{ absolute: string; size: number }> => {
+      let absolute: string;
+      try {
+        absolute = await resolveInsideCase(root, relative, "existing");
+      } catch (error) {
+        if (error instanceof CaseProtocolError && error.code === "PATH_ESCAPE")
+          return invalid(`${label} path is outside the current Attempt`, relative);
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === "ENOENT" || code === "ENOTDIR")
+          return invalid(`${label} is unavailable`, relative);
+        throw error;
+      }
+      let info: Awaited<ReturnType<typeof lstat>>;
+      try {
+        info = await lstat(absolute);
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === "ENOENT" || code === "ENOTDIR")
+          return invalid(`${label} is unavailable`, relative);
+        throw error;
+      }
+      if (!info.isFile() || info.isSymbolicLink())
+        return invalid(`${label} must be an ordinary file`, relative);
+      return { absolute, size: info.size };
+    };
+    if (!evidence.path.startsWith(evidencePrefix)) {
+      if (
+        evidence.kind !== "synthesis" ||
+        evidence.status !== "succeeded" ||
+        evidence.exit_code !== 0 ||
+        !evidence.path.startsWith(attemptPrefix)
+      )
+        invalid("solver synthesis execution-result path is not a successful scoped artifact", evidence.path);
+      const artifactAllowed = manifest.allowed_writes.some((allowed) =>
+        allowed.endsWith("/")
+          ? evidence.path.startsWith(allowed)
+          : evidence.path === allowed,
+      );
+      if (!artifactAllowed)
+        invalid("solver synthesis artifact path is outside the current Attempt allowed_writes", evidence.path);
+      const artifactFile = await resolveRegularFile(evidence.path, "solver synthesis artifact");
+      let artifactHash: string;
+      try {
+        artifactHash = await hashPath(artifactFile.absolute);
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === "ENOENT" || code === "ENOTDIR")
+          invalid("solver synthesis artifact is unavailable", evidence.path);
+        throw error;
+      }
+      let sizeBytes: unknown;
+      try {
+        const raw = JSON.parse(await readFile(executionResultAbsolute, "utf8")) as unknown;
+        sizeBytes = isRecord(raw) ? raw.size_bytes : undefined;
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === "ENOENT" || code === "ENOTDIR")
+          invalid("solver synthesis execution-result is unavailable", "execution-result.json");
+        throw error;
+      }
+      if (artifactHash !== evidence.sha256)
+        invalid("solver synthesis artifact hash is stale", evidence.path);
+      if (
+        sizeBytes !== undefined &&
+        (typeof sizeBytes !== "number" ||
+          !Number.isSafeInteger(sizeBytes) ||
+          sizeBytes !== artifactFile.size)
+      )
+        invalid("solver synthesis artifact size is stale", evidence.path);
+      return;
+    }
+    if (
+      evidence.kind !== "synthesis" ||
+      evidence.status !== "succeeded" ||
+      evidence.exit_code !== 0 ||
+      !evidence.path.startsWith(evidencePrefix) ||
+      !evidence.path.endsWith(".json")
+    )
+      invalid("solver synthesis execution evidence is not a successful scoped JSON file", evidence.path);
+    const evidenceFile = await resolveRegularFile(
+      evidence.path,
+      "solver synthesis execution evidence",
+    );
+    let payload: unknown;
+    try {
+      payload = JSON.parse(await readFile(evidenceFile.absolute, "utf8"));
+    } catch (error) {
+      if (error instanceof SyntaxError)
+        invalid("solver synthesis execution evidence is not valid JSON", evidence.path);
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "ENOENT" || code === "ENOTDIR")
+        invalid("solver synthesis execution evidence is unavailable", evidence.path);
+      throw error;
+    }
+    if (!isRecord(payload))
+      invalid("solver synthesis execution evidence payload is invalid", evidence.path);
+    const payloadRecord = payload as Record<string, unknown>;
+    if (
+      payloadRecord.schema_version !== SCHEMA_VERSION ||
+      payloadRecord.kind !== "synthesis" ||
+      payloadRecord.status !== "succeeded" ||
+      payloadRecord.exit_code !== 0
+    )
+      invalid("solver synthesis execution evidence payload is invalid", evidence.path);
+    const artifactPathValue = payloadRecord.artifact_path;
+    if (typeof artifactPathValue !== "string")
+      invalid("solver synthesis execution evidence payload is missing artifact_path", evidence.path);
+    const artifactPath = artifactPathValue as string;
+    const artifactAllowed = manifest.allowed_writes.some((allowed) =>
+      allowed.endsWith("/")
+        ? artifactPath.startsWith(allowed)
+        : artifactPath === allowed,
+    );
+    if (!artifactPath.startsWith(attemptPrefix) || !artifactAllowed)
+      invalid("solver synthesis artifact path is outside the current Attempt allowed_writes", artifactPath);
+    const artifactFile = await resolveRegularFile(
+      artifactPath,
+      "solver synthesis artifact",
+    );
+    let artifactHash: string;
+    try {
+      artifactHash = await hashPath(artifactFile.absolute);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "ENOENT" || code === "ENOTDIR")
+        invalid("solver synthesis artifact is unavailable", artifactPath);
+      throw error;
+    }
+    if (
+      typeof payloadRecord.sha256 !== "string" ||
+      payloadRecord.sha256 !== evidence.sha256 ||
+      payloadRecord.sha256 !== artifactHash
+    )
+      invalid("solver synthesis artifact hash is stale", artifactPath);
+    if (
+      payloadRecord.size_bytes !== undefined &&
+      (typeof payloadRecord.size_bytes !== "number" ||
+        !Number.isSafeInteger(payloadRecord.size_bytes) ||
+        payloadRecord.size_bytes !== artifactFile.size)
+    )
+      invalid("solver synthesis artifact size is stale", artifactPath);
+    const entryScriptValue = payloadRecord.entry_script;
+    if (entryScriptValue !== undefined) {
+      if (
+        !isRecord(entryScriptValue) ||
+        typeof entryScriptValue.path !== "string" ||
+        typeof entryScriptValue.sha256 !== "string"
+      )
+        invalid("solver synthesis entry_script reference is invalid", evidence.path);
+      const entryScript = entryScriptValue as Record<string, unknown>;
+      const entryPath = entryScript.path as string;
+      const entrySha256 = entryScript.sha256 as string;
+      if (!entryPath.startsWith(attemptPrefix))
+        invalid("solver synthesis entry_script path is outside the current Attempt", entryPath);
+      const entryFile = await resolveRegularFile(
+        entryPath,
+        "solver synthesis entry_script",
+      );
+      let entryHash: string;
+      try {
+        entryHash = await hashPath(entryFile.absolute);
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === "ENOENT" || code === "ENOTDIR")
+          invalid("solver synthesis entry_script is unavailable", entryPath);
+        throw error;
+      }
+      if (entryHash !== entrySha256)
+        invalid("solver synthesis entry_script hash is stale", entryPath);
+    }
   }
   private async validateReportingRuntimeEvidence(
     root: string,

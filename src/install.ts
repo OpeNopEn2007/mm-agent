@@ -6,14 +6,19 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
+// OpenCode 安装器。把 4 个 Skill 写进 OpenCode config root、把 plugin entry 加进
+// `opencode.json` 的 plugin 数组、写一份 receipt。所有变更事务化(backup→写入→出错逐个
+// 回滚),所有路径经 realpath 边界检查防符号链接逃逸,用户改动过的 owned 文件用 sha256
+// 比对发现后拒绝静默覆盖。`install`/`update`/`remove` 三个顶层函数被测试 import 调用,
+// CLI 入口在文件末尾。
 export type InstallerOptions = {
   configRoot?: string
   pluginEntry?: string
 }
 
 type ReceiptBase = {
-  package: "@mm-agent/opencode"
-  version: "1.0.0"
+  package: "mm-agent"
+  version: "0.1.0"
   plugin_entry: string
   plugin_added: boolean
   installed_skills: string[]
@@ -60,7 +65,11 @@ export class InstallerReceiptError extends Error {
   }
 }
 
+// 包根目录(本文件编译后位于 dist/，所以 `..` 即包根)，所有 Skill 内容从包内读出后写入用户 config。
 const packageRoot = fileURLToPath(new URL("..", import.meta.url))
+// 安装器唯一允许写入用户 config root 的受管路径。任何 receipt 里的 file.path 必须落进这个白名单，
+// 校验在 `validateReceipt` 和 `resolveOwnedPath` 两处把关。Skills 外的 rubrics/templates/runtime 走 plugin
+// 运行时按包内路径访问，不经安装器写入。
 const ownedSkillPaths = [
   "skills/mm-agent/SKILL.md",
   "skills/mm-hmml/SKILL.md",
@@ -108,6 +117,10 @@ function isWithinRealRoot(realRoot: string, candidate: string): boolean {
   return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
 }
 
+// 防符号链接逃逸：不仅做词法 `path.relative` 校验，还对路径上每一段已存在的组件做 `realpath`，
+// 确认真实指向仍落在 config root 内。这阻挡一种攻击：合法相对路径中途经 symlink 指向 root 外。
+// 不存在的末段组件允许通过(那是将要写入的目标)。逐段而非整体 realpath，是为了在中间某段是文件
+// 而非目录时给出精确的错误，而不是一个模糊的 escape。
 async function assertRealPathBoundary(configRoot: string, targetPath: string): Promise<void> {
   const resolvedRoot = path.resolve(configRoot)
   const relative = path.relative(resolvedRoot, path.resolve(targetPath))
@@ -153,12 +166,16 @@ async function readOwnedFile(configRoot: string, relativePath: string): Promise<
   return readFile(targetPath)
 }
 
+// Receipt 是安装/update/remove 的唯一真相源。校验严格：package/version 必须精确匹配，
+// plugin_entry 必须非空字符串，installed_skills 必须恰好是 legacy 单 Skill 集或当前四 Skill 集，
+// files 数组必须为空、不能多、每条 sha256 匹配 64 位十六进制、且每条 path 都在 ownedSkillPaths 白名单内。
+// 任何不符直接抛 `InstallerReceiptError`，不留局部状态——损坏 receipt 不能触发部分文件操作。
 function validateReceipt(configRoot: string, value: unknown): StoredReceipt {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new InstallerReceiptError("expected an object")
   }
   const receipt = value as Partial<StoredReceipt>
-  if (receipt.package !== "@mm-agent/opencode" || receipt.version !== "1.0.0") {
+  if (receipt.package !== "mm-agent" || receipt.version !== "0.1.0") {
     throw new InstallerReceiptError("package or version mismatch")
   }
   if (typeof receipt.plugin_entry !== "string" || receipt.plugin_entry.length === 0) {
@@ -224,6 +241,10 @@ async function readReceiptIfPresent(configRoot: string): Promise<StoredReceipt |
   }
 }
 
+// 冲突 = receipt 声称拥有的某个 Skill 文件，磁盘当前内容的 sha256 与 receipt 记录不符。
+// 这用来实现"用户改过的已安装文件不能被静默覆盖"：update/remove 检测到冲突就拒绝，
+// 要求用户先处理。对 legacy 单 Skill receipt，还要检查它没覆盖的那三个 Skill 路径是否已被占用——
+// 避免升级时把别人装的东西无声覆盖掉。
 async function findConflicts(configRoot: string, receipt: StoredReceipt): Promise<string[]> {
   const conflicts: string[] = []
   for (const file of receipt.files) {
@@ -281,10 +302,15 @@ async function removeArtifact(configRoot: string, artifactPath: string): Promise
     await assertRealPathBoundary(configRoot, artifactPath)
     await rm(artifactPath, { force: true, maxRetries: 3, retryDelay: 25 })
   } catch {
-    // Transaction cleanup is best effort; a retained backup is safer than deleting a failed snapshot.
+    // 事务清理是 best-effort；留着 backup 比删除失败快照更安全。
   }
 }
 
+// 事务化写入：所有变更先逐个 backup(原文件)→写临时文件，全部就绪后再逐个用 rename 原子替换。
+// 任一步骤失败时按相反顺序回滚：删已替换的新文件、把 backup 还原回原位。回滚本身若也失败则收集
+// rollbackErrors 合并抛 `AggregateError`，宁可留 backup 也不删失败快照。final 清理 backup/临时文件
+// 是 best-effort(`removeArtifact` 吞错)。全程逐次 `assertRealPathBoundary` 防止中途路径被改动。
+// 写入的 Skills、opencode.json 和 receipt 作为一个 batch：要么全成功落地，要么整体回滚到调用前。
 async function applyTransaction(configRoot: string, changes: TransactionChange[]): Promise<void> {
   const prepared: PreparedChange[] = []
   try {
@@ -374,6 +400,9 @@ async function applyTransaction(configRoot: string, changes: TransactionChange[]
   }
 }
 
+// 实际落地逻辑：从包内读 4 个 Skill、读现有 opencode.json、把 plugin_entry 加进 plugin 数组、
+// 组装新 receipt，把 [Skills + opencode.json + receipt] 作为一个事务写入。previousReceipt 用来处理
+// plugin_entry 变更(升级后新 entry 替换旧 entry，且别重复 push)。
 async function writeInstallation(
   configRoot: string,
   pluginEntry: string,
@@ -397,8 +426,8 @@ async function writeInstallation(
   }
   config.plugin = plugins
   const receipt: Receipt = {
-    package: "@mm-agent/opencode",
-    version: "1.0.0",
+    package: "mm-agent",
+    version: "0.1.0",
     plugin_entry: pluginEntry,
     plugin_added: pluginAdded ?? false,
     installed_skills: ["mm-agent", "mm-hmml", "mm-compute", "mm-report"],
@@ -413,6 +442,10 @@ async function writeInstallation(
   return { receipt, receiptPath }
 }
 
+// 安装。前置：若已有 receipt，先比对 sha256 检测冲突，用户改过任何 owned 文件就抛
+// `InstallerConflictError` 拒绝；若没有 receipt，退而检查 4 个 owned Skill 路径是否已被别的东西占用
+// (任意一个已存在就当冲突)。通过后调 `writeInstallation`。默认 config root 为 `~/.config/opencode`，
+// plugin_entry 默认指向包内 dist/index.js。
 export async function install(options: InstallerOptions = {}): Promise<InstallResult> {
   const configRoot = path.resolve(options.configRoot ?? defaultConfigRoot())
   const pluginEntry = options.pluginEntry ?? pathToFileURL(fileURLToPath(new URL("./index.js", import.meta.url))).href
@@ -438,6 +471,8 @@ export async function install(options: InstallerOptions = {}): Promise<InstallRe
   return writeInstallation(configRoot, pluginEntry, existingReceipt)
 }
 
+// 更新。必须有合法 receipt；比对所有 owned 文件 sha256，有冲突则拒绝、不改任何东西。
+// 用现 receipt 调 writeInstallation 覆盖 Skill 内容并刷新 receipt 里的 sha256。
 export async function update(options: InstallerOptions = {}): Promise<InstallResult> {
   const configRoot = path.resolve(options.configRoot ?? defaultConfigRoot())
   const pluginEntry = options.pluginEntry ?? pathToFileURL(fileURLToPath(new URL("./index.js", import.meta.url))).href
@@ -448,6 +483,9 @@ export async function update(options: InstallerOptions = {}): Promise<InstallRes
   return writeInstallation(configRoot, pluginEntry, receipt)
 }
 
+// 卸载。有 receipt 且无冲突才会执行。删所有 owned Skill 文件、(若 plugin_added)从 opencode.json
+// 的 plugin 数组移除本 entry、删 receipt 自身。有冲突时只返回 conflicts 列表不删任何文件——
+// 用户改过的东西仍属于用户。Plugin entry 不存在或由用户手动加入则保持不动。
 export async function remove(options: InstallerOptions = {}): Promise<RemoveResult> {
   const configRoot = path.resolve(options.configRoot ?? defaultConfigRoot())
   const receipt = await readReceipt(configRoot)
@@ -468,6 +506,8 @@ export async function remove(options: InstallerOptions = {}): Promise<RemoveResu
 
 type InstallerAction = "install" | "update" | "remove"
 
+// CLI 参数解析。接受 `install|update|remove` 和可选 `--config-root <path>`、`--plugin-entry <url>`。
+// 严格成对校验，未知 flag 或缺值直接报错退出。返回的 options 喂给同名顶层函数。
 function parseCliArguments(argv: string[]): { action: InstallerAction; options: InstallerOptions } {
   const [action, ...args] = argv
   if (action !== "install" && action !== "update" && action !== "remove") {
@@ -486,6 +526,9 @@ function parseCliArguments(argv: string[]): { action: InstallerAction; options: 
   return { action, options }
 }
 
+// CLI 入口分发：把子命令路由到 install/update/remove，把整个结果以 JSON 写到 stdout。
+// 安装器同时是模块(导出顶层函数供测试和库式调用)和 CLI(下面 main 守卫)，靠 process.argv[1]
+// 是否等于本文件 URL 来区分。
 async function runCli(argv: string[]): Promise<void> {
   const { action, options } = parseCliArguments(argv)
   const result = action === "install"
@@ -496,6 +539,8 @@ async function runCli(argv: string[]): Promise<void> {
   process.stdout.write(`${JSON.stringify({ action, result })}\n`)
 }
 
+// `mm-agent-opencode` 命令的 main 守卫：只有当本文件作为脚本直接执行(而非被 import)时才跑 CLI。
+// 避免 import 这个文件做单元测试时副作用地执行命令行逻辑。错误写到 stderr 并设退出码 1。
 const entryPath = process.argv[1]
 if (entryPath && pathToFileURL(path.resolve(entryPath)).href === import.meta.url) {
   runCli(process.argv.slice(2)).catch((error: unknown) => {

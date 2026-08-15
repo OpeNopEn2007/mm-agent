@@ -1,6 +1,6 @@
 {
-  "name": "@mm-agent/opencode",
-  "version": "1.0.0",
+  "name": "mm-agent",
+  "version": "0.1.0",
   "description": "An OpenCode harness that turns mathematical-modeling problems into gated artifacts, reproducible computations, and compiled PDF reports.",
   "license": "MIT",
   "repository": {
@@ -14,7 +14,7 @@
     "mm-agent-opencode": "./dist/install.js"
   },
   "scripts": {
-    "test": "tsx --test --test-concurrency=1 tests/step6.test.ts tests/plugin-spike.test.ts tests/golden-runner.test.ts tests/golden-resume.test.ts tests/mmbench-validation.test.ts tests/writer-contract.test.ts tests/core/case-context-store.test.ts tests/tools/*.test.ts",
+    "test": "tsx --test --test-concurrency=1 tests/formal-runtime-coordinator.test.ts tests/step6.test.ts tests/plugin-spike.test.ts tests/golden-runner.test.ts tests/golden-resume.test.ts tests/mmbench-validation.test.ts tests/writer-contract.test.ts tests/core/case-context-store.test.ts tests/tools/*.test.ts",
     "build": "tsc -p tsconfig.json",
     "test:runtime": "cross-env MM_AGENT_RUNTIME=1 tsx --test --test-concurrency=1 --test-name-pattern=^runtime: tests/plugin-spike.test.ts",
     "golden": "node scripts/run-golden-case.mjs",
@@ -32,7 +32,6 @@
     "knowledge",
     "templates/cumcmthesis",
     "templates/mcmthesis",
-    "schemas",
     "THIRD_PARTY_NOTICES.md"
   ],
   "dependencies": {

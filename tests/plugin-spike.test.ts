@@ -209,8 +209,8 @@ test("package shape declares the Step 1 ESM distribution surface", async () => {
     files?: string[]
   }
 
-  assert.equal(packageJson.name, "@mm-agent/opencode")
-  assert.equal(packageJson.version, "1.0.0")
+  assert.equal(packageJson.name, "mm-agent")
+  assert.equal(packageJson.version, "0.1.0")
   assert.ok(packageJson.description)
   assert.equal(packageJson.license, "MIT")
   assert.deepEqual(packageJson.repository, {
@@ -234,7 +234,6 @@ test("package shape declares the Step 1 ESM distribution surface", async () => {
     "knowledge",
     "templates/cumcmthesis",
     "templates/mcmthesis",
-    "schemas",
     "THIRD_PARTY_NOTICES.md",
   ])
 })
@@ -345,7 +344,7 @@ test("golden command invokes the Step 7 runner", async () => {
   const runner = await readFile(path.join(repositoryRoot, "scripts", "run-golden-case.mjs"), "utf8")
   assert.match(runner, /mm_agent_compute/u)
   assert.match(runner, /mm_agent_compile/u)
-  assert.match(runner, /mm_agent_case/u)
+  assert.match(runner, /runCaseAction/u)
   assert.match(runner, /multi-wave/u)
   assert.match(runner, /MM-Bench requires/u)
 })
@@ -354,16 +353,16 @@ test("Skills expose the four-stage workflow without a second public command", as
   const skill = await readFile(path.join(repositoryRoot, "skills", "mm-agent", "SKILL.md"), "utf8")
   assert.match(skill, /mm_agent_check/u)
   assert.match(skill, /mm_agent_prepare/u)
-  assert.match(skill, /mm_agent_case/u)
+  assert.match(skill, /mm_agent_flow/u)
   assert.match(skill, /mm-critic/u)
-  assert.match(skill, /schema_version: 1/u)
-  assert.match(skill, /top-level\s+`attempt_id`/u)
-  assert.match(skill, /Case-relative existing-path evidence/u)
-  assert.match(skill, /`expected_revision`/u)
-  assert.match(skill, /Canonical Analysis output contract/u)
-  assert.match(skill, /Do not tell the Actor to promote/u)
-  assert.match(skill, /Do not redefine or extend the Actor output schema/u)
-  assert.match(skill, /do not\s+invent `\/doctor`, `\/setup`, or another slash command/u)
+  assert.match(skill, /四个语义字段/u)
+  assert.match(skill, /要恢复一个已有 case/u)
+  assert.match(skill, /`case_id`.*不传新的显式路径或 `revision_budget`/u)
+  assert.match(skill, /持久化的不可变输入 manifest、policy、state 和 revision budget 是权威/u)
+  assert.match(skill, /不要重新提交输入路径或 budget/u)
+  assert.doesNotMatch(skill, /expected_revision/u)
+  assert.doesNotMatch(skill, /schema_version: 1/u)
+  assert.match(skill, /唯一的用户命令是 `\/mm-agent`；不要发明其他 slash command/u)
   for (const name of ["mm-hmml", "mm-compute", "mm-report"]) {
     const installed = await readFile(path.join(repositoryRoot, "skills", name, "SKILL.md"), "utf8")
     assert.match(installed, new RegExp(`name: ${name}`, "u"))
@@ -426,15 +425,27 @@ test("config hook injects five hidden least-privilege stage subagents", async ()
   assert.deepEqual(config.agent?.["mm-analyst"]?.permission?.skill, { "*": "deny" })
   assert.deepEqual(config.agent?.["mm-modeler"]?.permission?.skill, { "*": "deny", "mm-hmml": "allow" })
   assert.deepEqual(config.agent?.["mm-solver"]?.permission?.skill, { "*": "deny", "mm-compute": "allow" })
-  assert.match(config.agent?.["mm-solver"]?.prompt ?? "", /never invoke TDD or Superpowers Skills/u)
+  assert.match(config.agent?.["mm-solver"]?.prompt ?? "", /Computational Solver/u)
+  assert.match(config.agent?.["mm-solver"]?.prompt ?? "", /current_task\.requires_computation is false/u)
+  assert.match(config.agent?.["mm-solver"]?.prompt ?? "", /direct synthesis result/u)
+  assert.match(config.agent?.["mm-solver"]?.prompt ?? "", /do not create evidence\//u)
   assert.deepEqual(config.agent?.["mm-writer"]?.permission?.skill, { "*": "deny", "mm-report": "allow" })
   assert.deepEqual(config.agent?.["mm-critic"]?.permission?.skill, { "*": "deny" })
   const criticPrompt = config.agent?.["mm-critic"]?.prompt ?? ""
-  for (const required of ["schema_version must be exactly 1", "copy attempt_id exactly", "Case-relative paths", "reviewed_at must be UTC RFC 3339", "Before verdict pass", "DAG is acyclic", "factual contradiction", "recommendations explicitly requested", "every other key are forbidden"])
-    assert.match(criticPrompt, new RegExp(required, "u"))
+  assert.match(criticPrompt, /only verdict, findings, required_fixes, and evidence/u)
+  assert.match(criticPrompt, /declared candidate execution-result\.json/u)
+  assert.match(criticPrompt, /raw payload/u)
+  assert.match(criticPrompt, /If kind is direct synthesis/u)
+  assert.match(criticPrompt, /without parsing it as a Runtime Evidence payload/u)
+  assert.match(criticPrompt, /never use a directory, context\.json, manifest\.json/u)
+  assert.match(criticPrompt, /valid Runtime Evidence JSON envelope/u)
+  assert.doesNotMatch(criticPrompt, /schema_version|reviewed_at|attempt_id/u)
   const analystPrompt = config.agent?.["mm-analyst"]?.prompt ?? ""
   for (const required of ["\"tasks\"", "depends_on", "wave", "Do not use waves, task_ids, or dependencies", "never add wave, depends_on, input_paths, or output_paths"])
     assert.match(analystPrompt, new RegExp(required, "u"))
+  assert.match(analystPrompt, /post-modeling domain-solving DAG consumed by mm-solver/u)
+  assert.match(analystPrompt, /accepted modeling artifacts and direct dependency memory/u)
+  assert.match(analystPrompt, /fixed Analysis, Modeling, Reporting\/LaTeX compile, Writer, Critic, Gate, and Flow stages remain harness-owned/u)
 })
 
 test("config hook preserves an existing same-name agent unchanged", async () => {
@@ -460,16 +471,16 @@ test("Plugin registers the six deterministic Tools", async () => {
   const hooks = await mmAgentPlugin({ directory: repositoryRoot, worktree: repositoryRoot } as PluginInput)
 
   assert.deepEqual(Object.keys(hooks.tool ?? {}).sort(), [
-    "mm_agent_case",
     "mm_agent_check",
     "mm_agent_compile",
     "mm_agent_compute",
+    "mm_agent_flow",
     "mm_agent_hmml",
     "mm_agent_prepare",
   ])
   assert.match(hooks.tool?.mm_agent_check?.description ?? "", /structured evidence/i)
   assert.match(hooks.tool?.mm_agent_prepare?.description ?? "", /CaseContextStore\.open/i)
-  assert.match(hooks.tool?.mm_agent_case?.description ?? "", /CaseContextStore/i)
+  assert.match(hooks.tool?.mm_agent_flow?.description ?? "", /formal mm-agent runtime/i)
   assert.match(hooks.tool?.mm_agent_hmml?.description ?? "", /BM25 fallback/i)
   assert.match(hooks.tool?.mm_agent_compute?.description ?? "", /Runtime Evidence/i)
   assert.match(hooks.tool?.mm_agent_compile?.description ?? "", /latexmk/i)
@@ -541,122 +552,50 @@ test("config hook scopes actor edits to the project when OpenCode reports a non-
   assert.equal(edit["runs/*/attempts/analysis/*/**"], undefined)
 })
 
-test("case Tool preserves a versioned revise Review through Plugin execute", async (t) => {
+test("formal Flow owns Review machine fields through Plugin execute", async (t) => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "mm-agent-case-tool-revise-"))
   t.after(() => rm(directory, { recursive: true, force: true }))
   await writeFile(path.join(directory, "problem.md"), "revise boundary fixture\n")
   const mmAgentPlugin = await loadPlugin()
   const hooks = await mmAgentPlugin({ directory, worktree: directory } as PluginInput)
   const prepare = hooks.tool?.mm_agent_prepare
-  const definition = hooks.tool?.mm_agent_case
+  const definition = hooks.tool?.mm_agent_flow
   assert.ok(prepare)
   assert.ok(definition)
-  const context = { directory, worktree: directory } as ToolContext
+  const context = { directory, worktree: directory, sessionID: "ses-flow", messageID: "msg", abort: new AbortController().signal } as ToolContext
   const caseId = "case-tool-revise"
 
   await prepare.execute({
     case_id: caseId,
     explicit_paths: ["problem.md"],
   }, context)
-  const dispatched = JSON.parse(await definition.execute({
-    action: "dispatch",
-    case_id: caseId,
-    role: "analyst",
-    goal: "analyze",
-  }, context) as string) as { attemptId: string; contextPath: string }
-  const attempt = path.join(directory, "runs", caseId, path.dirname(dispatched.contextPath))
+  const dispatched = JSON.parse(await definition.execute({ action: "advance", case_id: caseId }, context) as string) as { attempt_id: string; context_path: string }
+  const attempt = path.join(directory, "runs", caseId, path.dirname(dispatched.context_path))
   await writeFile(path.join(attempt, "problem-understanding.md"), "# Understanding\n")
   await writeFile(path.join(attempt, "tasks.json"), '{"schema_version":1,"tasks":[{"id":"task-01","description":"solve","requires_computation":false}]}\n')
   await writeFile(path.join(attempt, "task-graph.json"), '{"schema_version":1,"tasks":[{"id":"task-01","depends_on":[],"wave":1}]}\n')
-  const review = {
-    schema_version: 1,
-    attempt_id: dispatched.attemptId,
-    verdict: "revise" as const,
+  const gated = JSON.parse(await definition.execute({
+    action: "submit_review",
+    case_id: caseId,
+    verdict: "revise",
     findings: ["clarify the understanding"],
     required_fixes: ["add one constraint"],
     evidence: ["attempts/analysis/001/problem-understanding.md"],
-    reviewed_at: "2026-07-29T00:00:00.000Z",
-  }
+  }, context) as string) as { status: string; agent?: string }
 
-  const gateArgs = tool.schema.object(definition.args).parse({
-    action: "gate",
-    case_id: caseId,
-    attempt_id: dispatched.attemptId,
-    review,
-    expected_revision: 0,
-  })
-  const gated = JSON.parse(await definition.execute(gateArgs, context) as string) as { outcome: string }
-
-  assert.equal(gated.outcome, "revise")
-  assert.deepEqual(JSON.parse(await readFile(path.join(attempt, "review.json"), "utf8")), review)
+  assert.equal(gated.status, "task")
+  assert.equal(gated.agent, "mm-analyst")
+  const review = JSON.parse(await readFile(path.join(attempt, "review.json"), "utf8")) as Record<string, unknown>
+  assert.equal(review.schema_version, 1)
+  assert.equal(review.attempt_id, dispatched.attempt_id)
+  assert.match(String(review.reviewed_at), /^\d{4}-\d{2}-\d{2}T.*Z$/u)
+  assert.equal(review.verdict, "revise")
 })
 
-test("compaction appends one active Case state hint without replacing the prompt", async (t) => {
-  for (const status of ["prepared", "running", "blocked"]) {
-    const projectRoot = await mkdtemp(path.join(os.tmpdir(), `mm-agent-compaction-${status}-`))
-    t.after(() => rm(projectRoot, { recursive: true, force: true }))
-    const stateDirectory = path.join(projectRoot, "runs", "case-alpha")
-    await mkdir(stateDirectory, { recursive: true })
-    await writeFile(path.join(stateDirectory, "state.json"), `${JSON.stringify({ case_id: "case-alpha", status })}\n`)
-    const mmAgentPlugin = await loadPlugin()
-    const hooks = await mmAgentPlugin({ directory: projectRoot, worktree: projectRoot } as PluginInput)
-    const output = { context: ["existing context"], prompt: "keep this prompt" }
-
-    await hooks["experimental.session.compacting"]?.({ sessionID: "session-1" }, output)
-
-    assert.deepEqual(output.context, [
-      "existing context",
-      "Active Case: case-alpha; state: runs/case-alpha/state.json. Inspect local state before continuing.",
-    ])
-    assert.equal(output.prompt, "keep this prompt")
-  }
-})
-
-test("compaction adds nothing when the active Case is ambiguous or absent", async (t) => {
-  const ambiguousRoot = await mkdtemp(path.join(os.tmpdir(), "mm-agent-ambiguous-"))
-  const emptyRoot = await mkdtemp(path.join(os.tmpdir(), "mm-agent-empty-"))
-  t.after(() => Promise.all([
-    rm(ambiguousRoot, { recursive: true, force: true }),
-    rm(emptyRoot, { recursive: true, force: true }),
-  ]))
-  for (const caseId of ["case-alpha", "case-beta"]) {
-    const caseDirectory = path.join(ambiguousRoot, "runs", caseId)
-    await mkdir(caseDirectory, { recursive: true })
-    await writeFile(path.join(caseDirectory, "state.json"), `${JSON.stringify({ case_id: caseId, status: "running" })}\n`)
-  }
-
-  for (const projectRoot of [ambiguousRoot, emptyRoot]) {
-    const mmAgentPlugin = await loadPlugin()
-    const hooks = await mmAgentPlugin({ directory: projectRoot, worktree: projectRoot } as PluginInput)
-    const output = { context: ["existing context"], prompt: "keep this prompt" }
-    await hooks["experimental.session.compacting"]?.({ sessionID: "session-2" }, output)
-    assert.deepEqual(output, { context: ["existing context"], prompt: "keep this prompt" })
-  }
-})
-
-test("compaction ignores malformed inactive or mismatched Case state", async (t) => {
-  const scenarios = [
-    { name: "malformed", directoryCaseId: "case-alpha", state: "{not-json\n" },
-    { name: "completed", directoryCaseId: "case-alpha", state: JSON.stringify({ case_id: "case-alpha", status: "completed" }) },
-    { name: "failed", directoryCaseId: "case-alpha", state: JSON.stringify({ case_id: "case-alpha", status: "failed" }) },
-    { name: "mismatched", directoryCaseId: "case-alpha", state: JSON.stringify({ case_id: "case-beta", status: "running" }) },
-    { name: "missing-status", directoryCaseId: "case-alpha", state: JSON.stringify({ case_id: "case-alpha" }) },
-  ]
-
-  for (const scenario of scenarios) {
-    const projectRoot = await mkdtemp(path.join(os.tmpdir(), `mm-agent-compaction-${scenario.name}-`))
-    t.after(() => rm(projectRoot, { recursive: true, force: true }))
-    const caseDirectory = path.join(projectRoot, "runs", scenario.directoryCaseId)
-    await mkdir(caseDirectory, { recursive: true })
-    await writeFile(path.join(caseDirectory, "state.json"), `${scenario.state}\n`)
-    const mmAgentPlugin = await loadPlugin()
-    const hooks = await mmAgentPlugin({ directory: projectRoot, worktree: projectRoot } as PluginInput)
-    const output = { context: ["existing context"], prompt: "keep this prompt" }
-
-    await hooks["experimental.session.compacting"]?.({ sessionID: "session-invalid" }, output)
-
-    assert.deepEqual(output, { context: ["existing context"], prompt: "keep this prompt" }, scenario.name)
-  }
+test("formal Plugin omits the compaction hint; recovery remains a disk-backed Flow operation", async () => {
+  const hooks = await loadPlugin()
+  const plugin = await hooks({ directory: repositoryRoot, worktree: repositoryRoot } as PluginInput)
+  assert.equal(plugin["experimental.session.compacting"], undefined)
 })
 
 test("fresh process recovery reads fixture state and context from disk without compaction", () => {
@@ -703,8 +642,8 @@ test("installer fresh install preserves unrelated config and writes a hashed rec
   assert.deepEqual(config.plugin, ["existing-plugin", pluginEntry])
   const receipt = JSON.parse(await readFile(path.join(configRoot, "mm-agent", "receipt.json"), "utf8"))
   assert.deepEqual(receipt, {
-    package: "@mm-agent/opencode",
-    version: "1.0.0",
+    package: "mm-agent",
+    version: "0.1.0",
     plugin_entry: pluginEntry,
     plugin_added: true,
     installed_skills: ["mm-agent", "mm-hmml", "mm-compute", "mm-report"],
@@ -762,7 +701,7 @@ test("installer upgrades a hash-verified legacy one-Skill receipt to four Skills
   for (const name of ["mm-hmml", "mm-compute", "mm-report"])
     await rm(path.join(configRoot, "skills", name), { recursive: true, force: true })
   await writeFile(path.join(configRoot, "mm-agent", "receipt.json"), `${JSON.stringify({
-    package: "@mm-agent/opencode", version: "1.0.0", plugin_entry: pluginEntry, plugin_added: true,
+    package: "mm-agent", version: "0.1.0", plugin_entry: pluginEntry, plugin_added: true,
     installed_skills: ["mm-agent"],
     files: [{ path: "skills/mm-agent/SKILL.md", sha256: createHash("sha256").update(legacySkill).digest("hex") }],
   }, null, 2)}\n`)
@@ -787,7 +726,7 @@ test("installer preserves legacy owned and unowned files when an upgrade conflic
     await rm(path.join(configRoot, "skills", name), { recursive: true, force: true })
   const receiptPath = path.join(configRoot, "mm-agent", "receipt.json")
   const legacyReceipt = `${JSON.stringify({
-    package: "@mm-agent/opencode", version: "1.0.0", plugin_entry: pluginEntry, plugin_added: true,
+    package: "mm-agent", version: "0.1.0", plugin_entry: pluginEntry, plugin_added: true,
     installed_skills: ["mm-agent"],
     files: [{ path: "skills/mm-agent/SKILL.md", sha256: createHash("sha256").update(legacySkill).digest("hex") }],
   }, null, 2)}\n`
@@ -823,7 +762,7 @@ test("legacy receipt upgrade rolls back every Skill when the transaction cannot 
     await rm(path.join(configRoot, "skills", name), { recursive: true, force: true })
   const receiptPath = path.join(configRoot, "mm-agent", "receipt.json")
   const legacyReceipt = `${JSON.stringify({
-    package: "@mm-agent/opencode", version: "1.0.0", plugin_entry: pluginEntry, plugin_added: true,
+    package: "mm-agent", version: "0.1.0", plugin_entry: pluginEntry, plugin_added: true,
     installed_skills: ["mm-agent"],
     files: [{ path: "skills/mm-agent/SKILL.md", sha256: createHash("sha256").update(legacySkill).digest("hex") }],
   }, null, 2)}\n`
@@ -1569,29 +1508,29 @@ test("runtime: Main gates a real Analyst candidate after a fresh Critic review",
 
   const session1 = runMain("Step 6 prepare and dispatch", [
     `Call mm_agent_prepare exactly once with case_id ${caseId} and explicit_paths [problem.md].`,
-    `Then call mm_agent_case exactly once with action dispatch, case_id ${caseId}, role analyst, and goal Analyze the notebook-cost problem.`,
+    `Then call mm_agent_flow exactly once with action advance and case_id ${caseId}.`,
     "Do not call task, inspect, gate, or any other mm_agent Tool. Reply exactly MM_AGENT_STEP6_SESSION1_DONE.",
   ].join(" "))
   const session2 = runMain("Step 6 Analyst task", [
-    `Call mm_agent_case exactly once with action inspect and case_id ${caseId}. Use only its disk-backed active Attempt contextPath.`,
-    "Then use built-in task exactly once with subagent_type mm-analyst. Tell it to read that contextPath and create every expected output in that Attempt only. tasks.json must be exactly {\"schema_version\":1,\"tasks\":[{\"id\":\"task-01\",\"description\":\"Compute the notebook cost\",\"requires_computation\":false}]}. task-graph.json must be exactly {\"schema_version\":1,\"tasks\":[{\"id\":\"task-01\",\"depends_on\":[],\"wave\":1}]}. Return its required JSON status.",
+    `Call mm_agent_flow exactly once with action advance and case_id ${caseId}. Use only its disk-backed active Attempt context_path.`,
+    "Then use built-in task exactly once with subagent_type mm-analyst. Tell it to read the returned context_path and create every expected output in that Attempt only. tasks.json must be exactly {\"schema_version\":1,\"tasks\":[{\"id\":\"task-01\",\"description\":\"Compute the notebook cost\",\"requires_computation\":false}]}. task-graph.json must be exactly {\"schema_version\":1,\"tasks\":[{\"id\":\"task-01\",\"depends_on\":[],\"wave\":1}]}. Return its required JSON status.",
     "Do not call dispatch, gate, or any other mm_agent Tool. Reply exactly MM_AGENT_STEP6_SESSION2_DONE.",
   ].join(" "))
   const session3 = runMain("Step 6 Critic and Gate", [
-    `Call mm_agent_case exactly once with action inspect and case_id ${caseId}. Use only its disk-backed active Attempt contextPath.`,
-    "Then use built-in task exactly once with subagent_type mm-critic. Tell it to read that same active contextPath and candidate outputs, then return exactly one bare Review JSON with schema_version 1, its exact context attempt_id, verdict pass, string arrays, existing Case-relative evidence paths, and UTC RFC 3339 reviewed_at.",
-    `Immediately call mm_agent_case exactly once with action gate for ${caseId}, top-level attempt_id copied from the active Manifest, expected_revision from this inspect state revision, and the Critic Review verbatim. If Gate returns an error, stop and report it without retrying or altering the Review. Do not call dispatch or any other mm_agent Tool. Reply exactly MM_AGENT_STEP6_SESSION3_DONE.`,
+    `Call mm_agent_flow exactly once with action advance and case_id ${caseId}. Use only its disk-backed active Attempt context_path.`,
+    "Then use built-in task exactly once with subagent_type mm-critic. Tell it to read that same active context_path and candidate outputs, then return exactly one JSON object with only verdict, findings, required_fixes, and evidence using existing Case-relative paths.",
+    `Immediately call mm_agent_flow exactly once with action submit_review for ${caseId}, passing only the Critic's four semantic fields. If Flow returns an error, stop and report it without retrying or altering the Review. Do not call dispatch, gate, or any other mm_agent Tool. Reply exactly MM_AGENT_STEP6_SESSION3_DONE.`,
   ].join(" "))
   const sessionIds = [session1, session2, session3].map((events) => events.find((event) => event.sessionID)?.sessionID)
   assert.equal(new Set(sessionIds).size, 3)
   for (const sessionId of sessionIds) assert.match(sessionId ?? "", /^ses_/u)
 
   const session1Tools = session1.filter((event) => event.type === "tool_use")
-  const dispatchEvent = session1Tools.find((event) => event.part?.tool === "mm_agent_case")
-  assertToolCompleted("Session 1 dispatch", dispatchEvent)
-  const dispatch = JSON.parse(dispatchEvent?.part?.state?.output ?? "") as { attemptId?: string; contextPath?: string }
-  assert.equal(dispatch.attemptId, "analysis-001")
-  assert.equal(dispatch.contextPath, "attempts/analysis/001/context.json")
+  const dispatchEvent = session1Tools.find((event) => event.part?.tool === "mm_agent_flow")
+  assertToolCompleted("Session 1 advance", dispatchEvent)
+  const dispatch = JSON.parse(dispatchEvent?.part?.state?.output ?? "") as { attempt_id?: string; context_path?: string }
+  assert.equal(dispatch.attempt_id, "analysis-001")
+  assert.equal(dispatch.context_path, "attempts/analysis/001/context.json")
 
   const analystTask = session2.find((event) => event.type === "tool_use" && event.part?.tool === "task")
   const criticTask = session3.find((event) => event.type === "tool_use" && event.part?.tool === "task")
@@ -1611,13 +1550,14 @@ test("runtime: Main gates a real Analyst candidate after a fresh Critic review",
   const criticParts = (JSON.parse(criticExport.stdout) as {
     messages?: Array<{ parts?: Array<{ type?: string; tool?: string }> }>
   }).messages?.flatMap((message) => message.parts ?? []) ?? []
-  assert.equal(criticParts.some((part) => part.type === "tool" && (part.tool === "edit" || part.tool === "mm_agent_case" || part.tool === "task")), false)
-  const session3CaseEvents = session3.filter((event) => event.type === "tool_use" && event.part?.tool === "mm_agent_case")
-  assert.equal(session3CaseEvents.length, 2)
-  assertToolCompleted("Session 3 inspect", session3CaseEvents[0])
-  assertToolCompleted("Session 3 gate", session3CaseEvents[1])
-  const gated = JSON.parse(session3CaseEvents[1]?.part?.state?.output ?? "") as { outcome?: string }
-  assert.equal(gated.outcome, "pass")
+  assert.equal(criticParts.some((part) => part.type === "tool" && (part.tool === "edit" || part.tool === "task")), false)
+  const session3FlowEvents = session3.filter((event) => event.type === "tool_use" && event.part?.tool === "mm_agent_flow")
+  assert.equal(session3FlowEvents.length, 2)
+  assertToolCompleted("Session 3 advance", session3FlowEvents[0])
+  assertToolCompleted("Session 3 submit_review", session3FlowEvents[1])
+  const gated = JSON.parse(session3FlowEvents[1]?.part?.state?.output ?? "") as { status?: string; agent?: string }
+  assert.equal(gated.status, "task")
+  assert.equal(gated.agent, "mm-modeler")
 
   const caseRoot = path.join(projectRoot, "runs", caseId)
   const attempts = await readdir(path.join(caseRoot, "attempts", "analysis"), { withFileTypes: true })

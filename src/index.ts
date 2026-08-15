@@ -1,50 +1,29 @@
 import { tool, type Plugin } from "@opencode-ai/plugin"
-import { readFile, readdir } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { createAgentConfigs } from "./agents.js"
-import { runCaseAction } from "./tools/case.js"
 import { runPreflight } from "./tools/check.js"
 import { runCompile } from "./tools/compile.js"
 import { runCompute } from "./tools/compute.js"
 import { retrieveHmml } from "./tools/hmml.js"
 import { prepareCase } from "./tools/prepare.js"
+import { FormalRuntimeCoordinator, type FlowInput } from "./runtime/formal-runtime-coordinator.js"
 
 const packageRoot = fileURLToPath(new URL("..", import.meta.url))
 
-async function findActiveCase(directory: string): Promise<string | undefined> {
-  let entries
-  try {
-    entries = await readdir(path.join(directory, "runs"), { withFileTypes: true })
-  } catch {
-    return undefined
-  }
-
-  const candidates: string[] = []
-  const activeStatuses = new Set(["prepared", "running", "blocked"])
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue
-    try {
-      const state = JSON.parse(await readFile(path.join(directory, "runs", entry.name, "state.json"), "utf8")) as {
-        case_id?: unknown
-        status?: unknown
-      }
-      if (state.case_id === entry.name && typeof state.status === "string" && activeStatuses.has(state.status)) {
-        candidates.push(entry.name)
-      }
-    } catch {
-      continue
-    }
-  }
-  return candidates.length === 1 ? candidates[0] : undefined
-}
-
-const mmAgentPlugin = (async ({ directory, worktree }) => ({
+// OpenCode 每次 plugin 初始化都调用一次这个 async 工厂，并在项目生命周期内复用返回的 hooks。
+// `flow` 是进程内协调器，同时持有按会话隔离的待执行指令表，供下面的 `tool.execute.before` 读取。
+const mmAgentPlugin = (async ({ directory, worktree }) => {
+  const flow = new FormalRuntimeCoordinator({ runsRoot: path.join(directory, "runs") })
+  return {
   config: async (config) => {
+    // 只在用户未定义同名 Agent 时注入五个 hidden subagent；用户提供的 Agent 配置优先。
     config.agent ??= {}
     for (const [name, agent] of Object.entries(createAgentConfigs(directory, worktree)))
       if (!(name in config.agent)) config.agent[name] = agent
   },
+  // 模型可见的正式 Tools。`mm_agent_case` 故意不在此注册：它是 Flow、Golden runner 和测试
+  // 通过 CaseContextStore 直接使用的内部 Core seam，模型永远不可见。
   tool: {
     mm_agent_check: tool({
       description: "Check the mm-agent environment with structured evidence and repair ownership before starting a Case.",
@@ -93,42 +72,36 @@ const mmAgentPlugin = (async ({ directory, worktree }) => ({
         }))
       },
     }),
-    mm_agent_case: tool({
-      description: "Direct CaseContextStore adapter for open, dispatch, gate, and inspect. Gate is the only state transition.",
+    mm_agent_flow: tool({
+      description: "Advance the formal mm-agent runtime or submit the Critic's semantic Review.",
       args: {
-        action: tool.schema.enum(["open", "dispatch", "gate", "inspect"]),
+        action: tool.schema.enum(["advance", "submit_review"]),
         case_id: tool.schema.string(),
-        role: tool.schema.enum(["analyst", "modeler", "solver", "writer"]).optional(),
-        task_id: tool.schema.string().optional(),
-        base_revision: tool.schema.number().optional(),
-        goal: tool.schema.string().optional(),
-        constraints: tool.schema.array(tool.schema.string()).optional(),
-        resolves_blocker: tool.schema.string().optional(),
-        attempt_id: tool.schema.string().optional(),
-        review: tool.schema.object({
-          schema_version: tool.schema.number(),
-          attempt_id: tool.schema.string(),
-          verdict: tool.schema.enum(["pass", "revise", "block"]),
-          findings: tool.schema.array(tool.schema.string()),
-          required_fixes: tool.schema.array(tool.schema.string()),
-          evidence: tool.schema.array(tool.schema.string()),
-          reviewed_at: tool.schema.string(),
-        }).optional(),
-        expected_revision: tool.schema.number().optional(),
+        verdict: tool.schema.enum(["pass", "revise", "block"]).optional(),
+        findings: tool.schema.array(tool.schema.string()).optional(),
+        required_fixes: tool.schema.array(tool.schema.string()).optional(),
+        evidence: tool.schema.array(tool.schema.string()).optional(),
       },
-      execute: async (input, context) => JSON.stringify(await runCaseAction(context.directory, {
-        action: input.action,
-        caseId: input.case_id,
-        ...(input.role ? { role: input.role } : {}),
-        ...(input.task_id ? { taskId: input.task_id } : {}),
-        ...(input.base_revision === undefined ? {} : { baseRevision: input.base_revision }),
-        ...(input.goal ? { goal: input.goal } : {}),
-        ...(input.constraints ? { constraints: input.constraints } : {}),
-        ...(input.resolves_blocker ? { resolvesBlocker: input.resolves_blocker } : {}),
-        ...(input.attempt_id ? { attemptId: input.attempt_id } : {}),
-        ...(input.review ? { review: input.review } : {}),
-        ...(input.expected_revision === undefined ? {} : { expectedRevision: input.expected_revision }),
-      })),
+      execute: async (input, context) => {
+        if (input.action === "submit_review" && (!input.verdict || !input.findings || !input.required_fixes || !input.evidence))
+          return JSON.stringify({ status: "failed", kind: "failed", message: "submit_review requires verdict, findings, required_fixes, and evidence" })
+        const flowInput = (input.action === "advance"
+          ? { action: "advance", caseId: input.case_id }
+          : {
+              action: "submit_review",
+              caseId: input.case_id,
+              verdict: input.verdict!,
+              findings: input.findings!,
+              requiredFixes: input.required_fixes!,
+              evidence: input.evidence!,
+            }) satisfies FlowInput
+        const result = await flow.execute(flowInput)
+        // 把 directive 暂存在当前会话，供下一次 `task` 调用使用。Skill 每 directive 机械发出
+        // 一次 `task`，下面的 `tool.execute.before` hook 读取这条暂存并覆盖调用的 args，
+        // 因此由 runtime 而非主模型决定 Agent、description 和 prompt。
+        flow.rememberDirective(context.sessionID, result)
+        return JSON.stringify(result)
+      },
     }),
     mm_agent_hmml: tool({
       description: "Retrieve traceable HMML method candidates with the pinned dense index or an explicit BM25 fallback when the model cache is unavailable.",
@@ -190,12 +163,29 @@ const mmAgentPlugin = (async ({ directory, worktree }) => ({
       })),
     }),
   },
-  "experimental.session.compacting": async (_input, output) => {
-    const caseId = await findActiveCase(directory)
-    if (caseId) {
-      output.context.push(`Active Case: ${caseId}; state: runs/${caseId}/state.json. Inspect local state before continuing.`)
-    }
+  // OpenCode 最关键的 seam。Skill 每个 directive 机械发出一次 built-in `task`，OpenCode 本会
+  // 按模型填的参数路由；这个 hook 在真正执行前用该会话暂存的 directive 原地覆盖调用的 args，
+  // 从而由 runtime 决定谁跑、跑什么。先全量删除 args，防止模型设置了 `task_id`、`background`、
+  // `command` 或错误的 `subagent_type`。Plugin API 没有受支持的接口从 hook 直接派遣子会话；
+  // 重写这一次 `task` 调用是让 child 保持 fresh、前景运行的受支持方式。
+  "tool.execute.before": async ({ tool: toolName, sessionID }, output) => {
+    if (toolName !== "task") return
+    const directive = flow.pendingDirective(sessionID)
+    if (!directive) return
+    const args = output.args ?? (output.args = {})
+    delete args.task_id
+    delete args.command
+    delete args.background
+    for (const key of Object.keys(args)) delete args[key]
+    args.subagent_type = directive.agent
+    args.description = directive.description
+    args.prompt = directive.prompt
   },
-})) satisfies Plugin
+  "tool.execute.after": async ({ tool: toolName, sessionID }) => {
+    // 一次性消费信号：一条 directive 只驱动一次 `task` 调用，随后清除。
+    if (toolName === "task") flow.clearDirective(sessionID)
+  },
+  }
+}) satisfies Plugin
 
 export default mmAgentPlugin
