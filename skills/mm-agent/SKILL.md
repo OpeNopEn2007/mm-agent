@@ -1,23 +1,20 @@
 ---
 name: mm-agent
-description: Use /mm-agent to create or resume an immutable mathematical-modeling Case and drive its four gated stages.
+description: 用 /mm-agent 创建或恢复一个不可变的数学建模 case，并驱动其四个门控阶段。
 ---
 
-# MM-Agent Workflow
+# MM-Agent 工作流
 
-Before any mathematical-modeling stage:
+在开始或恢复一个 case 之前：
 
-1. Call `mm_agent_check` with `scope: "all"` and the intended Case ID when one is known.
-2. Present every `pass`, `warn`, and `fail` item with its evidence and repair ownership. Do not infer availability from version text when the Tool reports a failed real template compilation.
-3. If any check is `fail`, stop before input preparation. Explain which `automatic` repairs can be performed after the user asks to完善, which `user` repairs require manual action, and which `none` items have no safe repair. Do not install packages, download models, or modify Python during this invocation.
-4. If the environment has no failures, call `mm_agent_prepare`. Explicit paths supplied by the user take priority; otherwise omit `explicit_paths` so the Tool uses `problems/`.
-5. Report whether the Case was created or resumed, its Case-relative manifest, immutable Policy, input labels and hashes, and the next confirmation needed from the user.
+1. 调用工具 `mm_agent_check` 并设 `scope: "all"`，逐条展示每个检查项的证据和修复归属。如果有任何检查失败，在准备输入之前就停下；不要安装包、下载模型或修改 Python。
+2. 调用工具 `mm_agent_prepare`，传入用户的显式路径；不传则以 `./problems/` 发现。报告不可变输入的标签、哈希、Policy，以及 case 是新建还是恢复的。
+3. 用户确认后，调用工具 `mm_agent_flow`，设 `action: "advance"` 和 case ID。
 
-After the user confirms the prepared Case, drive each stage with the same loop:
+对每条返回的 task directive，用 OpenCode 的 built-in `task` 恰好调用一次，把 directive 的 `agent` 作为 `subagent_type`，`description` 和 `prompt` 原样传入。不要提供 `task_id`、`command` 或后台执行。让 hidden Agent 完成自己的候选或语义审查，然后再调用工具 `mm_agent_flow`。
 
-1. Call `mm_agent_case` `dispatch` for the Actor role and save the returned `contextPath` and Attempt ID.
-2. Use OpenCode built-in `task` once for the matching hidden Agent. Give it the Case-relative `contextPath` and tell it to follow its hidden Agent prompt and that Manifest exactly; it must not delegate. Do not tell the Actor to promote candidates, write stable artifacts, call Gate, or perform any responsibility outside its Attempt. Do not redefine or extend the Actor output schema in the task prompt. For Analysis, use the `mm-analyst` Agent's Canonical Analysis output contract unchanged; do not substitute an alternate task-graph shape.
-3. Check only the Manifest `expected_outputs`, then use a fresh `mm-critic` task with the same `contextPath`. Critic returns one bare Review JSON with `schema_version: 1`, its `attempt_id` copied exactly from the Manifest, string-array findings and required fixes, UTC RFC 3339 `reviewed_at`, and Case-relative existing-path evidence limited to Manifest candidates, required reads, the Rubric, or legal Runtime Evidence. Critic creates no Attempt or file, and never calls Gate.
-4. Inspect the Case immediately before Gate. Submit the Critic Review through `mm_agent_case` `gate` with `action: "gate"`, `case_id`, a top-level `attempt_id` copied exactly from the active Manifest, `expected_revision` from that latest inspect state revision, and the complete fresh `review`. Do not assume `review.attempt_id` supplies the top-level `attempt_id`. On the first Gate error, stop and report it; do not alter the Review or retry. Only a `pass` advances state. On `revise` dispatch a new Actor Attempt; on `block` report the blocker and stop or resolve it in the same scope.
+当 directive 指向 `mm-critic` 时，把它的四个语义字段（`verdict`、`findings`、`required_fixes`、`evidence`）以 `action: "submit_review"` 提交给工具 `mm_agent_flow`。不要添加机器元数据或路由字段。持久化、时间戳、Attempt 身份、校验、promotion 和状态推进全部由 runtime 负责。
 
-Run stages in this order: Analyst, Modeler, Solver by current DAG wave, then Writer. Solver dispatches only the current wave tasks. Writer calls `mm_agent_compile` before Critic and Gate. Do not use stable artifacts or chat as a substitute for accepted facts. The only public command remains `/mm-agent`; do not invent `/doctor`, `/setup`, or another slash command.
+持续这个固定循环，直到 Flow 返回 `completed`、`blocked` 或 `failed`。blocked 的 case 需要用户补充事实并新建 case；v1 不会静默重新打开已接受的阶段。failed 的 Flow 操作不会自动重试。要恢复一个已有 case，就只传 `case_id` 调用工具 `mm_agent_prepare`，不传新的显式路径或 `revision_budget`；持久化的不可变输入 manifest、policy、state 和 revision budget 是权威。不要重新提交输入路径或 budget，然后调用工具 `mm_agent_flow` 并设 `action: "advance"`。
+
+阶段按此顺序运行：Analyst、Modeler、Solver 按 DAG 可执行顺序逐个 task、然后 Writer。Writer 必须在报告审查之前先编译报告。唯一的用户命令是 `/mm-agent`；不要发明其他 slash command。

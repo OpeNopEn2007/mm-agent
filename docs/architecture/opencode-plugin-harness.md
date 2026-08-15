@@ -1,20 +1,19 @@
 # OpenCode Plugin Harness
 
-根目录 [README.md](../../README.md) 是完整产品与机制设计入口；宿主无关机制固定在 [Canonical Core](canonical-core.md) 与 [Artifact 协议](../context/artifact-protocol.md)。本文只固定 OpenCode Adapter 的实现接口和不变量，不重新定义 Case schema、状态推进或 Context Manifest。
+根目录 [README.md](../../README.md) 是完整产品与机制设计入口；宿主无关机制固定在 [Canonical Core](canonical-core.md) 与 [Artifact 协议](../context/artifact-protocol.md)。本文只固定 OpenCode Adapter 的实现接口和不变量，不重新定义 Case schema、状态推进或 Context Manifest。多宿主安装与分发架构（仅设计、不触当前实现）见 [多宿主安装架构](multi-host-install.md)。
 
 ## 交付形态
 
-v1 发布 npm 包 `@mm-agent/opencode`，包含 Plugin、安装器、Skills、Agent prompt、Python runtime 定义、HMML 资产和报告模板。
+v1 发布 npm 包 `mm-agent`，包含 Plugin、安装器、Skills、Agent prompt、Python runtime 定义、HMML 资产和报告模板。
 
 OpenCode Plugin 通过以下宿主机制接入：
 
 | OpenCode 机制 | mm-agent 用途 |
 |---------------|---------------|
 | `config` hook | 注入 `mm-analyst`、`mm-modeler`、`mm-solver`、`mm-writer`、`mm-critic`。 |
-| Plugin tool registry | 注册 6 个 `mm_agent_*` Tools。 |
+| Plugin tool registry | 注册正式运行面六个 `mm_agent_*` Tools：`check`、`prepare`、`flow`、`hmml`、`compute`、`compile`。 |
 | built-in `task` | 为每次阶段或任务派发创建 fresh child session。 |
 | Skill discovery | 安装后的 `mm-agent` Skill 提供 `/mm-agent`。 |
-| compaction hook | 可选注入 active Case 和 `state.json` 路径，不承担恢复正确性。 |
 
 ## Plugin 接口
 
@@ -28,9 +27,9 @@ Plugin 初始化时只做三件事：
 
 1. 解析 package assets 和平台 cache 路径。
 2. 注册 hidden Agents 和 Tools。
-3. 建立进程内的 Case mutex registry。
+3. 建立正式 Flow 的进程内待执行 directive registry 和 Case mutex registry。
 
-模型下载、Python 环境完善和 TeX 检查由用户调用 `/mm-agent` 后的 preflight 驱动，不能发生在 Plugin import 阶段。
+模型下载、Python 环境完善和 TeX 检查由用户调用 `/mm-agent` 后的 preflight 驱动，不能发生在 Plugin import 阶段。Plugin API 没有受支持的接口从 hook 直接调用 built-in `task`；Skill 必须机械发出一次 Task，hook 只能在原调用中校正参数。
 
 ## Tool 接口
 
@@ -58,11 +57,30 @@ type CheckResult = {
 
 解析显式输入或 `problems/`，构造 input manifest 与 Case Policy，并且只通过 `CaseContextStore.open` 创建 `runs/<case-id>/input/manifest.json`、`case.json` 和初始 `state.json`。Core `open` 把输入副本、revision budget 与四份 Rubric 快照固化到 Case；Intake 不直接写 Case 状态，不修改源文件，也不保留可被后续访问的用户原始绝对路径。
 
-Tool 返回 `{ ok: true, result }` 或 `{ ok: false, error }`。错误包含稳定 code、可行动 message、`automatic / user / none` repair 和是否需要用户输入；无效 Case ID、空/缺失输入、linked input、linked/unwritable `runs/`、冲突输入或 Policy、源文件在发现与固化之间变化，以及损坏的 Rubric 都不能发布部分 Case。相同 Policy 的已有 Case 可在没有新 input 参数时恢复，不重新读取原始来源。
+Tool 返回 `{ ok: true, result }` 或 `{ ok: false, error }`。错误包含稳定 code、可行动 message、`automatic / user / none` repair 和是否需要用户输入；无效 Case ID、空/缺失输入、linked input、linked/unwritable `runs/`、冲突输入或 Policy、源文件在发现与固化之间变化，以及损坏的 Rubric 都不能发布部分 Case。恢复已有 Case 的调用只传 `case_id`，持久化 input manifest、policy、state revision 和 revision budget 权威，不接受新 input/policy/budget 覆盖，也不重新读取原始来源。
 
-### `mm_agent_case`
+### `mm_agent_flow`
 
-使用 discriminated union 暴露四个 action，调用 `CaseContextStore`：
+正式用户路径只暴露 `advance` 和 `submit_review` 两个 action：
+
+```ts
+type FlowInput =
+  | { action: "advance"; caseId: string }
+  | {
+      action: "submit_review"
+      caseId: string
+      verdict: "pass" | "revise" | "block"
+      findings: string[]
+      requiredFixes: string[]
+      evidence: string[]
+    }
+```
+
+`advance` 从磁盘权威事实推导下一 Actor/Critic directive；`submit_review` 只接收 Critic 的四个语义字段。Flow 生成 `schema_version`、`attempt_id`、`reviewed_at`、`expected_revision` 等机器字段，执行 Review evidence allowlist 校验，再调用内部 Core Gate，并立即从 fresh state 路由下一动作。Gate 在任何 mutation 前严格校验 candidate、Runtime Evidence、expected outputs、promotion 和 hash；`revise` 只有校验通过才创建下一 Attempt，`pass` 缺失文件返回 `SCHEMA_INVALID`，两者都不以不完整文件推进 state。Critic 对需要计算的 Solver 可读取 `execution-result.json` 引用的 raw compute payload 做语义核验；direct synthesis 分支只校验 execution-result 的 `path`/hash，不把 artifact 当作 raw payload 解析。Evidence 只引用声明的 `execution-result.json`，不得出现 manifest/context/目录/`runs/<case-id>/` 前缀或自然语言。返回值为 `task`、`blocked`、`failed` 或 `completed`。
+
+### 内部 `mm_agent_case` Core seam
+
+`mm_agent_case` 不注册到模型可见 Tool registry。它是 Flow、Golden runner 和兼容测试使用的内部 Core seam，使用 discriminated union 调用 `CaseContextStore`：
 
 ```ts
 type CaseAction =
@@ -74,10 +92,10 @@ type CaseAction =
 
 四个 action 直接映射 Core Interface：
 
-- `open` 既能根据 `inputManifest` 与 `CasePolicy` 固化输入副本、Rubric 快照、`case.json` 与初始 `state.json`，也能省略这些参数并先做 schema 校验以恢复已有 Case；已有 Case 收到新的 intake 参数时必须返回冲突，不得覆盖不可变事实。
+- `open` 既能根据 `inputManifest` 与 `CasePolicy` 固化输入副本、Rubric 快照、`case.json` 与初始 `state.json`，也能仅凭 `caseId` 先做 schema 校验以恢复已有 Case；已有 Case 收到新的 intake 参数时必须返回冲突，不得覆盖不可变事实，持久化 input/policy/state revision/budget 继续作为权威。
 - `dispatch` 为 Actor 创建唯一 Attempt，写入 `context.json`；`baseRevision` 仅作为 Manifest 的审计字段，不参与 Gate 的 compare-and-swap。
-- `gate` 必须携带调用方的 `expectedRevision`，由 Core 拒绝并发覆盖；只有 `pass` 才能提升 Artifact 并推进 Case 状态。
-- `inspect` 是只读操作，返回 `state.json`、accepted artifact index、由 attempt 目录推导的 active attempts、blockers 和派生 completion evidence，不写任何状态。
+- `gate` 必须携带调用方的 `expectedRevision`，由 Core 拒绝并发覆盖；所有 verdict 先严格验证 candidate/runtime；`revise` 验证通过后才创建下一 Attempt，`pass` 缺少 expected/promotion 文件返回 `SCHEMA_INVALID`，只有成功 `pass` 才能提升 Artifact 并推进 Case 状态。
+- `inspect` 是只读操作，返回 `state.json`、accepted artifact index、由 attempt 目录推导的 active attempts、blockers 和派生 completion evidence，不写任何状态。旧 `schema_version: 1` Case 可在 Flow 恢复时懒生成 `handoff.json`，不改写既有持久 schema。
 
 ### `mm_agent_hmml`
 
@@ -85,7 +103,7 @@ type CaseAction =
 
 ### `mm_agent_compute`
 
-输入 Case 内工作目录、入口脚本、参数和 timeout。拒绝 Case 外路径，返回执行 manifest，作为 Runtime Evidence 供 Gate 校验。
+输入 Case 内工作目录、入口脚本、参数和 timeout。拒绝 Case 外路径，返回执行 manifest，作为 Runtime Evidence 供 Gate 校验。`requires_computation: false` 的 Solver 不伪造 Compute；它把 `execution-result.json` 写成 `kind: "synthesis"`、`status: "succeeded"`、`exit_code: 0`，`path` 直接指向当前 Attempt `allowed_writes` 内 candidate artifact，并以 `sha256`（可选 `size_bytes`）绑定该 artifact，不要求手写 `evidence/*.json` payload。
 
 ### `mm_agent_compile`
 
@@ -112,8 +130,8 @@ interface CaseContextStore {
 - 每个 attempt 使用 `attempts/<scope>/<attempt-id>/` 唯一目录，`attempt-id` 为 `<scope-slug>-<sequence>` 三位序号。
 - `gate` 比较调用方 `expected_revision` 与当前 `revision`，并发 stale write 必须失败。
 - `gate` 逐项校验 Manifest 的 `required_reads` hash 仍对应输入快照、Runtime Evidence 或 accepted artifact。
-- `gate` 校验 `promotions` 列表中每个 candidate 路径与 `allowed_writes` 一致，且每个 target 都在当前 scope 的稳定 artifact 白名单内。
-- `gate` 只接受 `pass` 提升 Artifact 并推进 Stage；`revise` 创建下一次 Attempt，`block` 追加 blocker 并保留 stage/wave。
+- `gate` 校验 `promotions` 列表中每个 candidate 路径与 `allowed_writes` 一致，且每个 target 都在当前 scope 的稳定 artifact 白名单内；缺失 expected/promotion 文件或 Runtime Evidence 不合规时返回 `SCHEMA_INVALID`，不写 Review、不创建 Attempt、不改变 state。
+- `gate` 只接受 `pass` 提升 Artifact 并推进 Stage；`revise` 仅在严格验证通过后创建下一次 Attempt，`block` 追加 blocker 并保留 stage/wave。
 - state 更新使用临时文件和原子替换。
 - 唯一 `gate` 可以改变 accepted index、Stage、`current_wave` 和 `revision`。
 - 同 scope 存在 `context.json` 但尚未拥有有效 `review.json` 的 Attempt 时，`dispatch` 拒绝创建第二个 Attempt。
@@ -145,17 +163,24 @@ type ContextRecipe = {
 
 ## Agent 派发
 
-`mm-agent` Skill 执行以下宿主原生步骤：
+正式 `/mm-agent` Skill 只执行固定的宿主原生循环：
 
-1. 调用 `mm_agent_case` 的 `dispatch` 生成唯一 Actor Attempt 与 `context.json`。
-2. 使用 OpenCode built-in `task` 选择 hidden Agent。
-3. Prompt 指定 `context.json` 路径和最终返回 schema。
-4. 检查预期 candidate 文件与 `expected_outputs` 是否存在。
-5. 派发 fresh `mm-critic`，向其交付同一 `context.json` 的 `review` section、candidate expected outputs、Rubric 和必要上游约束，不创建第二个 Attempt。
-6. Critic 返回结构化 verdict，主 Agent 将其封装为 `Review` 提交 `gate`，携带 `expectedRevision`。
-7. `gate` 返回后，主 Agent 根据 pass / revise / block 决定下一动作。
+```text
+mm_agent_flow(advance)
+  → OpenCode built-in task（恰好一次）
+  → mm_agent_flow(advance)
+  → [Actor 完整时] built-in task（fresh mm-critic）
+  → mm_agent_flow(submit_review)
+```
 
-Subagent 不得嵌套委派。Worker 最终消息只用于当前控制流，持久事实必须写入 candidate artifact。
+1. `mm_agent_flow { action: "advance" }` 通过内部 Core `dispatch` 生成唯一 Actor Attempt 和 `context.json`，或恢复已有 active Attempt。
+2. Skill 原样机械发出一次 built-in `task`，使用 Flow directive 的 `agent`、`description` 和 `prompt`。
+3. `tool.execute.before` hook 在原地校正 Task 参数，并清除 `task_id`、`background`、`command`；这保证调用是 fresh foreground child。Hook 不绕过宿主 API 另起子会话。
+4. Agent 只读取 directive 指向的 `context.json` 及其声明文件。Actor 写 candidate；Critic 只返回 `verdict`、`findings`、`required_fixes`、`evidence`，不生成机器字段、不写文件、不 Gate、不委派。
+5. Skill 再次调用 Flow。Flow 检查 `expected_outputs` 是否齐全；完整时派同一 Attempt 的 fresh Critic，不创建第二个 Attempt；不完整时恢复同一 Actor。`submit_review` 前后的 Core Gate 会严格验证 candidate/runtime，只有验证通过的 `revise` 才能进入下一 Attempt，缺失文件的 `pass` 返回 `SCHEMA_INVALID`。
+6. Skill 把 Critic 四个语义字段提交 `submit_review`。Flow 规范化并校验 evidence，生成 Review 机器字段，调用内部 Core `gate`，再从 fresh state 路由下一 directive 或终态。
+
+首条正式链中的 Solver task 按 DAG 可执行顺序串行运行；DAG 仍记录依赖，但不启用 same-wave 并发。Subagent 不得嵌套委派，持久事实必须写入 candidate artifact 或 Runtime Evidence。
 
 ## 权限
 
@@ -166,6 +191,8 @@ Agents 使用静态角色权限和动态 gate 双层控制：
 - 进程执行通过 `mm_agent_compute` 和 `mm_agent_compile`。
 - Tool 再次验证 resolved path 位于当前 Case。
 - `gate` 拒绝 `context.json.allowed_writes` 之外的候选路径，拒绝当前 scope 白名单之外的 promotion target。
+- Review evidence 必须是 Case-relative path，并且属于当前 Manifest 的 candidate、review required reads、immutable input/accepted upstream、Rubric，或当前 Attempt 的 Runtime Evidence（包括 `execution-result.json`）并通过 schema 与 hash 校验；Critic 对需要计算的 Solver 可读取 execution-result 引用的 raw compute payload，direct synthesis 只校验 execution-result 的 `path`/hash，不把 artifact 当作 raw payload 解析。Evidence 不得改引 payload，也不得出现 manifest/context/目录/`runs/<case-id>/` 前缀、任意未声明的 `tmp/`、其他 Attempt、其他 Case、stable 文件、绝对路径和自然语言描述。
+- Flow 生成的 `runs/<case-id>/handoff.json` 是从 `state.json`、active Attempt、accepted artifacts 和 DAG 派生的交接投影，不是 promotion 或 completion 依据。每次 `advance`、`submit_review` 和恢复都允许覆盖它。
 
 ## 安装器
 
@@ -173,8 +200,8 @@ Agents 使用静态角色权限和动态 gate 双层控制：
 
 ```json
 {
-  "package": "@mm-agent/opencode",
-  "version": "1.0.0",
+  "package": "mm-agent",
+  "version": "0.1.0",
   "plugin_entry": "...",
   "installed_skills": [],
   "files": [{ "path": "...", "sha256": "..." }]
@@ -191,14 +218,21 @@ Python runtime 不读取用户 `.venv`。Plugin 通过 `shell.env` 或显式 spa
 
 ## 不依赖项
 
-v1 正确性不依赖：
+正式运行面正确性不依赖：
 
-- OpenCode 实验性 compaction hook。
+- OpenCode compaction hint 或压缩后的聊天摘要；恢复只读取 Case 磁盘事实。
 - 独立 MCP server。
 - 数据库或向量数据库。
 - Plugin import 时联网。
 - 归档中的 Claude/Codex Agent、Hook 或 `.planning/`。
 - 任何宿主的私有聊天或 memory。
+
+## 兼容与失败边界
+
+- `case.json`、`state.json`、`context.json`、Review 和 Runtime Evidence 的持久 `schema_version: 1` 本轮不变。旧 Case 恢复时由 Flow 懒生成 `handoff.json`，不静默猜测或改写旧文件。
+- `block` 只记录当前 Case 的追加式 blocker；正式运行面不自动回滚已接受阶段。输入缺失或 accepted upstream 已错误时，用户需补充事实并创建新 Case，或等待未来显式 reopen/migration 机制。
+- Golden runner 仅作为开发期验收工具，通过内部 Core 接口运行；它不进入 npm 包，也不驱动用户 `/mm-agent` 流程。
+- npm package 清单以真实 `package.json.files` 为准，不声明或打包不存在的 `schemas/` 目录。
 
 ## Spike Gate
 

@@ -1,8 +1,8 @@
 ---
 name: mm-compute
-description: Run reproducible solving code inside the current Solver Attempt.
+description: 在当前 Solver Attempt 内运行可复算的求解代码。
 ---
 
-# Reproducible Compute
+# 可复算 Compute
 
-Write code only beneath the current Solver Manifest `code/` allowed write. Call `mm_agent_compute` with that exact code directory and a direct entry script. Use its Runtime Evidence reference in `execution-result.json`, then write a complete Task Memory with task description, modeling method, result interpretation, execution result, code outputs, and figures. Do not write a stable `tasks/` path.
+只把代码写到当前 Solver Manifest 声明的 `code/` 允许写目录下。用那个确切的代码目录和直接入口脚本调用 `mm_agent_compute`。把返回的 Runtime Evidence 引用写进 `execution-result.json`，随后写一份完整的 Task Memory，包含：任务描述、建模方法、结果解读、执行结果、代码输出和图表。不要写持久态的 `tasks/` 路径。
