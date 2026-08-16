@@ -6,7 +6,7 @@
 
 ## 项目方向
 
-`mm-agent` 现在是一个基于 Pi CLI Extension 的 MM-Agent Harness 项目。
+`mm-agent` 是一个 host-agnostic 数学建模 MM-Agent Harness 项目。架构唯一权威依据是 `docs/abstracted-design.md`。
 
 旧 Claude/Codex 插件方向已经在 `v0.2.0` 结束，并归档到：
 
@@ -14,17 +14,25 @@
 .archived/legacy-claude-codex-plugin/
 ```
 
-除非用户明确要求回溯旧方向，否则不要恢复归档中的插件结构。
+旧 Pi CLI Extension 协议层已在本次重构中归档到：
+
+```text
+.archived/legacy-pi-design/
+```
+
+除非用户明确要求回溯旧方向，否则不要恢复归档中的插件结构或 Pi 期协议。
 
 ## 核心产品标准
 
 本项目存在的目的，是把数学建模赛题转化为一篇真实报告：
 
 ```text
-赛题输入 -> 四阶段工作流 -> 可编译 LaTeX -> PDF 论文
+赛题输入 -> 数学建模四阶段 (cognitive skeleton) -> 可编译 LaTeX -> PDF 论文
 ```
 
-对 `v1.0.0` 来说，Harness 必须跑完 MM-Agent 论文的端到端流程：
+四阶段（Problem Analysis / Mathematical Modeling / Computational Solving / Solution Reporting）是认知骨架，不是 runtime state machine；具体编排见 `docs/abstracted-design.md`。
+
+对 `v1.0.0` 来说，Harness 必须跑完端到端流程：
 
 1. Problem Analysis
 2. Mathematical Modeling
@@ -43,9 +51,7 @@ LaTeX 没有编译成功、PDF 不存在，就不能认为 Case 完成。
 4. `PLAN.md`
 5. `docs/context/project-kernel.md`
 6. `docs/context/handoff-protocol.md`
-7. `docs/context/artifact-protocol.md`
-8. `docs/architecture/pi-extension-harness.md`
-9. `docs/architecture/paper-alignment.md`
+7. `docs/abstracted-design.md`
 
 `docs/research/` 只能作为证据，不是当前指令。
 
@@ -58,7 +64,7 @@ LaTeX 没有编译成功、PDF 不存在，就不能认为 Case 完成。
 - `HANDOFF.md` 记录当前交接状态。
 - `PLAN.md` 解释下一步做什么。
 - `docs/context/` 定义项目级协议。
-- `docs/architecture/` 定义 Harness 设计。
+- `docs/abstracted-design.md` 定义系统架构与设计。
 - `docs/roadmap/` 记录简短版本目标。
 - `docs/research/` 只存放历史调研。
 - `.archived/` 只存放非活跃历史资产。
@@ -77,16 +83,13 @@ runs/<case-id>/
 
 ## 可复用资产
 
-以下活跃资产可以被 Pi Harness 复用：
+以下活跃资产可以被 Harness 复用：
 
-- `knowledge/`
-- `prompts/`
-- `scripts/`
-- `servers/`
-- `templates/`
-- `tests/`
+- `knowledge/`（HMML 方法树 + 写作经验 + 比赛模板，待重组）
+- `templates/`（LaTeX 报告模板）
+- `tests/`（验证 fixtures）
 
-复用资产，不复用旧 Claude/Codex 入口。
+复用资产，不复用旧 Claude/Codex 入口，不复用旧 Pi CLI Extension 协议。
 
 ## 工程规则
 

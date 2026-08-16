@@ -17,8 +17,7 @@ Project Kernel 是任何智能体都能读取并接续工作的本地项目上�
 1. `README.md`
 2. `IDEA.md`
 3. `PLAN.md`
-4. `docs/context/artifact-protocol.md`
-5. `docs/architecture/canonical-core.md`
+4. `docs/abstracted-design.md`
 
 ## 运行边界
 
@@ -27,5 +26,7 @@ Harness 应该把 Case 输出写入：
 ```text
 runs/<case-id>/
 ```
+
+Case 运行产物的写入必须限制在 `runs/<case-id>/` 范围内，并拒绝路径穿越与符号链接逃逸；读取系统 Knowledge 或其他明确允许的项目资产不受此限制。
 
 根目录项目文档用于描述系统，不应该变成 Case 日志堆放处。

@@ -1,11 +1,11 @@
 # mm-agent
 
-基于 Pi CLI Extension 的数学建模 MM-Agent Harness。
+host-agnostic 数学建模 MM-Agent Harness。
 
-`mm-agent` 试图把 MM-Agent 论文中的数学建模多智能体框架，变成本地可运行、可检查、可反馈、可迭代的工程系统。
+`mm-agent` 把数学建模赛题转化为一篇真实报告：可运行、可检查、可反馈、可迭代。
 
 ```text
-赛题输入 -> MM-Agent 四阶段工作流 -> 可编译 LaTeX -> PDF 论文
+赛题输入 -> 数学建模四阶段 (cognitive skeleton) -> 可编译 LaTeX -> PDF 论文
 ```
 
 ## 状态
@@ -13,7 +13,7 @@
 当前主线从 `v1.0.0` 开始重建。
 
 - `v0.2.0` 是旧 Claude/Codex 插件方向的最终快照。
-- `v1.0.0` 目标是基于 Pi CLI Extension 跑通论文四阶段闭环。
+- `v1.0.0` 以 `docs/abstracted-design.md` 为架构唯一权威依据。
 - 当前还不是可安装、可直接使用的稳定工具。
 
 ## 核心目标
@@ -33,8 +33,9 @@
 - [IDEA.md](IDEA.md)：项目思想和动机。
 - [PLAN.md](PLAN.md)：当前 `v1.0.0` 执行计划。
 - [HANDOFF.md](HANDOFF.md)：当前交接状态，供不同智能体接手项目。
-- [docs/context/](docs/context/)：项目上下文、artifact 协议和监督反馈规则。
-- [docs/architecture/](docs/architecture/)：Pi Harness 设计、论文对齐和参考工程取舍。
+- [docs/abstracted-design.md](docs/abstracted-design.md)：MM-Agent 架构与设计唯一权威依据。
+- [docs/context/](docs/context/)：项目级协议（project-kernel、handoff-protocol）。
+- [docs/reference/](docs/reference/)：一手参考资料（论文原文、解读、上游工程实现）。
 - [docs/roadmap/v1.0.0.md](docs/roadmap/v1.0.0.md)：第一个可用版本的验收标准。
 - [docs/README.md](docs/README.md)：`docs/` 内部分类说明。
 
@@ -42,9 +43,7 @@
 
 ```text
 mm-agent/
-├── .gitignore             # 忽略缓存、构建产物和运行期 Case 输出
-├── .mcp.json              # 项目级 MCP 配置，当前作为可迁移资产保留
-├── .archived/             # 历史资产，可回溯但不参与活跃开发
+├── .archived/             # 历史资产；legacy-claude-codex-plugin (v0.2.0), legacy-pi-design (v1.0.0 on Pi)
 ├── README.md              # 项目入口
 ├── IDEA.md                # 项目思想：为什么做、反对什么、相信什么
 ├── PLAN.md                # 当前计划：v1.0.0 的近期执行目标
@@ -52,20 +51,17 @@ mm-agent/
 ├── CHANGELOG.md           # 版本历史和迁移记录
 ├── CLAUDE.md              # Claude 系智能体入口，与 AGENTS.md 同步
 ├── AGENTS.md              # 通用智能体入口，与 CLAUDE.md 同步
-├── requirements.txt       # 当前 Python 依赖记录
 ├── docs/
 │   ├── README.md          # docs 内部分类说明
-│   ├── context/           # 项目级上下文协议、artifact 和反馈规则
-│   ├── architecture/      # Pi Harness、论文对齐、参考工程取舍
-│   ├── roadmap/           # 简短版本目标
+│   ├── abstracted-design.md  # MM-Agent 架构与设计唯一权威依据
+│   ├── context/           # 项目级协议（project-kernel, handoff-protocol）
+│   ├── reference/         # 一手参考资料（MM-Agent 论文 PDF + 中文解读 + upstream 伴读）
+│   │   └── upstream-prompts/  # 上游 LLM-MM-Agent 仓库保留的 prompt 套件
 │   ├── research/          # 调研材料，不是当前项目真相
-│   └── reference/         # 一手参考资料，尤其是 MM-Agent 论文
-├── knowledge/             # HMML 和数学建模知识资产
-├── prompts/               # prompt 资产
-├── scripts/               # DAG、HMML、memory 等本地工具
-├── servers/               # 可复用的工具/服务实验
-├── templates/             # LaTeX 报告模板和报告生成资产
-├── tests/                 # 现有验证 fixtures，后续按 v1.0.0 对齐
+│   └── roadmap/           # 简短版本目标
+├── knowledge/             # HMML 方法树 + 写作经验 + 比赛模板（待重组）
+├── templates/             # LaTeX 报告模板（CUMCM, MCM-ICM）
+├── tests/                 # 验证 fixtures
 └── runs/                  # 运行期 Case 输出；仅 .gitkeep 入库
 ```
 
@@ -79,10 +75,11 @@ mm-agent/
 
 ## 旧方向归档
 
-旧 Claude/Codex 插件实验资产保存在：
+历史资产按方向分两个归档区：
 
 ```text
-.archived/legacy-claude-codex-plugin/
+.archived/legacy-claude-codex-plugin/   # 旧 Claude/Codex 插件实验（v0.2.0）
+.archived/legacy-pi-design/             # 旧 Pi CLI Extension 协议（v1.0.0 on Pi，本次重构后归档）
 ```
 
 这些内容用于回溯和迁移参考，不再作为活跃开发入口。

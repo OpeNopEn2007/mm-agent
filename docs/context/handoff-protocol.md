@@ -4,6 +4,8 @@ Handoff 的目标是让任何智能体都能从仓库文件恢复项目真相，
 
 本项目把仓库视为共享记忆总线。聊天只是传输通道，持久状态必须落到文件里。
 
+本文中的 Commander / Worker / User 描述的是开发和维护 MM-Agent 项目时的人机协作角色，不属于 MM-Agent 运行时的 Agent 架构；运行时主体以 `docs/abstracted-design.md` 为准。
+
 ## 文件分工
 
 | 文件 | 职责 |
@@ -43,7 +45,7 @@ git rev-parse --show-toplevel
 2. `AGENTS.md` 或 `CLAUDE.md`
 3. `HANDOFF.md`
 4. `PLAN.md`
-5. 与任务相关的 `docs/context/` 或 `docs/architecture/` 文档
+5. 与任务相关的 `docs/` 文档；涉及 MM-Agent 架构时，以 `docs/abstracted-design.md` 为准。
 
 接手摘要应回答：
 
