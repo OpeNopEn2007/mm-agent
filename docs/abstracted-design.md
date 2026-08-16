@@ -92,7 +92,7 @@ Discuss → Plan → Execute → Verify
                          │                     │
                          ↓                     ↓
                    ┌──────────┐          ┌────────────┐
-                   │ Explorer │          │ Task Solver│
+                   │ Explorer │          │ Solver│
                    │ 研究支持 │          │  局部解题  │
                    └────┬─────┘          └─────┬──────┘
                         │                      │
@@ -151,7 +151,7 @@ Decomposition
       ↓
 Initial Task Graph
       ↓
-动态分派 Explorer / Task Solver
+动态分派 Explorer / Solver
       ↓
 持续读取 Research Memo / Task Memory
       ↓
@@ -201,7 +201,7 @@ Decomposition
 Task Graph
      ↓
 ┌─────────────────────────────────────┐
-│        Task Solver Episode          │
+│        Solver Episode          │
 │                                     │
 │  Formulation                        │
 │      ↕                              │
@@ -311,11 +311,11 @@ Task D 是否需要保留，等待 Task A 的结果后再决定。
 
 ---
 
-# 6. Task Solver
+# 6. Solver
 
 ## 6.1 定位
 
-Task Solver 是核心的生产型 subagent。
+Solver 是核心的生产型 subagent。
 
 每次启动：
 
@@ -330,18 +330,18 @@ Fresh Context
      ↓
 读取直接依赖的 Task Memories
      ↓
-完成一次 Task Solver Episode
+完成一次 Solver Episode
      ↓
 留下 Task Memory
 ```
 
-一个 Task Solver 只对当前 Task 的局部数学建模工作负责。
+一个 Solver 只对当前 Task 的局部数学建模工作负责。
 
 ---
 
-# 7. Task Solver Episode
+# 7. Solver Episode
 
-Task Solver 进入 fresh context 后，内部完成：
+Solver 进入 fresh context 后，内部完成：
 
 ```text
              ┌──────────────────┐
@@ -403,7 +403,7 @@ Computation 由确定性 Runtime 工具执行。
 - 结果是否违反现实约束；
 - 是否需要重新 Formulation。
 
-Evaluation 属于 Task Solver 自己的内部工作与局部自检。
+Evaluation 属于 Solver 自己的内部工作与局部自检。
 
 ## 7.4 Interpretation
 
@@ -416,7 +416,7 @@ Evaluation 属于 Task Solver 自己的内部工作与局部自检。
 → 现实解释
 ```
 
-Task Solver 不应该只留下：
+Solver 不应该只留下：
 
 ```text
 x = 0.713
@@ -434,7 +434,7 @@ x = 0.713
 
 # 8. Task 内部允许局部迭代
 
-Task Solver 对当前 Task 拥有局部自治权。
+Solver 对当前 Task 拥有局部自治权。
 
 例如：
 
@@ -455,13 +455,13 @@ Interpretation 发现结果违反现实常识
 
 这些回环不需要主会话逐步介入。
 
-如果问题仍然属于当前 Task 的边界，Task Solver 应自主尝试解决。
+如果问题仍然属于当前 Task 的边界，Solver 应自主尝试解决。
 
 ---
 
-# 9. Task Solver 如何退出
+# 9. Solver 如何退出
 
-Task Solver 不使用固定的：
+Solver 不使用固定的：
 
 ```text
 SUCCESS
@@ -474,7 +474,7 @@ UNCERTAIN
 
 这些可以作为设计者理解失败类型的概念，但不应成为 Agent 的填表 schema。
 
-Task Solver 结束时应写一份自然语言 Markdown 交接文档。
+Solver 结束时应写一份自然语言 Markdown 交接文档。
 
 如果顺利完成，它写清：
 
@@ -506,10 +506,10 @@ Task Solver 结束时应写一份自然语言 Markdown 交接文档。
 
 # 10. Task Memory
 
-Task Memory 是 Task Solver 对局部求解过程的压缩提交。
+Task Memory 是 Solver 对局部求解过程的压缩提交。
 
 ```plaintext
-Task Solver Episode
+Solver Episode
         ↓
      Task Memory
         ↓
@@ -565,7 +565,7 @@ Explorer 是贯穿整个 Case 的研究支持能力。
 
 它不占据固定的业务阶段。
 
-它可以在任何时候被 Main Session 或 Task Solver 调用。
+它可以在任何时候被 Main Session 或 Solver 调用。
 
 Explorer 负责：
 
@@ -586,7 +586,7 @@ Explorer 回答的是：
 
 > 当前问题需要哪些可靠的外部知识、数据、方法和证据？
 
-它可以提出方法建议，但最终模型选择仍由 Main Session 或 Task Solver 决定。
+它可以提出方法建议，但最终模型选择仍由 Main Session 或 Solver 决定。
 
 ---
 
@@ -1159,7 +1159,7 @@ Main Session
    ↕
 Explorer
    ↕
-Task Solver
+Solver
    ↕
 Case Artifacts
    ↓
@@ -1207,9 +1207,9 @@ Grounding / Abstraction / Decomposition
       ↓
 选择可执行 Task
       ↓
-spawn fresh Task Solver
+spawn fresh Solver
       ↓
-Task Solver 完成一次 Episode
+Solver 完成一次 Episode
       ↓
 写 Task Memory
       ↓
@@ -1242,21 +1242,21 @@ Retrospective
 
 ```text
 Computation 失败
-→ Task Solver 内部回 Formulation / Computation
+→ Solver 内部回 Formulation / Computation
 ```
 
 ```text
 Evaluation 发现模型表现差
-→ Task Solver 内部调整模型
+→ Solver 内部调整模型
 ```
 
 ```text
 Interpretation 发现结果违反现实约束
-→ Task Solver 回查假设和 Formulation
+→ Solver 回查假设和 Formulation
 ```
 
 ```text
-Task Solver 发现缺关键上游信息
+Solver 发现缺关键上游信息
 → 写入 Task Memory
 → Main Session 判断是否修改 Task Graph
 ```
@@ -1382,7 +1382,7 @@ Host Adapter C
 
 ## 原则 2：Task 是主要卸载边界
 
-局部复杂工作进入 fresh Task Solver Episode。
+局部复杂工作进入 fresh Solver Episode。
 
 ## 原则 3：Task 内允许自治迭代
 
@@ -1449,7 +1449,7 @@ Task Memory、Research Memo、Task Graph、STATE.md 属于 Working Memory。
                             │
                    ┌────────┴────────┐
                    ↓                 ↓
-               Explorer         Task Solver
+               Explorer         Solver
                    │                 │
                    ↓                 ↓
              Research Memo       Task Memory
