@@ -1,0 +1,6 @@
+site_id,name,capacity_max,cost_per_unit
+S1,东门停车场,8,15
+S2,图书馆地下,6,18
+S3,学生公寓A区,12,12
+S4,体育中心,16,14
+S5,北门外,4,9
