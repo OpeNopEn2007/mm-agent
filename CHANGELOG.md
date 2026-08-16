@@ -10,6 +10,10 @@
 ## [Unreleased]
 
 ### 文档
+- 新增 `docs/reference/mm-agent-paper-deep-dive.md`，中文深度解读 MM-Agent 论文，并梳理本项目基于 Pi CLI 要实现的 v1 workflow 目标。
+- 新增 `docs/research/pi-cli-extension-analysis.md`，记录 Pi CLI 安装验证、Extension/Package 机制和 v1 Harness 建议。
+- 更新 `docs/architecture/pi-extension-harness.md`，纳入已验证 Pi 事实和 v1 最小 Pi package 形态。
+- 更新 `docs/README.md`，补充当前关键调研文档索引。
 - 将活跃项目文档重置为 `1.x` Pi CLI Extension + MM-Agent Harness 方向。
 - 将 `IDEA.md` 重写为项目具象哲学和动机文档。
 - 围绕 v1 项目结构重写 `README.md`、`PLAN.md`、`docs/README.md`、`CLAUDE.md` 和 `AGENTS.md`。
@@ -23,6 +27,10 @@
 ### 项目结构
 - 保留 `runs/.gitkeep` 以记录运行期 Case 输出目录边界。
 - 更新 `.gitignore`，忽略 `runs/**` 运行产物但保留 `runs/.gitkeep`。
+
+### 工具验证
+- 在本机用户级 npm prefix 安装并验证 `@earendil-works/pi-coding-agent@0.79.4`。
+- 验证 `pi --version`、`pi --help`、`pi list` 可运行，且未在项目目录生成 `.pi/`。
 
 ### 归档
 - 将旧 Claude/Codex 插件资产和 GSD 运行期规划产物移动到 `.archived/legacy-claude-codex-plugin/`。

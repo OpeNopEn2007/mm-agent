@@ -14,8 +14,24 @@
 
 | 目录 | 职责 |
 |------|------|
-| `reference/` | 一手资料。MM-Agent 论文放在这里。 |
+| `reference/` | 一手资料及其紧贴原文的伴读文档。MM-Agent 论文和论文深度解读放在这里。 |
 | `research/` | 历史分析和外部项目调研。它们是证据，不是活跃指令。 |
+
+当前关键参考：
+
+| 文档 | 职责 |
+|------|------|
+| `reference/MM-Agent-Paper.pdf` | MM-Agent 论文原文。 |
+| `reference/mm-agent-paper-deep-dive.md` | MM-Agent 论文中文深度解读，并从论文机制反推本项目 v1 Pi workflow 目标。 |
+
+当前关键调研：
+
+| 文档 | 职责 |
+|------|------|
+| `research/pi-cli-extension-analysis.md` | Pi CLI 安装、Extension、Package、生态包和 v1 Harness 可行性分析。 |
+| `research/llm-mm-agent-engineering-analysis.md` | 官方 LLM-MM-Agent 工程实现分析。 |
+| `research/gsd-project-analysis.md` | GSD 上下文工程和工作流纪律分析。 |
+| `research/cross-platform-agent-cli-comparison.md` | 多 Agent CLI 插件系统历史对比。 |
 
 ## 边界规则
 
